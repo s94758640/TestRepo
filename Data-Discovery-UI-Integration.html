@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data-Discovery-UI-Integration</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Data Discovery &amp; Classification — UI Integration Guide</h1>
+<p><strong>Audience:</strong> UI / integration team · <strong>Screens:</strong> Overview tab, By User tab (Users + Endpoints views), Run Discovery Scan modal, Re-scan modal <strong>Status:</strong> endpoints code-complete on branch <code>feature/data-discovery-classification</code>; QA availability requires deploy + APIM registration <strong>Backend contacts:</strong> DLP API team · Design reference: DATA-DISCOVERY-IMPLEMENTATION-PLAN.md</p>
+<hr>
+<h2>1. Basics</h2>
+<ul>
+<li><strong>Base URL:</strong> the DLP API gateway (same as the dashboard APIs), e.g. <code>https://qa-email.azure-api.net/qadlp</code></li>
+<li><strong>Auth:</strong> every request needs the normal <code>Authorization: Bearer &lt;JWT&gt;</code> <strong>and</strong> the <code>ClientGUID</code> header (tenant routing) — identical to the existing dashboard calls.</li>
+<li><strong>Casing:</strong> responses are camelCase JSON, wrapped in the standard envelope:</li>
+</ul>
+<pre><code>
+{ "success": true, "message": null, "data": { ... }, "errors": null }
+</code></pre>
+<ul>
+<li><strong>Admin-only actions:</strong> <code>POST /discovery/scans</code> and <code>POST /discovery/schedule</code> return <strong>403</strong> for non-admin roles. The UI should hide/disable those buttons for non-admins, but the server enforces it regardless.</li>
+<li>Until the EXE agent integrates, all data comes from the mock seeder — every widget renders, values are synthetic.</li>
+</ul>
+<hr>
+<h2>2. Endpoint map (what each screen element calls)</h2>
+<table><thead><tr>
+<th>Screen element</th>
+<th>Method + route</th>
+</tr></thead><tbody>
+<tr>
+<td>Header strip (Scanned … / Next scan in … / Weekly · 02:00 IST)</td>
+<td><code>GET /discovery/scans/latest</code></td>
+</tr>
+<tr>
+<td>Run Discovery Scan modal → Start scan</td>
+<td><code>POST /discovery/scans</code></td>
+</tr>
+<tr>
+<td>Re-scan modal (single endpoint) → Start scan</td>
+<td><code>POST /discovery/scans</code> (scope <code>SingleEndpoint</code>)</td>
+</tr>
+<tr>
+<td>Cancel ✕ on a row · Cancel scan button</td>
+<td><code>POST /discovery/scans/cancel</code></td>
+</tr>
+<tr>
+<td>Stop/Start DDC scanner option</td>
+<td><code>GET /discovery/scanner</code> · <code>POST /discovery/scanner</code></td>
+</tr>
+<tr>
+<td>"Found in" scan picker</td>
+<td><code>POST /discovery/scan-history</code></td>
+</tr>
+<tr>
+<td>ALL Overview tiles + charts</td>
+<td><code>POST /discovery/overview</code> (one call)</td>
+</tr>
+<tr>
+<td>By User tab — Users view grid</td>
+<td><code>POST /discovery/users</code></td>
+</tr>
+<tr>
+<td>By User tab — Endpoints view grid</td>
+<td><code>POST /discovery/endpoints</code> (same rows/shape)</td>
+</tr>
+<tr>
+<td>Right-hand detail panel (tiles + volume cards)</td>
+<td><code>POST /discovery/endpoint-detail</code></td>
+</tr>
+<tr>
+<td>Discovered Files grid (Sensitive / All / Unclassified)</td>
+<td><code>POST /discovery/files</code></td>
+</tr>
+<tr>
+<td>"Found in" scan dropdown on the files grid</td>
+<td><code>POST /discovery/scan-history</code></td>
+</tr>
+<tr>
+<td>Schedule settings read / save</td>
+<td><code>GET /discovery/schedule</code> · <code>POST /discovery/schedule</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>3. Header strip — <code>GET /discovery/scans/latest</code></h2>
+<pre><code>
+{
+  "lastCompletedAt": "2026-09-09T21:10:44Z",
+  "nextScheduledAt": "2026-09-16T20:30:00Z",
+  "cadence": "Weekly",
+  "runAtLocal": "02:00",
+  "timeZone": "Asia/Kolkata",
+  "scanInProgress": false,
+  "runningScanJobId": null,
+  "averageDurationMinutes": 42,
+  "runningMachineCount": 0,
+  "queuedMachineCount": 0,
+  "scannerEnabled": true
+}
+</code></pre>
+<ul>
+<li>"Scanned 1 day ago" ← <code>lastCompletedAt</code> · "Next scan in 6 days" ← <code>nextScheduledAt</code> · "Weekly · 02:00 IST" ← <code>cadence</code> + <code>runAtLocal</code> + <code>timeZone</code>.</li>
+<li><code>averageDurationMinutes</code> is the real per-endpoint average — use it for the "~42 min average" line in both modals.</li>
+<li>While a scan runs, <code>scanInProgress</code> is true; poll this endpoint to refresh the strip.</li>
+<li><code>scannerEnabled</code> is the tenant's Stop/Start DDC scanner option (§7.5) — when false, show the scanner-stopped state and disable the Run Scan buttons (the server refuses them with 400 anyway).</li>
+</ul>
+<hr>
+<h2>4. Run Discovery Scan / Re-scan — <code>POST /discovery/scans</code></h2>
+<p>Request (Run Discovery Scan modal):</p>
+<pre><code>
+{ "scope": "All", "scanType": "Full", "volumes": ["C", "D", "E", "Mapped"] }
+</code></pre>
+<ul>
+<li><code>scope</code>: <code>All</code> | <code>HighRisk</code> | <code>NeverScanned</code> | <code>SingleEndpoint</code> (maps to the modal options: All managed endpoints / High-risk users only / Never scanned)</li>
+<li><code>scanType</code>: <code>Full</code> | <code>Incremental</code></li>
+<li><code>volumes</code>: any of <code>C</code>, <code>D</code>, <code>E</code>, <code>Mapped</code>; omit/empty = all four</li>
+<li>Re-scan modal sends: <code>{ "scope": "SingleEndpoint", "targetEndpointId": 4482, "scanType": "Full", "volumes": ["C","D","E"] }</code></li>
+</ul>
+<p>Response:</p>
+<pre><code>
+{ "scanJobId": 12, "endpointsQueued": 27, "superseded": 3 }
+</code></pre>
+<ul>
+<li><code>superseded</code> = older queued scans replaced by this one (informational).</li>
+<li><strong>400</strong> with a message when the scope matches no endpoints; <strong>403</strong> for non-admin callers.</li>
+<li>The "Never scanned (18)" count for the modal label comes from <code>overview.coverage.neverScanned</code>.</li>
+</ul>
+<hr>
+<h2>5. Overview — <code>POST /discovery/overview</code> (empty body <code>{}</code>)</h2>
+<p>One call returns every tile and chart:</p>
+<pre><code>
+{
+  "scanJobId": 12,
+  "scanStatus": "Running",
+  "scanInProgress": true,
+  "dataAsOf": "2026-09-09T21:42:10Z",
+  "lastScanAt": "2026-09-09T21:10:44Z",
+  "filesScanned": 4281530,
+  "sensitiveFiles": 96412,
+  "unclassifiedFiles": 1204,
+  "unencryptedDisks": { "count": 192, "total": 2240 },
+  "filesOnUnencryptedDisks": 7412,
+  "endpointsScanned": { "count": 782, "total": 800 },
+  "classification": [
+    { "label": "PHI", "files": 32780, "sharePct": 34.0, "deltaPct": 6.0 },
+    { "label": "PII", "files": 25070, "sharePct": 26.0, "deltaPct": 3.0 }
+  ],
+  "classByVolumeKind": {
+    "PHI": { "Local": 14530, "External": 1240, "Mapped": 780 },
+    "PII": { "Local": 13120, "External": 1980, "Mapped": 1120 }
+  },
+  "newSensitiveByWeek": [
+    { "weekStart": "2026-08-03T00:00:00Z", "total": 38000, "byClass": { "PHI": 20000, "PFI": 11000, "PCI": 7000 } }
+  ],
+  "byExtension": [
+    { "extension": "xlsx", "files": 4120, "sensitiveBytes": 13743895347, "sensitiveSize": "12.8 GB" }
+  ],
+  "hotspotFolders": [
+    { "path": "C:\\Users\\mock.user\\Downloads", "topClass": "PHI", "files": 12480, "endpoints": 618 }
+  ],
+  "topUsers": [
+    { "userId": 100, "userName": "Mac Ferrari", "emailId": "macferrari.m@company.com", "sensitiveFiles": 2418 }
+  ],
+  "ageBuckets": { "0-6m": 38420, "6-12m": 26110, "1-3y": 23742, "3y+": 8140 },
+  "coverage": { "fullyScanned": 742, "partialInterrupted": 40, "inProgress": 0, "neverScanned": 18, "totalEndpoints": 800 }
+}
+</code></pre>
+<h3>5.1 While a scan is running</h3>
+<p><code>scanJobId</code> is the newest scan that was not cancelled — <strong>the running one while a scan is in flight</strong>, not the last completed one. So the Overview fills in as the agents upload, including on a tenant's very first scan, which used to show nothing at all until the job closed.</p>
+<ul>
+<li><code>scanInProgress</code> is true while that job is Queued or Running. Everything else is then a partial picture that grows — label the panel accordingly rather than presenting it as a finished scan.</li>
+<li><code>scanStatus</code> is the job's own status: <code>Queued</code> / <code>Running</code> / <code>Completed</code> / <code>CompletedWithErrors</code>. Null when the tenant has never scanned.</li>
+<li><code>lastScanAt</code> remains the last scan that <strong>finished</strong> — null while the first one is still running. Use <code>scanStatus</code> for what is happening now.</li>
+<li><code>classification[].deltaPct</code> is null for the whole run: half a scan measured against a completed one reads as a collapse in every class, which is an artefact of the timing. Deltas come back when the job closes.</li>
+<li><code>dataAsOf</code> stamps <strong>the charts only</strong> — <code>classification</code>, <code>classByVolumeKind</code>, <code>byExtension</code>, <code>ageBuckets</code>, <code>hotspotFolders</code>, <code>newSensitiveByWeek</code>. They are rebuilt at most once a minute during a run, so they can trail the tiles by up to that much. Polling faster than that is free but changes nothing.</li>
+<li>Every tile — <code>filesScanned</code>, <code>sensitiveFiles</code>, <code>unclassifiedFiles</code>, <code>unencryptedDisks</code>, <code>endpointsScanned</code>, <code>topUsers</code>, <code>coverage</code> — is counted live on each call and is <strong>not</strong> subject to <code>dataAsOf</code>. So <code>sensitiveFiles</code> agrees with <code>topUsers</code> at all times; expect it to run ahead of what the charts below add up to while a scan is in flight.</li>
+</ul>
+<p><code>filesScanned</code> is the largest of three figures per endpoint, not their sum: the per-disk counters (written only when an endpoint finishes), the agent's progress heartbeat (live, but only as current as the last beat), and the number of file rows we actually hold. Taking the largest keeps it monotonic — it climbs as a rescan overtakes the previous total and never goes backwards mid-scan.</p>
+<p>The row count matters because the other two lag. Batches of files arrive faster than heartbeats do, so a scan that had already delivered 1,469 rows was still reporting 23 scanned. <strong><code>filesScanned</code> is therefore guaranteed to be at least <code>sensitiveFiles + unclassifiedFiles</code></strong> — you will never see the tile claim fewer files scanned than the sensitive count beside it.</p>
+<p>It is still a floor, not a precise total, while a scan runs: clean files are counted but never stored as rows (§9.1), so the true figure is higher than what we can prove from rows alone until the endpoint reports its volumes at completion.</p>
+<p><code>filesOnUnencryptedDisks</code> is floored the same way, per volume — file rows carry their volume, so they can be attributed. The heartbeat cannot be: it is per endpoint, with no way to split it across disks.</p>
+<p><code>endpointsScanned.count</code> is endpoints that have <strong>ever finished a scan, or are scanning now</strong> — not only completed ones, which read 0 all through a first scan. Triggering a tenant-wide rescan does not reset it.</p>
+<p>Coverage during a run: a machine currently being scanned lands in <code>coverage.inProgress</code>. The four buckets are disjoint and add up to <code>totalEndpoints</code>. <code>totalEndpoints</code> counts distinct machines — a machine with several endpoint users is one, matching the By User / Endpoints grid.</p>
+<p>Tile bindings:</p>
+<table><thead><tr>
+<th>Tile / chart</th>
+<th>Field</th>
+</tr></thead><tbody>
+<tr>
+<td>Files Scanned</td>
+<td><code>filesScanned</code></td>
+</tr>
+<tr>
+<td>Sensitive Files</td>
+<td><code>sensitiveFiles</code></td>
+</tr>
+<tr>
+<td>Unencrypted Disks 192/2,240</td>
+<td><code>unencryptedDisks.count</code> / <code>.total</code></td>
+</tr>
+<tr>
+<td>Files on Unencrypted Disks</td>
+<td><code>filesOnUnencryptedDisks</code></td>
+</tr>
+<tr>
+<td>Endpoints Scanned 782/800</td>
+<td><code>endpointsScanned.count</code> / <code>.total</code></td>
+</tr>
+<tr>
+<td>Classification Breakdown donut + list</td>
+<td><code>classification[]</code> (<code>deltaPct</code> is the red/green %; <code>null</code> on the first scan and throughout a run → hide the badge)</td>
+</tr>
+<tr>
+<td>Where Each Class Lives matrix</td>
+<td><code>classByVolumeKind</code> — columns are <code>Local</code> / <code>External</code> / <code>Mapped</code> (C: and D: are both <code>Local</code>; render per design)</td>
+</tr>
+<tr>
+<td>Newly Discovered Sensitive Files</td>
+<td><code>newSensitiveByWeek[]</code> — 6 entries, oldest→newest, stack by <code>byClass</code> keys</td>
+</tr>
+<tr>
+<td>Sensitive Volume by File Type</td>
+<td><code>byExtension[]</code> — see limitation §9.1</td>
+</tr>
+<tr>
+<td>Hotspot Folders</td>
+<td><code>hotspotFolders[]</code> (<code>topClass</code> = the chip)</td>
+</tr>
+<tr>
+<td>Users Holding Most Sensitive Data</td>
+<td><code>topUsers[]</code></td>
+</tr>
+<tr>
+<td>Age of Sensitive Data</td>
+<td><code>ageBuckets</code> (fixed keys <code>0-6m</code>, <code>6-12m</code>, <code>1-3y</code>, <code>3y+</code>)</td>
+</tr>
+<tr>
+<td>Endpoint Scan Coverage</td>
+<td><code>coverage</code> (Fully scanned / Partial — interrupted / In progress / Never scanned)</td>
+</tr>
+</tbody></table>
+<p>Performance note: heavy widgets are cached per scan server-side — calling this per page load is fine. During a run that cache is rebuilt at most once a minute (see §5.1), so polling the Overview while a scan is in flight is also fine.</p>
+<hr>
+<h2>6. By User grids — <code>POST /discovery/users</code> and <code>/discovery/endpoints</code></h2>
+<p>Both routes return the same row shape (one row per machine, with its primary user); the two views just present different columns. Request body is the standard grid <code>QueryParameters</code>:</p>
+<pre><code>
+{
+  "page": 1, "pageSize": 20,
+  "sortBy": "sensitiveFiles", "sortDescending": true,
+  "likeFilters": { "userName": ["mac"] },
+  "exactFilters": { "encryptionStatus": ["Unencrypted", "Partial"] }
+}
+</code></pre>
+<ul>
+<li>Multi-value filters work like the other grids: values within a key OR'ed, keys AND'ed; keys are the camelCase response field names.</li>
+<li><code>sortBy</code> accepted: <code>userName</code>, <code>machineName</code>, <code>filesScanned</code>, <code>lastScanAt</code>, <code>encryptionStatus</code>, <code>riskBand</code>, <code>classifications</code>, <code>agentStatus</code>, <code>scanStatus</code>, <code>scanProgressPct</code>, <code>queuePosition</code> (default: <code>sensitiveFiles</code> desc).</li>
+<li><strong>An unknown filter key is now a 400</strong>, naming the key, exactly as <code>/discovery/files</code> has always behaved. It used to be swallowed, so a typo returned the full unfiltered grid and nothing said so. Allowed keys:</li>
+<li><code>likeFilters</code>: <code>userName</code>, <code>emailId</code>, <code>designationName</code>, <code>machineName</code>, <code>osName</code>, <code>encryptionDetail</code></li>
+<li><code>exactFilters</code>: <code>classifications</code>, <code>disks</code>, <code>agentStatus</code>, <code>encryptionStatus</code>, <code>scanStatus</code>, <code>riskBand</code>, <code>userId</code>, <code>endpointId</code>, <code>userName</code>, <code>emailId</code>, <code>designationName</code>, <code>machineName</code>, <code>osName</code>, <code>runningScanJobId</code></li>
+<li><strong>Volumes filter</strong> → <code>exactFilters.disks</code>: a row matches when <strong>any</strong> of its disks is listed. <code>"C"</code> and <code>"C:"</code> are the same drive, so sending back exactly what the column renders works.</li>
+</ul>
+<p>Response:</p>
+<pre><code>
+{
+  "totalCount": 800,
+  "data": [
+    {
+      "userId": 100,
+      "userName": "Mac Ferrari",
+      "emailId": "macferrari.m@company.com",
+      "designationName": "Finance Controller",
+      "endpointId": 4482,
+      "machineName": "IN-LT-4482",
+      "osName": "Windows 11 Pro",
+      "disks": ["C", "D", "E"],
+      "encryptionStatus": "Partial",
+      "encryptionDetail": "2 of 3 · E: open",
+      "filesScanned": 96410,
+      "sensitiveFiles": 2418,
+      "classifications": ["PCI", "PFI", "PHI"],
+      "riskBand": "High",
+      "volumeScannedGb": 412.00,
+      "lastScanAt": "2026-09-06T20:44:02Z",
+      "scanStatus": "Running",
+      "agentStatus": "Active",
+      "runningScanJobId": 12,
+      "scanStartedAt": "2026-09-09T21:02:11Z",
+      "scanProgressPct": 61.4,
+      "queuePosition": null,
+      "scanStatusReason": null
+    }
+  ],
+  "encryptionCounts": [
+    { "value": "Encrypted", "label": "Encrypted", "count": 540 },
+    { "value": "Partial",   "label": "Partial",   "count": 192 },
+    { "value": null,        "label": "Not reported", "count": 18 }
+  ],
+  "riskCounts":   [ { "value": "Critical", "label": "Critical", "count": 24 } ],
+  "statusCounts": [ { "value": "Running",  "label": "Running",  "count": 31 } ],
+  "agentCounts":  [ { "value": "Active",   "label": "Active",   "count": 702 },
+                    { "value": "Offline",  "label": "Offline",  "count": 80 },
+                    { "value": "Unknown",  "label": "Unknown",  "count": 18 } ]
+}
+</code></pre>
+<ul>
+<li><strong>Disk Encryption column:</strong> render <code>encryptionStatus</code> as the badge (<code>Encrypted</code> | <code>Partial</code> | <code>Suspended</code> | <code>Unencrypted</code>) and <code>encryptionDetail</code> as the subtitle ("XTS-AES 256", "2 of 3 · E: open", "Paused 9 days", "No volume encryption"). <strong>Those four are the only values, and <code>null</code> is the only other thing you can get.</strong> The agent reports a volume's encryption once, in the scan-complete payload, so a machine with no completed scan has nothing to show: <code>null</code>, rendered "Not reported", with <code>encryptionDetail</code> saying "Reported when the scan completes". Null is not a verdict — don't colour it as exposure, and don't count it as protected either. <em>(Changed — there used to be an <code>Unknown</code> state, for an agent that could not read BitLocker. The agent no longer sends it: an unreadable volume now goes out as <code>Unencrypted</code>. <code>Unknown</code> is gone from <code>encryptionCounts</code> and from <code>exactFilters.encryptionStatus</code>, and any legacy row still holding the word is served as <code>null</code>. A mixed machine's subtitle says "· 1 not reported yet" where it used to say "· 1 unreadable".)</em></li>
+<li><code>classifications</code> = the class chips. <code>riskBand</code> = Critical/High/Medium/Low/Safe — the <strong>average</strong> verdict of the endpoint's sensitive files (per file, the higher of the agent's <code>risk</code> and <code>severity</code>; unrated files are excluded). It is NOT the single worst file — one critical file on a mostly-benign machine will not read Critical. <code>Safe</code> = a completed scan found nothing sensitive; <code>null</code> = never scanned, or no file carries a verdict.</li>
+<li><code>scanStatus</code>: <code>Completed</code> | <code>Running</code> | <code>Queued</code> | <code>Interrupted</code> | <code>Failed</code> | <code>TimedOut</code> | <code>Cancelled</code> | <code>Superseded</code> | <code>Never</code> — the last-scan cell. <code>TimedOut</code> means the scheduler gave up waiting: the agent never claimed the scan, or claimed it and never came back, for longer than the tenant's <code>DiscoveryQueueTimeoutHours</code> (default 168h / one week). Treat it like <code>Failed</code> for colour — it is a run that did not happen — and show <code>scanStatusReason</code>, which names the limit it blew ("Timed out after 168h — the agent never picked the scan up"). It appears in the scan-status facet list like any other value. <em>(New — a queued row for an offline agent had no timeout at all, so its job could never close and <code>scanInProgress</code> stayed true for ever: QA job 41 held 36 queued machines, 31 of them offline.)</em> <strong>It is the scan the agent is on</strong>, not the newest job that named the machine: a machine that is scanning reads <code>Running</code> even when a later job also listed it, and <code>runningScanJobId</code> names that same scan. <em>(Fixed — the row used to report the machine's newest scan row while the agent claims its oldest pending one, so endpoint 15 read <code>Queued</code>, <code>queuePosition: 1</code>, <code>runningScanJobId: 53</code> — a job its own scan history did not list, because it had never run — while the agent was ten hours into job 42 and the server was acking its batches. The ✕ would have cancelled job 53 and left the running scan alone. The panel header, the grid and <code>POST /discovery/scan-history</code> now agree.)</em></li>
+<li><code>lastScanAt</code> is <strong>when the machine last FINISHED a scan, whatever a newer job is doing</strong>. Queueing a rescan over a machine does not blank it. It is null <strong>only</strong> when the machine has never completed one — that, and only that, is "Not scanned yet". Superseded, Cancelled and TimedOut rows don't date a scan (their timestamp is when the row was closed, not when a scan ran); a Failed run does, because it still walked the disk. What a newer job is up to is in <code>scanStatus</code>, <code>queuePosition</code>, <code>scanStartedAt</code> and <code>scanProgressPct</code>. <em>(Fixed — it used to be read off the newest scan row, so a machine with 97,656 scanned files and a fresh job queued returned <code>null</code>.)</em></li>
+</ul>
+<h3>6.1 The Agent column — <code>agentStatus</code></h3>
+<p><code>Active</code> | <code>Offline</code> | <code>Unknown</code>, from the machine's newest <code>dlp."EndpointDailyStatus"</code> row. Anything but <code>Offline</code> is Active (Online and Locked both mean the agent reported in). <strong>A machine that has never written a status row is <code>Unknown</code>, not Offline</strong> — "we have never heard from it" and "it told us it was off" are different claims, and only one blames the machine. Same derivation as the Upload Activity report's AGENT column, so the two screens cannot disagree.</p>
+<p>Filter with <code>exactFilters.agentStatus</code>; counts come back in <code>agentCounts</code>.</p>
+<h3>6.2 Running %, queue position, status sub-line</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><code>runningScanJobId</code></td>
+<td>The job this machine is running, waiting for, or was interrupted on — the one the <strong>agent</strong> is on. <strong>Non-null is the test for "this row has a cancellable scan"</strong> — feed it to <code>/discovery/scans/cancel</code>. Null once nothing is pending.</td>
+</tr>
+<tr>
+<td><code>scanStartedAt</code></td>
+<td>When the agent actually started. Null while still Queued.</td>
+</tr>
+<tr>
+<td><code>scanProgressPct</code></td>
+<td><code>0</code>–<code>99</code>, or <strong>null for "running, no estimate"</strong>.</td>
+</tr>
+<tr>
+<td><code>queuePosition</code></td>
+<td>1-based place among the machines of <strong>its own job</strong> that are still waiting; null otherwise. See below — it is not a turn.</td>
+</tr>
+<tr>
+<td><code>scanStatusReason</code></td>
+<td>The sub-line, e.g. <code>"Agent offline"</code>, <code>"Cancelled by admin"</code>, <code>"Waiting for the agent to pick it up"</code>. Null when the state needs no explanation.</td>
+</tr>
+</tbody></table>
+<p><strong><code>scanProgressPct</code> is an estimate and the cap at 99 is deliberate.</strong> A scan cannot report a true percentage — the agent discovers how much work there is as it does it — so this is the live file counter measured against what the <strong>same machine's last completed scan</strong> scanned. It never reaches 100: only the agent's scan-complete call says a scan is done. <code>null</code> means there is no completed scan to measure against (a first scan) — render an indeterminate bar, <strong>not</strong> 0%. Queued rows read 0.</p>
+<p><strong><code>queuePosition</code> is ordering, not a turn and not an ETA. The server runs no queue of its own.</strong> It does not scan one machine at a time: each agent polls, is handed its own row, and starts — so every machine in a job can be scanning at once, an offline machine at position 1 does not hold up position 2, and the number does not count down as other machines finish. Position 1 on two different jobs is normal. <code>Queued</code> means one thing: <strong>that machine's agent has not asked for its work yet</strong> — either it has not polled since the job was created, or it is offline (then <code>agentStatus</code> is <code>Offline</code> and the sub-line says so). A fleet sitting at <code>Queued</code> with live agents is an agent-side symptom, not a server backlog; the counterpart check is <code>GET /discovery/scanner</code> — while the scanner is stopped no agent is handed anything, and everything stays queued.</p>
+<p>Branch your rendering on <code>scanStatus</code>, never on <code>scanStatusReason</code> — that string is display copy and may be reworded.</p>
+<h3>6.3 Filter-menu counts</h3>
+<p><code>encryptionCounts</code>, <code>riskCounts</code>, <code>statusCounts</code> and <code>agentCounts</code> are <strong>faceted</strong> like <code>riskCounts</code> on <code>/discovery/files</code>: each list is counted with every <em>other</em> filter applied but not its own, so ticking one encryption state does not zero out the three options you are still looking at.</p>
+<p>Each entry is <code>{ value, label, count }</code>. Known options are always present even at count 0, so a checkbox never disappears mid-interaction. <code>value: null</code> is the unrecorded bucket (<code>"Not reported"</code> / <code>"Not scored"</code>) and has no filter value — it is a count, not a tick box.</p>
+<hr>
+<h2>7. Detail panel + Discovered Files</h2>
+<h3>7.1 <code>POST /discovery/endpoint-detail</code> — <code>{ "endpointId": 4482 }</code></h3>
+<pre><code>
+{
+  "endpointId": 4482,
+  "machineName": "IN-LT-4482",
+  "osName": "Windows 11 Pro",
+  "userId": 100,
+  "userName": "Mac Ferrari",
+  "emailId": "macferrari.m@company.com",
+  "designationName": "Finance Controller",
+  "encryptionStatus": "Partial",
+  "encryptionDetail": "2 of 3 · E: open",
+  "scanStatus": "Interrupted",
+  "lastScanAt": "2026-09-06T20:44:02Z",
+  "filesScanned": 96410,
+  "sensitiveFiles": 2418,
+  "unclassifiedFiles": 1204,
+  "volumeOnDiskGb": 3584.00,
+  "scannedGb": 3584.00,
+  "volumes": [
+    {
+      "driveLetter": "C", "kind": "Local", "sizeGb": 512, "scannedGb": 118.40,
+      "encryptionStatus": "Encrypted", "encryptionMethod": "XTS-AES 256",
+      "filesScanned": 48220, "sensitiveCount": 911, "sensitivePctOfFiles": 1.9
+    }
+  ]
+}
+</code></pre>
+<p>Maps 1:1 to the panel header + tiles + per-volume cards (<code>sensitivePctOfFiles</code> = the "19% of files" figure). <code>emailId</code> / <code>designationName</code> are the header subtitle; <code>scanStatus</code> is the "Scan status" chip (<code>Never</code> when the endpoint has no scan row); <code>encryptionDetail</code> is the text behind the Encryption value, same wording as the grid's <code>encryptionDetail</code>.</p>
+<p><code>lastScanAt</code> follows the same rule as the grid (§6): the last scan the machine <strong>finished</strong>, whatever a newer job is doing, and null only when it has never completed one.</p>
+<p><code>volumeOnDiskGb</code> and each card's <code>sizeGb</code> are <strong>capacity only</strong> — what the agent measured off the disk (<code>DriveInfo.TotalSize</code>) and sent with the completion payload. Both are <code>null</code> until a scan completes and reports it, and are never derived from anything else. The grid's <code>diskSizeGb</code> (§6) is the same figure.</p>
+<p><code>scannedGb</code>, on the panel and on each card, is the other number: the bytes of the inventory rows we hold, floored by reported capacity. It moves as a scan uploads and says nothing about how big the disk is. It is the grid's <code>volumeScannedGb</code> (§6), to the same decimal, and is <code>null</code> only when there is no reported capacity <strong>and</strong> nothing stored — the genuine Never case.</p>
+<blockquote><p>Until 2026-11-06 <code>sizeGb</code> carried the floored figure, so an endpoint with no completed scan reported the size of what it had uploaded as though it were the disk's capacity — INN274-SHAIKHMO showed <code>23.31</code> for a 474.7 GiB C: drive. A UI binding <code>sizeGb</code> to a disk-capacity label should now expect <code>null</code> before the first completed scan, and bind <code>scannedGb</code> wherever it wants the old behaviour.</p></blockquote>
+<h3>7.2 <code>POST /discovery/files</code></h3>
+<pre><code>
+{
+  "endpointId": 4482,
+  "tab": "Sensitive",
+  "search": "payroll",
+  "scanJobId": 2104,
+  "page": 1, "pageSize": 15,
+  "sortBy": "lastModified", "sortDescending": true
+}
+</code></pre>
+<ul>
+<li><code>tab</code>: <code>Sensitive</code> | <code>All</code> | <code>Unclassified</code> — see limitation §9.2 for what "All" means.</li>
+<li><code>search</code> matches file name OR path, case-insensitive contains.</li>
+<li><code>scanJobId</code> (optional) — the "Found in" dropdown. A value from <code>POST /discovery/scan-history</code> (§7.3) narrows the grid to the files <strong>first detected</strong> by that scan; rows, <code>totalCount</code> and the facet counts all narrow together. Omit it for "All scans". A job that never ran on the endpoint is a 400.</li>
+<li><code>sortBy</code>: <code>fileName</code>, <code>size</code>, <code>firstSeenAt</code>, <code>confidence</code>, <code>risk</code>, <code>severity</code>, default <code>lastModified</code>. <code>risk</code> and <code>severity</code> sort by <strong>severity, not alphabetically</strong> (CRITICAL → SAFE, case-insensitively), with unrecorded and unrecognised values last on a descending sort.</li>
+<li><code>exactFilters</code> keys: <code>classifications</code>, <code>risk</code>, <code>severity</code>, <code>dpdpFlag</code>, <code>extension</code> and <strong><code>driveLetter</code></strong> (the C:/D: disk filter — <code>"C"</code> and <code>"C:"</code> both work). <code>likeFilters</code>: <code>fileName</code>, <code>directory</code>, <code>extension</code>, <code>severityReason</code>. Unknown key → 400, naming it.</li>
+<li>The "Found in" filter is the <strong>top-level <code>scanJobId</code></strong>, not an exact filter — see §7.3.</li>
+</ul>
+<p>Row:</p>
+<pre><code>
+{
+  "fileId": 991,
+  "fileName": "Payroll_Master_2026.xlsx",
+  "directory": "D:\\Finance\\Payroll\\2026",
+  "driveLetter": "D",
+  "extension": "xlsx",
+  "sizeBytes": 50537240,
+  "size": "48.2 MB",
+  "classifications": ["PFI", "PII"],
+  "lastModified": "2026-09-02T10:11:00Z",
+  "firstSeenAt": "2026-08-28T02:14:00Z",
+  "foundInScanJobId": 2104,
+  "foundInScanAt": "2026-07-12T02:00:14Z",
+  "foundInScanType": "Full",
+  "confidence": 87.5,
+  "risk": "HIGH",
+  "severity": "CRITICAL",
+  "severityReason": "Health insurance + Email + Phone",
+  "dpdpFlag": "Protect",
+  "sensitiveContent": {
+    "PFI": ["#### 2### 3### 4###"],
+    "PII": ["xxxx.xxxxx@acme.co.in"]
+  }
+}
+</code></pre>
+<h4>The "Found in" column</h4>
+<p><code>foundInScanJobId</code> / <code>foundInScanAt</code> / <code>foundInScanType</code> name the scan that <strong>first detected</strong> the file — render as "12/07/26 · Full scan". <code>foundInScanType</code> is <code>Full</code> or <code>Incremental</code> (what actually ran); append the word "scan" yourself. All three are null when the endpoint has no scan history to place the file in. Clicking the cell = resend the request with that <code>foundInScanJobId</code> as <code>scanJobId</code>.</p>
+<h3>7.3 <code>POST /discovery/scan-history</code> — <code>{ "endpointId": 4482 }</code></h3>
+<p>The "Found in" dropdown: every scan that ran on the endpoint, newest first.</p>
+<pre><code>
+{
+  "endpointId": 4482,
+  "scanCount": 4,
+  "firstScanAt": "2026-05-03T02:00:09Z",
+  "totalFiles": 10,
+  "scans": [
+    {
+      "scanJobId": 2231, "scanDate": "2026-09-06T02:00:11Z",
+      "completedAt": "2026-09-06T02:38:40Z", "scanType": "Incremental",
+      "status": "Completed", "durationSeconds": 2280, "durationDisplay": "38 min",
+      "newFiles": 2, "isBaseline": false, "isLatest": true
+    },
+    {
+      "scanJobId": 2001, "scanDate": "2026-05-03T02:00:09Z",
+      "completedAt": "2026-05-03T04:46:12Z", "scanType": "Full",
+      "status": "Completed", "durationSeconds": 9960, "durationDisplay": "2 h 46 min",
+      "newFiles": 4, "isBaseline": true, "isLatest": false
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li>Header line = <code>scanCount</code> + <code>firstScanAt</code> + <code>totalFiles</code> ("All scans · 4 scans since 03/05/26 · 10 files total").</li>
+<li><code>newFiles</code> = stored files that scan first detected ("+2 new files"); on the baseline row it is everything the first scan found ("4 found · baseline"). <strong>First-detected, not files-seen.</strong> A re-scan of a machine whose files are all already on record reports <code>newFiles: 0</code> while happily uploading thousands of rows — that is the right answer to "what did this scan find that we did not have?", and picking that scan in the files grid correctly shows nothing. Label the column "New files", never "Files scanned"; the files the run is walking are the row's <code>filesScanned</code> in §6, which updates as batches are acked.</li>
+<li>The <code>newFiles</code> figures add up to <code>totalFiles</code> — a file is first-detected by exactly one scan.</li>
+<li><code>isLatest</code> drives the "Latest" badge; <code>durationDisplay</code> is pre-formatted, null while the scan is still running.</li>
+<li>Only scans the endpoint's agent <strong>actually started</strong> appear — a job that was queued and never claimed has nothing to show. Status is not consulted, so a scan that ran and was later superseded or cancelled still appears and still owns the files it found. <em>(Fixed — Superseded rows used to be excluded. An agent that uploads files and then goes silent gets its row swept to Interrupted and then superseded by the next job, which erased the scan from the history: QA endpoints 25 and 19 showed 11,215 and 440 files with <code>scanCount: 0</code>.)</em></li>
+<li><strong><code>newFiles</code> across all scans sums to <code>totalFiles</code></strong> — every stored file belongs to exactly one scan, because the oldest window is open-ended and catches anything older than it. If the two ever disagree, the machine holds files from a scan that is not in the list, which is a bug worth reporting.</li>
+<li>A scan appearing here does <strong>not</strong> imply <code>lastScanAt</code> is set: a run that was interrupted or superseded ran but never <em>finished</em>, and <code>lastScanAt</code> only counts finished scans (§6). A machine can legitimately show scan history, files, and no scan date — it means no scan on it has ever completed.</li>
+</ul>
+<h4>The risk columns</h4>
+<p>All five are <strong>nullable, and null means "not recorded" — never a benign verdict</strong>. Render null as an empty cell or a muted dash; do not substitute <code>LOW</code>, <code>Safe</code> or <code>0</code>. An older agent build, or a row written before these columns existed, sends none of them.</p>
+<table><thead><tr>
+<th>Field</th>
+<th>Values</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>confidence</code></td>
+<td><code>0</code>–<code>100</code>, two decimals</td>
+<td>Detection confidence. A number, not a percentage string — format it yourself.</td>
+</tr>
+<tr>
+<td><code>risk</code></td>
+<td>agent's label, e.g. <code>"HIGH"</code></td>
+<td><strong>Verbatim, NOT normalised.</strong></td>
+</tr>
+<tr>
+<td><code>severity</code></td>
+<td>agent's label, e.g. <code>"CRITICAL"</code></td>
+<td>Verbatim.</td>
+</tr>
+<tr>
+<td><code>severityReason</code></td>
+<td>free text, e.g. <code>"Health insurance + Email + Phone"</code></td>
+<td>Names the classes that fired. Shown as sent — render as text, and escape it like any other server string.</td>
+</tr>
+<tr>
+<td><code>dpdpFlag</code></td>
+<td>e.g. <code>"Protect"</code></td>
+<td>DPDP disposition. Verbatim.</td>
+</tr>
+</tbody></table>
+<p>These four are stored exactly as the agent sent them — the server validates and rewrites nothing — so both the casing and the vocabulary are the agent's, and a value you have never seen is a real possibility. A mismatched agent build surfaces here rather than being silently rewritten, so render an unknown value as-is instead of falling through to a default chip.</p>
+<p>Note this is <strong>not</strong> the same field as the endpoint grid's <code>riskBand</code> (§6): that one is the normalised (<code>Critical</code>/<code>High</code>/…) average of these per-file verdicts across the endpoint — don't feed both into one chip component expecting matching casing.</p>
+<h4><code>sensitiveContent</code> — the detection-detail panel</h4>
+<p>What tripped detection on the file, the discovery equivalent of the transfer-log grid's <code>incidentInfoJson</code>. Render it as the same "Sensitive Info" panel.</p>
+<ul>
+<li><strong>The values arrive masked and there is no unmasked form.</strong> They were masked before they were ever written, so <code>4111 2222 3333 4444</code> is stored and returned as <code>#### 2### 3### 4###</code>. Digits become <code>#</code>, letters <code>x</code>, separators survive, and emails keep their domain. Do not build an "unmask" or "reveal" affordance — there is nothing behind it, and the shape is the whole point: a card still looks like a card.</li>
+<li><strong><code>null</code> means "not shown to you", and you cannot tell why.</strong> It is null when the tenant's <code>Discovery:ShowSensitiveContent</code> setting is off, when the row predates the column, and when the agent sent no detail — deliberately indistinguishable. Hide the panel on null; don't show an error or an empty-state that implies data was expected.</li>
+<li>The setting is a <strong>ClientSetting row, not a UI toggle</strong>. There is no endpoint to flip it; it is provisioned per tenant. It is now <strong>opt-OUT</strong>: unset tenants get the panel, and only <code>"0"</code> or <code>"false"</code> turns it off. (It was opt-in, which meant every tenant saw <code>"sensitiveContent": null</code> with no way to switch it on — if you built around the panel never appearing, it appears now.)</li>
+<li>The shape is whatever the agent sent, masked in place — treat it as an arbitrary JSON object and render generically rather than binding to fixed keys.</li>
+</ul>
+<hr>
+<h2>7.4 Cancel a scan — <code>POST /discovery/scans/cancel</code></h2>
+<pre><code>
+{ "scanJobId": 12 }                      // Cancel scan — the whole run
+{ "endpointId": 4482 }                   // Cancel ✕ — stop this machine
+{ "scanJobId": 12, "endpointId": 4482 }  // same as above; the job id is ignored
+</code></pre>
+<p>Response:</p>
+<pre><code>
+{
+  "scanJobId": 12,
+  "cancelledJobIds": [12],
+  "cancelledRunning": 3,
+  "removedQueued": 11,
+  "jobClosed": true,
+  "jobsClosed": 1,
+  "jobStatus": "CompletedWithErrors"
+}
+</code></pre>
+<ul>
+<li><strong>Admin only (403 otherwise)</strong> — same rule as starting a scan. Stopping a tenant-wide run is as consequential as launching one.</li>
+<li><strong>A scan does not have to have started.</strong> Queued rows are cancelled exactly like Running ones — most of a fleet job is work that has not started, and a stop that only reached a live scan would stop almost nothing. Interrupted rows go too: they are resumable (the laptop-switched-off case), so leaving them would have the run quietly restart days later on a scan somebody stopped.</li>
+<li><strong>Naming a machine stops the machine, not one row of it.</strong> <code>endpointId</code> cancels everything that endpoint has pending, across every job, and <code>cancelledJobIds</code> lists what was touched. <code>scanJobId</code> is optional once you send <code>endpointId</code>, and is ignored when you send both — send either, or both, and the machine stops. <em>(Fixed — a machine holding a Running row with a newer Queued one behind it was cancelled only in the job the ✕ named, then claimed the other on its next poll: the button reported success and the disk kept being crawled.)</em></li>
+<li><strong>400 when there is nothing left to cancel</strong> — the run already finished, or somebody else cancelled it first. Show the message; it is not a server fault.</li>
+<li><code>jobStatus</code> after a full cancel is <code>Cancelled</code> if the run delivered nothing, or <code>CompletedWithErrors</code> if some machines had already finished — their results are real and the dashboard still reads them.</li>
+<li><strong>Agents are not pushed to.</strong> A cancelled scan stops because the agent's next poll returns nothing and its next upload is refused, so a machine mid-file may keep working for up to one heartbeat (5 min) before it notices. Treat the ✕ as "stop requested", and let the row's <code>scanStatus</code> → <code>Cancelled</code> confirm it. A Queued row stops the moment you call this — there is no agent to notice.</li>
+<li>Enable the ✕ on a row whenever <code>runningScanJobId</code> is non-null — which includes <code>Queued</code> and <code>Interrupted</code> rows, not just <code>Running</code> ones.</li>
+</ul>
+<hr>
+<h2>7.5 Stop the DDC scanner — <code>GET</code> / <code>POST /discovery/scanner</code></h2>
+<p>The tenant-wide off switch, distinct from cancelling one run: while the scanner is stopped, <strong>no</strong> scans run, queue, or reach agents — the scheduler skips its slots, <code>POST /discovery/scans</code> returns 400, and agent polls return nothing — until it is started again.</p>
+<p><code>GET /discovery/scanner</code> (any console role):</p>
+<pre><code>
+{ "enabled": true, "running": 3, "queued": 11 }
+</code></pre>
+<p><code>running</code>/<code>queued</code> are the endpoint scans a stop would end / remove — use them in the confirmation dialog ("Stop the scanner? 3 machines are scanning now and 11 are queued.").</p>
+<p><code>POST /discovery/scanner</code> (admin only, 403 otherwise):</p>
+<pre><code>
+{ "enabled": false }
+</code></pre>
+<p>Response:</p>
+<pre><code>
+{ "enabled": false, "cancelledRunning": 3, "removedQueued": 11, "jobsClosed": 1 }
+</code></pre>
+<ul>
+<li><strong>Stopping cancels every in-flight endpoint scan across all jobs</strong> and closes the open jobs (same closing rule as a cancel: a run that completed some machines reads <code>CompletedWithErrors</code> and keeps those results; one that delivered nothing reads <code>Cancelled</code>).</li>
+<li><strong>Agents are not pushed to</strong> — same as a cancel, a machine mid-file may keep working for up to one heartbeat (5 min) before it notices. The switch also reaches the EXE as the <code>DiscoveryScannerEnabled</code> key in <code>GetEndpointExeSettings</code>, so agent builds that honor it stop without even polling.</li>
+<li><code>{ "enabled": true }</code> starts the scanner again. Nothing cancelled is resurrected — the next schedule slot or a manual run queues fresh scans.</li>
+<li>The header strip (<code>GET /discovery/scans/latest</code>) now carries <code>scannerEnabled</code>, so the dashboard can show the state without an extra call.</li>
+<li>The schedule itself is untouched by the switch: stopping does not flip <code>isActive</code> on <code>/discovery/schedule</code>, it just gates it. Starting again resumes the existing cadence.</li>
+</ul>
+<hr>
+<h2>8. Schedule — <code>GET</code> / <code>POST /discovery/schedule</code></h2>
+<pre><code>
+{
+  "cadence": "Weekly",
+  "runAtLocal": "02:00",
+  "timeZone": "Asia/Kolkata",
+  "defaultScanType": "Incremental",
+  "defaultVolumes": ["C", "D", "E", "Mapped"],
+  "isActive": true
+}
+</code></pre>
+<p>POST takes the same shape (admin-only, 403 otherwise). <code>runAtLocal</code> must be <code>HH:mm</code>. <code>cadence</code>: <code>Daily</code> | <code>Weekly</code> | <code>Monthly</code>.</p>
+<hr>
+<h2>9. Known limitations / behaviours to design for</h2>
+<ol>
+<li><strong>Sensitive Volume by File Type:</strong> the backend stores rows only for sensitive + unclassified files (clean files are counted, not stored — design decision 8.1). So <code>byExtension[]</code> carries <strong>sensitive</strong> bytes per type; the "total volume scanned per type" bar from the mock-up is not derivable. Size the bars on <code>sensitiveBytes</code> / <code>sensitiveSize</code>.</li>
+<li><strong>"All files" tab:</strong> same reason — "All" lists the stored rows (sensitive + unclassified). Clean files appear in the counts (<code>filesScanned</code>) but have no rows to list. If the tab must show a number, use the volume card counts.</li>
+<li><strong>Weekly cadence has no day-of-week</strong> — the next run is 7 days after the previous scheduled run, at <code>runAtLocal</code> tenant-local time. If product wants "every Monday", request it as a backend change.</li>
+<li><strong><code>deltaPct</code> is <code>null</code> on the first scan</strong> (nothing to compare against) — hide the trend badge, don't show 0%.</li>
+<li><strong>Mock data phase:</strong> until the EXE agent integrates, numbers are synthetic (seeded per tenant). Shapes and behaviours are final.</li>
+<li><strong>403 handling:</strong> scan/schedule POSTs return the standard envelope with <code>success:false</code> and a message — show it as a permission toast.</li>
+<li>New routes 404 from the gateway until the APIM operations are registered — a <code>{"statusCode": 404, "message": "Resource not found"}</code> body means APIM, not a wrong URL in your code. <strong><code>/discovery/scans/cancel</code>, <code>/discovery/scan-history</code> and <code>GET</code>/<code>POST /discovery/scanner</code> are new and need registering.</strong></li>
+<li><strong><code>scanProgressPct</code> is an estimate, never 100</strong> (§6.2). There is no true percentage to report; design the bar for "61%" and for "running, unknown".</li>
+<li><strong>Cancel is not instant</strong> (§7.4) — there is no push channel to the agent, so a machine can keep scanning for up to one heartbeat after the ✕.</li>
+<li><strong>A fleet stuck at <code>Queued</code> is not a server backlog</strong> (§6.2). Nothing serialises scans: the server hands every agent its own row the moment that agent polls. So <code>Queued</code> on a machine you believe is online means its agent has not polled <code>/discovery/scan</code> — check, in this order: <code>GET /discovery/scanner</code> (<code>enabled:false</code> → nothing is handed out at all), the row's <code>agentStatus</code>, and then the agent build on the machine (a DLP agent without the discovery poll never claims anything). Rows nobody ever claims are closed as <code>TimedOut</code> after <code>DiscoveryQueueTimeoutHours</code>.</li>
+</ol>
+<hr>
+<h2>10. Quick test recipe (Postman)</h2>
+<ol>
+<li>Log into the QA dashboard as a <strong>DLP Admin</strong>, copy <code>Authorization</code> + <code>ClientGUID</code> from any request in the Network tab.</li>
+<li><code>POST /discovery/overview</code> with <code>{}</code> → all tiles populated (mock data).</li>
+<li><code>POST /discovery/users</code> with <code>{"page":1,"pageSize":10}</code> → grid rows.</li>
+<li><code>POST /discovery/endpoint-detail</code> with an <code>endpointId</code> from step 3 → tiles + volume cards.</li>
+<li><code>POST /discovery/files</code> with the same <code>endpointId</code>, <code>tab:"Sensitive"</code> → file rows.</li>
+<li><code>POST /discovery/scans</code> <code>{"scope":"All","scanType":"Full"}</code> → job queued (verify 403 with a non-admin token).</li>
+<li><code>POST /discovery/users</code> <code>{"exactFilters":{"disks":["C"]}}</code> → only machines with a C: drive; <code>{"exactFilters":{"volumes":["C"]}}</code> → <strong>400</strong> naming the bad key.</li>
+<li><code>POST /discovery/scan-history</code> <code>{"endpointId":4482}</code> → the scan list; feed a <code>scanJobId</code> back as <code>{"endpointId":4482,"scanJobId":2231}</code> on <code>/discovery/files</code>.</li>
+<li><code>POST /discovery/scans/cancel</code> <code>{"scanJobId":&lt;the job from step 6&gt;}</code> → counts of what was stopped; call it twice and the second is a <strong>400</strong> ("nothing left to cancel").</li>
+<li><code>POST /discovery/scanner</code> <code>{"enabled":false}</code> → everything in flight cancelled; <code>POST /discovery/scans</code> now returns <strong>400</strong> ("scanner is stopped") and <code>GET /discovery/scans/latest</code> shows <code>scannerEnabled: false</code>. Finish with <code>{"enabled":true}</code> to put the tenant back.</li>
+</ol>
+
+<div class="doc-foot">Defensely DLP &middot; Data-Discovery-UI-Integration &middot; generated 2026-11-02</div>
+</body></html>

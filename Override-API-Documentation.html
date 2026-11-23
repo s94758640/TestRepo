@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Override API — Documentation</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#ffffff; --muted:#64748b; --line:#e2e8f0;
+    --get:#16a34a; --post:#2563eb; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.5}
+  header.top{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:#cbd5e1;font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:280px;flex:0 0 280px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:#fff}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:#334155;text-decoration:none;font-size:13px}
+  nav.side a:hover{background:#f1f5f9}
+  main{flex:1;padding:24px 32px;min-width:0}
+  .intro{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .intro h2{margin-top:0}
+  .kv{font-size:14px}
+  .kv code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:13px}
+  .endpoint{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+  .endpoint > .head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:#fafbfc;flex-wrap:wrap}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:4px 10px;border-radius:6px;letter-spacing:.04em}
+  .method.post{background:var(--post)} .method.get{background:var(--get)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600}
+  .body{padding:18px 22px}
+  .desc{color:#334155;margin:0 0 14px}
+  h5.section{margin:18px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  td code{background:#f1f5f9;padding:1px 5px;border-radius:4px}
+  .type{color:#9333ea;font-family:ui-monospace,monospace;font-size:12px}
+  .req{color:#dc2626;font-size:11px;font-weight:700}
+  .opt{color:var(--muted);font-size:11px;font-weight:600}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .newpill{display:inline-block;background:var(--newbg);color:var(--new);border:1px solid #a7f3d0;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
+  .anonpill{display:inline-block;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
+  .jwtpill{display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
+  .note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .ok{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:1000px){nav.side{display:none}.grid2{grid-template-columns:1fr}}
+  .tag{font-size:11px;color:var(--muted)}
+  h3.group{margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent);font-size:16px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Override API — Documentation</h1>
+  <p>Every override endpoint on SFM.DLP.API — request, approve, cancel, revoke, history, AI prompt overrides · for the tray / UI / agent teams</p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Getting started</h4>
+  <a href="#overview">The override flow</a>
+  <a href="#conventions">Conventions &amp; headers</a>
+  <a href="#enums">Values &amp; error codes</a>
+  <a href="#channel">Channels</a>
+  <a href="#duration">Durations &amp; limits</a>
+  <h4>End user (tray)</h4>
+  <a href="#settings">GetUserOverrideSettings</a>
+  <a href="#submit">SubmitOverrideRequest</a>
+  <a href="#cancel">CancelOverrideRequest</a>
+  <a href="#pending">GetPendingRequests</a>
+  <h4>Approvals (admin)</h4>
+  <a href="#counts">GetApprovalStatusCounts</a>
+  <a href="#list">GetApprovalList</a>
+  <a href="#request">GetApprovalRequest</a>
+  <a href="#review">ReviewOverrideRequest</a>
+  <a href="#bulk">BulkApproveReject</a>
+  <a href="#allpending">GetAllPendingRequests</a>
+  <a href="#rolebased">GetRoleBasedApprovals</a>
+  <h4>Self override history</h4>
+  <a href="#history">GetSelfOverrideHistory</a>
+  <a href="#historygrouped">GetSelfOverrideHistoryGrouped</a>
+  <a href="#revoke">RevokeSelfOverride</a>
+  <h4>Agent</h4>
+  <a href="#checkstatus">CheckOverrideStatus</a>
+  <h4>AI prompt overrides</h4>
+  <a href="#promptsubmit">SubmitPromptOverrideRequest</a>
+  <a href="#promptstatus">CheckPromptOverrideStatus</a>
+  <a href="#promptcancel">CancelPromptOverrideRequest</a>
+  <h4>Portal</h4>
+  <a href="#overridelist">GetOverrideList</a>
+  <h4>Reference</h4>
+  <a href="#deploy">Deployment note (SQL)</a>
+  <a href="#gaps">Known gaps</a>
+</nav>
+
+<main>
+
+<section class="intro" id="overview">
+  <h2>The override flow</h2>
+  <p class="kv">A policy blocks a transfer. The employee can ask for that block to be lifted, by one of two routes the policy decides per severity:</p>
+  <table>
+    <tr><th>Route</th><th>What happens</th></tr>
+    <tr><td><code>SelfOverride</code> <span class="tag">stored as 1</span></td><td><strong>Auto-approved at submit.</strong> The request row is written already <code>APPROVED</code>, with <code>ValidFrom</code>/<code>ValidUntil</code> set, and the activity is flagged <code>IsOverrideApplied</code>. It spends one of the user's allowance for the reset period. An admin can close the window early with <a href="#revoke">RevokeSelfOverride</a>.</td></tr>
+    <tr><td><code>AdminApproval</code> <span class="tag">stored as 2</span></td><td>Written <code>PENDING</code>; the activity is flagged <code>IsPendingApproval</code> and the DLP admins get a Recent Alerts notification. Nothing unlocks until someone calls <a href="#review">ReviewOverrideRequest</a>. The approver roles allowed to decide it are frozen onto the row at submit.</td></tr>
+  </table>
+  <p class="kv">Both routes write one row of <code>dlp."OverrideRequest"</code>. The same table backs file overrides (<code>ActivityId</code> = the activity's <code>EnrichedId</code>) and AI prompt overrides (<code>ActivityId</code> = 0, <code>AiPromptBlockLogId</code> set).</p>
+  <div class="ok"><strong>Which rules apply</strong> — since 23 Oct 2026 every override endpoint resolves its rules from the published <strong>PolicyV2 Response options</strong> (the override matrix: severities → route → unlock duration → approver roles), falling back to <code>TrayAppSettings</code> in <code>appsettings</code> when the tenant has no published V2 policy. The legacy <code>dlp."PolicyActionSettings"</code> booleans are deliberately not read.</div>
+  <p class="kv"><strong>Route aliases.</strong> <code>SubmitPolicyOverrideRequest</code> and <code>GetUserPolicyOverrideSettings</code> were added while the tray team was moving to the new policy. Both now behave <em>identically</em> to the original routes — same contract, same rules. New callers should use <code>SubmitOverrideRequest</code> and <code>GetUserOverrideSettings</code>.</p>
+</section>
+
+<section class="intro" id="conventions">
+  <h2>Conventions &amp; headers</h2>
+  <table>
+    <tr><th>Header</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>ClientGUID</code></td><td><span class="req">required</span></td><td>Tenant identifier — selects the tenant's DLP database. Without it the request falls back to <code>DefaultConnection</code> and reads the wrong tenant.</td></tr>
+    <tr><td><code>Content-Type</code></td><td><span class="req">required</span></td><td><code>application/json</code> on every <code>POST</code>.</td></tr>
+    <tr><td><code>Authorization</code></td><td>see below</td><td>Tray and agent endpoints are <code>[AllowAnonymous]</code> and identify the user by <code>userId</code> in the body or query. Portal endpoints need a Bearer JWT. On the approval grid a JWT with a <code>UserId</code> claim removes the need for <code>?userId=</code>.</td></tr>
+  </table>
+  <div class="note">
+    <strong>Routes have no controller prefix.</strong> Every endpoint below sits at the host root — <code>POST https://{dlp-api-host}/SubmitOverrideRequest</code>, not <code>/api/TrayApp/...</code>.<br/>
+    <strong>Dates</strong> are ISO-8601 <strong>UTC</strong>; the server clock decides every window, so never compute an expiry from the endpoint's own clock. <strong>JSON is camelCase.</strong> Every response uses the envelope <code>{ success, message, data, errors }</code> — the samples below show the <code>data</code> shape only.
+  </div>
+  <h5 class="section">Who is marked <span class="anonpill">ANON</span> / <span class="jwtpill">JWT</span></h5>
+  <p class="kv"><span class="anonpill">ANON</span> — <code>[AllowAnonymous]</code>: reachable by the tray app and the agent with no token. <span class="jwtpill">JWT</span> — requires a Bearer token. Note that the approvals endpoints are anonymous too: <code>canApprove</code> is a <em>display</em> flag, and server-side enforcement of who may decide is not wired yet (see <a href="#gaps">known gaps</a>).</p>
+</section>
+
+<section class="intro" id="enums">
+  <h2>Values &amp; error codes</h2>
+  <div class="grid2">
+    <div>
+      <h5 class="section">Override type</h5>
+      <table>
+        <tr><th>In a request</th><th>Stored / returned</th></tr>
+        <tr><td><code>"SelfOverride"</code></td><td><code>overrideType: 1</code></td></tr>
+        <tr><td><code>"AdminApproval"</code></td><td><code>overrideType: 2</code></td></tr>
+      </table>
+      <p class="tag">Submit takes the <strong>string</strong>; every list and detail row returns the <strong>int</strong>.</p>
+    </div>
+    <div>
+      <h5 class="section">Request status (stored, UPPERCASE)</h5>
+      <table>
+        <tr><th>Value</th><th>Meaning</th></tr>
+        <tr><td><code>PENDING</code></td><td>Admin approval awaiting a decision.</td></tr>
+        <tr><td><code>APPROVED</code></td><td>Granted — self-overrides are born here.</td></tr>
+        <tr><td><code>REJECTED</code></td><td>Declined by an approver.</td></tr>
+        <tr><td><code>CANCELLED</code></td><td>Withdrawn by the requester; <code>isActive</code> goes false.</td></tr>
+      </table>
+    </div>
+  </div>
+  <h5 class="section">Self override history status <span class="tag">derived, not stored</span></h5>
+  <p class="kv"><code>Active</code> (unlock window open) · <code>Expired</code> (window closed) · <code>Revoked</code> (an admin closed it early). Used by <a href="#history">GetSelfOverrideHistory</a> only — do not send these to the admin-approval endpoints.</p>
+  <h5 class="section">Error codes <span class="tag">TrayAppErrorCodes — stable, safe to switch on</span></h5>
+  <table>
+    <tr><th>Code</th><th>HTTP</th><th>Means</th></tr>
+    <tr><td><code>NOT_ALLOWED</code></td><td>400</td><td>The policy does not permit this route, or not for this severity. Don't retry; offer the other route if the policy allows it.</td></tr>
+    <tr><td><code>LIMIT_EXCEEDED</code></td><td>409</td><td>The self-override allowance for the period is spent, or the requested duration is over the ceiling. On a review, the approver asked for more time than the policy allows (400).</td></tr>
+    <tr><td><code>DUPLICATE_REQUEST</code></td><td>409</td><td>A request for this activity is already pending — usually a double click. Refresh, don't resubmit.</td></tr>
+    <tr><td><code>ALREADY_DECIDED</code></td><td>409 / 400</td><td>Someone already approved or rejected it. The first decision stands; refresh the row.</td></tr>
+    <tr><td><code>FORBIDDEN</code></td><td>400</td><td>The caller is not the requester (cancel), or may not see/decide approvals.</td></tr>
+  </table>
+  <div class="note">On a refusal <strong>both levels say failure</strong>: the envelope's <code>success</code> is <code>false</code> <em>and</em> <code>data.success</code> is <code>false</code> with <code>data.errorCode</code> set. Read <code>errorCode</code>, never the message text — the wording changes.</div>
+</section>
+
+<section class="intro" id="channel">
+  <h2>Channels <span class="newpill">NEW</span></h2>
+  <p class="kv">An override now records <strong>where</strong> it applies, as a pair: <code>channelType</code> — <code>"App"</code> or <code>"Site"</code> — and <code>channelName</code>, the channel itself.</p>
+  <div class="grid2">
+    <div>
+      <h5 class="section">App</h5>
+      <p class="kv">The application the user was working in: <span class="pill">Teams</span><span class="pill">Outlook</span><span class="pill">Slack</span><span class="pill">OneDrive</span><span class="pill">File Explorer</span> and anything else the log names.</p>
+    </div>
+    <div>
+      <h5 class="section">Site</h5>
+      <p class="kv">The web destination the file was going to: <span class="pill">OneDrive</span><span class="pill">SharePoint</span><span class="pill">Google Drive</span><span class="pill">Dropbox</span><span class="pill">ChatGPT</span>, or the host itself for anything unrecognised (<code>vendor-portal.com</code>).</p>
+    </div>
+  </div>
+  <h5 class="section">How the pair is filled</h5>
+  <table>
+    <tr><th>What the caller sends</th><th>What is stored</th></tr>
+    <tr><td>Both fields</td><td>Exactly that — the caller knows things the log does not.</td></tr>
+    <tr><td><code>channelName</code> only</td><td>The name as sent, plus the derived type when the two agree on the channel, <code>"App"</code> otherwise. A named channel is never left untyped.</td></tr>
+    <tr><td>Neither</td><td>Derived from the activity's own application and URL, so a client that never heard of the field still stores a channel.</td></tr>
+  </table>
+  <div class="ok"><strong>A browser is never the channel.</strong> Chrome uploading to OneDrive is a <em>OneDrive</em> transfer. So a known non-browser application wins first, then the site, then whatever application was left. <code>chrome.exe</code> + <code>onedrive.live.com</code> → <code>Site</code> / <code>OneDrive</code>; <code>teams.exe</code> with no URL → <code>App</code> / <code>Teams</code>.</div>
+  <div class="note"><strong>Null and empty are valid.</strong> Both fields null means the override covers <em>every</em> channel — which is how every override behaved before the column existed, so rows written before this change, and any activity naming neither an application nor a URL, keep working untouched. Treat null as "no channel restriction", never as a miss.</div>
+  <p class="tag">Stored as <code>dlp."OverrideRequest"."ChannelType"</code> varchar(20) and <code>"ChannelName"</code> varchar(100); a longer value is cut, not rejected. Returned by <a href="#checkstatus">CheckOverrideStatus</a>. Prompt overrides do not set a channel.</p>
+</section>
+
+<section class="intro" id="duration">
+  <h2>Durations &amp; limits</h2>
+  <p class="kv">A request may say how long access is wanted: <code>requestedDuration</code> (a number) plus <code>durationUnit</code> (<code>"Hours"</code> or <code>"Days"</code>, defaulting to Hours). Both are optional — omitting them keeps the pre-existing behaviour (the configured default window).</p>
+  <table>
+    <tr><th>Rule</th><th>Effect</th></tr>
+    <tr><td>A policy matrix rule covers the activity's severity</td><td>The rule's unlock duration <strong>wins</strong> over whatever the employee asked for, and the ceiling check is skipped.</td></tr>
+    <tr><td>Rule preset is <code>OneUpload</code></td><td>The row stores <code>durationUnit: "OneUpload"</code> so the agent can enforce single use; <code>validUntil</code> is a 60-minute grace window.</td></tr>
+    <tr><td>No matrix rule, self override</td><td>Capped at <code>maxSelfOverrideHours</code> (from <a href="#settings">GetUserOverrideSettings</a>); over it → 409 <code>LIMIT_EXCEEDED</code>.</td></tr>
+    <tr><td>No matrix rule, admin approval</td><td>Capped at <code>maxAdminApprovalDays</code>; over it → 409 <code>LIMIT_EXCEEDED</code>.</td></tr>
+    <tr><td>Allowance</td><td><code>selfOverridesRemaining &lt;= 0</code> → 409 <code>LIMIT_EXCEEDED</code>. <code>0</code> means zero, not unlimited; unlimited is signalled by <code>isUnlimitedSelfOverrides: true</code> (totals then carry <code>int.MaxValue</code> — render "Unlimited", not the number).</td></tr>
+  </table>
+  <h5 class="section">What the approver may grant</h5>
+  <p class="kv">On approve, the Access Time dialog sends <code>grantedDuration</code> + <code>grantedDurationUnit</code>. The window is resolved in this order: <strong>1.</strong> what the approver chose · <strong>2.</strong> what the employee asked for · <strong>3.</strong> the configured default (<code>AdminApprovalValidityDays</code>). An approver may <em>shorten</em> a window, never extend it past <code>policyTimeLimitMinutes</code> on the row — the dialog should cap at that value ("Up to 3 Days", <code>policyTimeLimitSetBy</code> names the policy).</p>
+</section>
+
+<h3 class="group">End user (tray)</h3>
+
+<section class="endpoint" id="settings">
+  <div class="head"><span class="method get">GET</span><span class="path">/GetUserOverrideSettings/{userId}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Everything the tray's override dialog needs for one user: whether each route is allowed, the allowance left this period, the policy's override matrix, the ceilings to quote, and whether this user should see the Approvals tab at all. <code>GET /GetUserPolicyOverrideSettings/{userId}</code> is an alias with identical behaviour.</p>
+    <h5 class="section">Response <span class="tag">data</span></h5>
+<pre>{
+  "userId": 412,
+  "selfOverridesUsed": 2,
+  "selfOverridesTotal": 5,
+  "selfOverridesRemaining": 3,
+  "isUnlimitedSelfOverrides": false,
+  "canSelfOverride": true,
+  "canAdminOverride": true,
+  "typicalResponseTime": "2 to 4 Hours",
+  "overrideResetPeriod": "Monthly",
+
+  "policySource": "PolicyV2",
+  "policyName": "Finance Restrict All",
+  "overrideRules": [
+    {
+      "severities": ["High", "Low"],
+      "type": "SelfOverride",
+      "unlockPreset": "24h",
+      "unlockValue": null,
+      "unlockUnit": null,
+      "unlockMinutes": 1440,
+      "approverRoles": [],
+      "approverRoleNames": []
+    },
+    {
+      "severities": ["Medium"],
+      "type": "AdminApproval",
+      "unlockPreset": "4h",
+      "unlockMinutes": 240,
+      "approverRoles": ["12", "SecurityAdmin"],
+      "approverRoleNames": ["DLP Admin", "Security admin"]
+    }
+  ],
+  "selfOverrideSeverities": ["High", "Low"],
+  "adminApprovalSeverities": ["Medium"],
+  "allowCancelWhilePending": true,
+
+  "maxSelfOverrideHours": 8,
+  "maxAdminApprovalDays": 30,
+
+  "isApprover": false,
+  "canDecide": false,
+  "roleIds": [7],
+  "pendingApprovalCount": 0,
+
+  "actionSettings": { },
+  "alertMessages": [ ]
+}</pre>
+    <h5 class="section">Reading it</h5>
+    <table>
+      <tr><th>Field</th><th>Use</th></tr>
+      <tr><td><code>policySource</code></td><td><code>"PolicyV2"</code> when a published policy answered, <code>"AppSettings"</code> on the fallback. <code>policyName</code> is set only in the first case.</td></tr>
+      <tr><td><code>overrideRules</code></td><td>The matrix as the wizard drew it. <strong>Empty</strong> when no rev-18 matrix is in force — then the coarse <code>canSelfOverride</code>/<code>canAdminOverride</code> pair says everything. <code>severities: []</code> on a rule means <em>every</em> severity.</td></tr>
+      <tr><td><code>unlockPreset</code></td><td><code>"1h" | "4h" | "24h" | "7d" | "OneUpload"</code>, or <code>null</code> when the admin typed a custom <code>unlockValue</code> + <code>unlockUnit</code> (<code>h</code>/<code>d</code>). <code>unlockMinutes</code> is the resolved window either way, <code>null</code> for OneUpload.</td></tr>
+      <tr><td><code>approverRoles</code> / <code>approverRoleNames</code></td><td>Index-aligned. Raw tokens are tenant role ids (digits) or catalog codes; the names feed the "by …" chip.</td></tr>
+      <tr><td><code>overrideResetPeriod</code></td><td><code>Daily</code>, <code>Weekly</code>, <code>Monthly</code> or <code>Never</code>.</td></tr>
+      <tr><td><code>isApprover</code> / <code>canDecide</code> / <code>pendingApprovalCount</code></td><td>Draw or hide the Approvals tab and its badge. <code>pendingApprovalCount</code> is always 0 for a non-approver.</td></tr>
+    </table>
+    <div class="note">The allowance shown here is the allowance that is <strong>enforced</strong> at submit — the two cannot disagree. Re-read this endpoint after every successful self override.</div>
+  </div>
+</section>
+
+<section class="endpoint" id="submit">
+  <div class="head"><span class="method post">POST</span><span class="path">/SubmitOverrideRequest</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Raise an override on a blocked activity. <code>POST /SubmitPolicyOverrideRequest</code> is an alias with the identical contract and behaviour.</p>
+    <h5 class="section">Request body</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th></th><th>Notes</th></tr>
+      <tr><td><code>enrichedId</code></td><td class="type">int</td><td><span class="req">required</span></td><td>The blocked activity (<code>LandingLogsCrunched.EnrichedId</code>). 404 if no such row.</td></tr>
+      <tr><td><code>userId</code></td><td class="type">int</td><td><span class="req">required</span></td><td>The employee raising it.</td></tr>
+      <tr><td><code>overrideType</code></td><td class="type">string</td><td><span class="req">required</span></td><td><code>"SelfOverride"</code> or <code>"AdminApproval"</code>. Anything else → 400.</td></tr>
+      <tr><td><code>businessJustification</code></td><td class="type">string</td><td><span class="req">required</span></td><td>Blank or whitespace → 400.</td></tr>
+      <tr><td><code>requestedDuration</code></td><td class="type">int?</td><td><span class="opt">optional</span></td><td>How long access is wanted. See <a href="#duration">durations</a>.</td></tr>
+      <tr><td><code>durationUnit</code></td><td class="type">string?</td><td><span class="opt">optional</span></td><td><code>"Hours"</code> (default) or <code>"Days"</code>.</td></tr>
+      <tr><td><code>channelType</code> <span class="newpill">NEW</span></td><td class="type">string?</td><td><span class="opt">optional</span></td><td><code>"App"</code> or <code>"Site"</code>. See <a href="#channel">channels</a>.</td></tr>
+      <tr><td><code>channelName</code> <span class="newpill">NEW</span></td><td class="type">string?</td><td><span class="opt">optional</span></td><td><code>"Teams"</code>, <code>"OneDrive"</code>, … Omit both and the server derives them from the activity.</td></tr>
+    </table>
+<pre>POST /SubmitOverrideRequest
+ClientGUID: 2b4d91d0-...
+Content-Type: application/json
+
+{
+  "enrichedId": 884213,
+  "userId": 412,
+  "overrideType": "SelfOverride",
+  "businessJustification": "Vendor needs the signed Q3 statement before 5pm.",
+  "requestedDuration": 4,
+  "durationUnit": "Hours",
+  "channelType": "Site",
+  "channelName": "OneDrive"
+}</pre>
+    <h5 class="section">200 — self override (applied immediately)</h5>
+<pre>{
+  "success": true,
+  "message": "Self override applied successfully.",
+  "errorCode": null,
+  "overridesRemaining": 2,
+  "accessExpiresAt": null
+}</pre>
+    <h5 class="section">200 — admin approval (queued)</h5>
+<pre>{
+  "success": true,
+  "message": "Admin approval request submitted successfully. Typical response time: 2 to 4 Hours.",
+  "errorCode": null,
+  "overridesRemaining": null,
+  "accessExpiresAt": null
+}</pre>
+    <h5 class="section">Refusals</h5>
+    <table>
+      <tr><th>HTTP</th><th>errorCode</th><th>When</th></tr>
+      <tr><td>400</td><td>—</td><td>Missing justification, or an <code>overrideType</code> that is neither value. Plain <code>ApiResponse&lt;string&gt;</code> failure, no code.</td></tr>
+      <tr><td>404</td><td>—</td><td>No activity for that <code>enrichedId</code>.</td></tr>
+      <tr><td>400</td><td><code>NOT_ALLOWED</code></td><td>The policy disables this route, or excludes the activity's severity from it.</td></tr>
+      <tr><td>409</td><td><code>LIMIT_EXCEEDED</code></td><td>Asked duration over the ceiling, or the self-override allowance is spent.</td></tr>
+      <tr><td>409</td><td><code>DUPLICATE_REQUEST</code></td><td>Admin approval only — a pending request already exists for this activity.</td></tr>
+      <tr><td>500</td><td>—</td><td>Unhandled; the message carries the exception text.</td></tr>
+    </table>
+    <h5 class="section">Side effects</h5>
+    <table>
+      <tr><th>Route</th><th>Activity row</th><th>Notification</th></tr>
+      <tr><td>Self override</td><td><code>IsOverrideApplied = true</code>, <code>IsPendingApproval = false</code>, <code>ProcessStatus = "Override Applied"</code></td><td>none</td></tr>
+      <tr><td>Admin approval</td><td><code>IsPendingApproval = true</code>, <code>IsOverrideApplied = true</code>, <code>ProcessStatus = "Override Requested"</code></td><td>Recent Alerts to DLP admins, category <code>AdminApproval</code></td></tr>
+    </table>
+    <div class="note">The request row also freezes the activity's <code>Severity</code>, the <a href="#channel">channel</a>, and, for admin approval, the <code>ApproverRoles</code> resolved from the matrix <em>with the hierarchy applied</em> (a High approver also covers Medium and Low). A later policy edit never changes who may decide an already-queued request.</div>
+  </div>
+</section>
+
+<section class="endpoint" id="cancel">
+  <div class="head"><span class="method post">POST</span><span class="path">/CancelOverrideRequest</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The requester withdraws their own <strong>pending</strong> admin-approval request. Sets the row to <code>CANCELLED</code>, <code>isActive = false</code>, clears the activity's pending flags (<code>ProcessStatus = "Override Cancelled"</code>) and tells the admins it was withdrawn.</p>
+    <h5 class="section">Request body</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th></th><th>Notes</th></tr>
+      <tr><td><code>overrideRequestId</code></td><td class="type">guid</td><td><span class="req">required</span></td><td>404 when unknown.</td></tr>
+      <tr><td><code>userId</code></td><td class="type">int</td><td><span class="req">required</span></td><td>Must be the original requester.</td></tr>
+      <tr><td><code>cancellationReason</code></td><td class="type">string?</td><td><span class="opt">optional</span></td><td>Stored in <code>reviewComments</code>; defaults to "Cancelled by user".</td></tr>
+    </table>
+    <h5 class="section">Responses</h5>
+<pre>200 { "success": true, "message": "Override request cancelled successfully.",
+      "errorCode": null, "overrideRequestId": "0f0c…" }
+
+400 { "success": false, "errorCode": "FORBIDDEN",       … }   // not your request
+400 { "success": false, "errorCode": "ALREADY_DECIDED", … }   // no longer PENDING
+404 — no such request</pre>
+    <div class="note">Only pending requests can be cancelled, and only by their requester. Whether the Cancel button is offered at all is the policy's <code>allowCancelWhilePending</code> flag from <a href="#settings">GetUserOverrideSettings</a>. For a prompt override use <a href="#promptcancel">CancelPromptOverrideRequest</a> instead — this endpoint does not check the prompt linkage.</div>
+  </div>
+</section>
+
+<section class="endpoint" id="pending">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetPendingRequests/{userId}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">One user's own requests — the tray's "My requests" list.</p>
+    <h5 class="section">Request body <span class="tag">TrayAppPendingRequestsFilter</span></h5>
+<pre>{ "pageNumber": 1, "pageSize": 20, "status": "PENDING" }</pre>
+    <p class="kv"><code>status</code> omitted returns the user's active requests regardless of status; otherwise it matches the stored value exactly (<code>PENDING</code> / <code>APPROVED</code> / <code>REJECTED</code> / <code>CANCELLED</code>).</p>
+    <h5 class="section">Response <span class="tag">data: TrayAppOverrideRequestDetailDTO[]</span></h5>
+<pre>[{
+  "overrideRequestId": "0f0c…", "activityId": 884213, "overrideType": 2,
+  "justification": "Vendor needs the signed Q3 statement.",
+  "status": "PENDING", "dateRequested": "2026-10-27T09:14:22Z",
+  "reviewedAt": null, "reviewedByEmail": null, "reviewComments": null,
+  "fileName": "Q3_vendor_payments.xlsx", "fileSize": 184320,
+  "fileSizeFormatted": "180 KB", "application": "chrome.exe",
+  "destination": "drive.google.com", "policyName": "Finance Restrict All",
+  "isLargeFile": false, "sensitiveDataTypes": ["PII","PCI"],
+  "userName": "Lara Niles", "employeeCode": "FIN-2291",
+  "overridesThisPeriod": 4,
+  "requestedDuration": 4, "durationUnit": "Hours",
+  "grantedDuration": null, "accessExpiresAt": null
+}]</pre>
+  </div>
+</section>
+
+<h3 class="group">Approvals (admin)</h3>
+
+<section class="endpoint" id="counts">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetApprovalStatusCounts</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The Pending / Approved / Rejected / All pills above the approval grid. Admin-approval requests only.</p>
+    <h5 class="section">Request body <span class="tag">ApprovalListFilterDTO</span></h5>
+<pre>{ "approverUserId": 118, "fromDate": "2026-10-01T00:00:00Z", "toDate": "2026-10-31T23:59:59Z" }</pre>
+    <h5 class="section">Response</h5>
+<pre>{ "pending": 12, "approved": 148, "rejected": 9, "all": 169 }</pre>
+  </div>
+</section>
+
+<section class="endpoint" id="list">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetApprovalList?userId={callerId}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The admin approval grid: paged, filtered and sorted admin-approval requests, newest first, with the status pills and the Activity filter counts for the whole date range.</p>
+    <h5 class="section">Request body <span class="tag">QueryParameters</span></h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>page</code> / <code>pageSize</code></td><td class="type">int</td><td>Default 1 / 10.</td></tr>
+      <tr><td><code>fromDate</code> / <code>toDate</code></td><td class="type">date</td><td><span class="req">send both</span> — there is no server-side default here, and a null bound matches no rows.</td></tr>
+      <tr><td><code>sortBy</code> / <code>sortDescending</code></td><td class="type">string / bool</td><td>Column name on the request row; default order is <code>dateRequested</code> descending.</td></tr>
+      <tr><td><code>status</code></td><td class="type">string</td><td>Stored value, e.g. <code>"PENDING"</code>.</td></tr>
+      <tr><td><code>likeFilters</code></td><td class="type">object</td><td>CONTAINS filters. <code>userName</code> (also matches the email) and <code>employeeCode</code> are matched against the user row before paging. Each key takes a string or an array — <code>{"userName":"lara"}</code> and <code>{"userName":["lara","sam"]}</code> both bind; values in one key OR, keys AND.</td></tr>
+      <tr><td><code>exactFilters</code></td><td class="type">object</td><td>Equality filters on request columns, same single-value-or-array tolerance.</td></tr>
+    </table>
+    <h5 class="section">Query string</h5>
+    <p class="kv"><code>?userId=</code> is the <strong>caller</strong>, and it is what fills <code>canApprove</code> on each row. The portal may omit it and rely on the JWT's <code>UserId</code> claim. With neither, <code>canApprove</code> is <code>null</code> on every row — a missing flag, not a <code>false</code>.</p>
+    <h5 class="section">Response <span class="tag">data</span></h5>
+<pre>{
+  "totalCount": 169,
+  "statusCounts": { "pending": 12, "approved": 148, "rejected": 9, "all": 169 },
+  "activityCounts": { "Upload": 140, "Download": 21, "AI Prompt": 8 },
+  "data": [{
+    "overrideRequestId": "0f0c…", "activityId": 884213, "metaId": "a19f…",
+    "requestedByUserId": 412, "requestedByEmail": "lara@contoso.com",
+    "userName": "Lara Niles", "employeeCode": "FIN-2291",
+    "overridesThisPeriod": 4,
+    "fileName": "Q3_vendor_payments.xlsx", "fileSize": 184320,
+    "fileSizeFormatted": "180 KB", "isLargeFile": false,
+    "justification": "Vendor needs the signed Q3 statement.",
+    "application": "chrome.exe", "destination": "drive.google.com",
+    "policyName": "Finance Restrict All", "sensitiveDataTypes": ["PII","PCI"],
+    "activity": "Upload", "severity": "Medium",
+    "dateRequested": "2026-10-27T09:14:22Z", "status": "PENDING", "overrideType": 2,
+
+    "requestedDuration": 4, "durationUnit": "Hours",
+    "grantedDuration": null, "accessExpiresAt": null,
+    "policyTimeLimitMinutes": 4320, "policyTimeLimitSetBy": "Finance Restrict All",
+
+    "approverRoles": ["12","SecurityAdmin"], "canApprove": true,
+    "reviewedAt": null, "reviewedByUserId": null,
+    "reviewedByEmail": null, "reviewedByUserName": null, "reviewComments": null,
+    "incidentInfo": null, "incidentInfoJson": null,
+    "timeline": [
+      { "event": "Blocked",       "label": "Upload blocked on Drive",        "at": "2026-10-27T09:12:40Z" },
+      { "event": "Requested",     "label": "Approval requested by Lara Niles","at": "2026-10-27T09:14:22Z" },
+      { "event": "WaitingReview", "label": "Waiting for admin review",        "at": null }
+    ]
+  }]
+}</pre>
+    <h5 class="section">canApprove</h5>
+    <table>
+      <tr><th>Row state</th><th>Result for the caller</th></tr>
+      <tr><td>Row has stored <code>approverRoles</code></td><td><code>true</code> when a token matches: a digit token against the caller's <strong>RoleId</strong>, any other token against the caller's <strong>role name</strong> ignoring case and spaces (<code>SecurityAdmin</code> matches "Security admin").</td></tr>
+      <tr><td>No stored roles (legacy / AppSettings)</td><td>Falls back to DLP Admin or a <code>PolicyApprovalRoleMap</code> entry.</td></tr>
+      <tr><td>Caller not identified</td><td><code>null</code>.</td></tr>
+    </table>
+    <p class="kv"><code>activity</code> is the underlying transfer kind (<code>Upload</code>, <code>Download</code>, …), or <code>"AI Prompt"</code> for a prompt-anchored request (<code>activityId: 0</code>). <code>activityCounts</code> covers the whole date range, not just the page, so the filter dropdown reads the same on page 4 as on page 1.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="request">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetApprovalRequest/{overrideRequestId}?userId={callerId}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">One request in exactly the row shape <a href="#list">GetApprovalList</a> returns — timeline, policy time limit, <code>canApprove</code> and all. This is how the detail screen is reached directly from a notification, a deep link, or a refresh after deciding. No request body is needed.</p>
+    <h5 class="section">Responses</h5>
+<pre>200 → data: ApprovalListItemDTO   (same shape as one row of GetApprovalList)
+404 → "Override request not found: {id}"</pre>
+  </div>
+</section>
+
+<section class="endpoint" id="review">
+  <div class="head"><span class="method post">POST</span><span class="path">/ReviewOverrideRequest</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Approve or reject one pending admin-approval request. Approving writes the unlock window and flags the activity <code>IsOverrideApplied</code>; rejecting clears both flags. A prompt-anchored request updates its block-log row instead (<code>"Override Applied"</code>, or back to <code>"Block"</code> on reject). Either way the requester is notified.</p>
+    <h5 class="section">Request body <span class="tag">TrayAppAdminReviewRequestDTO</span></h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th></th><th>Notes</th></tr>
+      <tr><td><code>overrideRequestId</code></td><td class="type">guid</td><td><span class="req">required</span></td><td></td></tr>
+      <tr><td><code>status</code></td><td class="type">string</td><td><span class="req">required</span></td><td><code>"APPROVED"</code> or <code>"REJECTED"</code> — uppercase. Anything else → 400.</td></tr>
+      <tr><td><code>reviewedByUserId</code> / <code>reviewedByEmail</code></td><td class="type">int / string</td><td><span class="req">required</span></td><td>The approver, recorded on the row.</td></tr>
+      <tr><td><code>reviewComments</code></td><td class="type">string</td><td><span class="opt">optional</span></td><td>Shown to the requester.</td></tr>
+      <tr><td><code>grantedDuration</code> / <code>grantedDurationUnit</code></td><td class="type">int? / string?</td><td><span class="opt">optional</span></td><td>The Access Time dialog: <code>3</code> + <code>"Days"</code>. Approve only; capped at the row's <code>policyTimeLimitMinutes</code>.</td></tr>
+      <tr><td><code>validFrom</code> / <code>validUntil</code></td><td class="type">date?</td><td><span class="opt">legacy</span></td><td>Raw window from older clients. <code>grantedDuration</code> wins when both are sent; <code>validFrom</code> defaults to now.</td></tr>
+    </table>
+<pre>{
+  "overrideRequestId": "0f0c…",
+  "status": "APPROVED",
+  "reviewedByUserId": 118,
+  "reviewedByEmail": "admin@contoso.com",
+  "reviewComments": "Approved for the vendor deadline only.",
+  "grantedDuration": 3,
+  "grantedDurationUnit": "Days"
+}</pre>
+    <h5 class="section">Responses</h5>
+    <table>
+      <tr><th>HTTP</th><th>errorCode</th><th>When</th></tr>
+      <tr><td>200</td><td>—</td><td><code>{ "success": true, "message": "Override request approved successfully." }</code> (or "… rejected.")</td></tr>
+      <tr><td>400</td><td>—</td><td><code>status</code> is neither APPROVED nor REJECTED.</td></tr>
+      <tr><td>400</td><td><code>LIMIT_EXCEEDED</code></td><td>Granted time is under an hour, or above the policy cap — the message names the limit and the policy that set it.</td></tr>
+      <tr><td>404</td><td>—</td><td>No such request.</td></tr>
+      <tr><td>409</td><td><code>ALREADY_DECIDED</code></td><td>It is no longer <code>PENDING</code> — another approver won the race. Refresh rather than retry.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="endpoint" id="bulk">
+  <div class="head"><span class="method post">POST</span><span class="path">/BulkApproveReject</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Decide several requests in one call. Each is validated on its own, so one request whose policy limit is shorter than the batch's Access Time fails without taking the others down.</p>
+    <h5 class="section">Request body</h5>
+<pre>{
+  "overrideRequestIds": ["0f0c…", "7a21…"],
+  "status": "APPROVED",
+  "reviewedByUserId": 118,
+  "reviewedByEmail": "admin@contoso.com",
+  "reviewComments": "Batch approved after review.",
+  "grantedDuration": 1,
+  "grantedDurationUnit": "Days"
+}</pre>
+    <h5 class="section">Response</h5>
+<pre>{ "success": true, "message": "…", "processedCount": 2,
+  "successCount": 1, "failedCount": 1,
+  "errors": ["0f0c…: Policy allows at most 4 Hours (set in Finance Restrict All). You can shorten it, not extend it."] }</pre>
+    <p class="kv">An empty <code>overrideRequestIds</code> is the one validation failure the service reports — 400.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="allpending">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetAllPendingRequests</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Admin-approval requests across all users, newest first — the simple queue, without the grid's counts and enrichment.</p>
+    <h5 class="section">Request body</h5>
+<pre>{ "pageNumber": 1, "pageSize": 20, "status": "Pending,Approved" }</pre>
+    <table>
+      <tr><th><code>status</code></th><th>Returns</th></tr>
+      <tr><td>omitted</td><td>Pending only — the admin queue.</td></tr>
+      <tr><td><code>"Approved"</code> / <code>"Rejected"</code> / <code>"Cancelled"</code></td><td>That status.</td></tr>
+      <tr><td>comma list, e.g. <code>"Pending,Approved"</code></td><td>Any of them.</td></tr>
+      <tr><td><code>"All"</code></td><td>Every status.</td></tr>
+      <tr><td>anything else</td><td>400, naming the invalid value.</td></tr>
+    </table>
+    <p class="kv">Response: <code>TrayAppOverrideRequestDetailDTO[]</code>, same shape as <a href="#pending">GetPendingRequests</a>.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="rolebased">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetRoleBasedApprovals</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The approval queue filtered to what one approver's roles cover, plus whether they may approve at all.</p>
+    <h5 class="section">Request body <span class="tag">RoleBasedApprovalFilterDTO (QueryParameters + …)</span></h5>
+<pre>{ "approverUserId": 118, "page": 1, "pageSize": 20,
+  "status": "PENDING", "searchText": "payments", "isLargeFile": null,
+  "fromDate": "2026-10-01T00:00:00Z", "toDate": "2026-10-31T23:59:59Z" }</pre>
+    <h5 class="section">Response</h5>
+<pre>{ "totalCount": 12,
+  "hasApprovalPermission": true,
+  "approverRoleIds": [12, 7],
+  "statusCounts": { "pending": 12, "approved": 148, "rejected": 9, "all": 169 },
+  "data": [ /* TrayAppOverrideRequestDetailDTO */ ] }</pre>
+    <p class="kv">400 <code>"User not found."</code> when <code>approverUserId</code> matches no user.</p>
+  </div>
+</section>
+
+<h3 class="group">Self override history</h3>
+
+<section class="endpoint" id="history">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetSelfOverrideHistory</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The Approvals screen's second tab, flat view: every self-override in the window with its derived status, access window, usage trail and data types. Self-overrides are approved at submit, so a row's status is about its <strong>unlock window</strong>, not a decision.</p>
+    <h5 class="section">Request body <span class="tag">QueryParameters</span></h5>
+    <table>
+      <tr><th>Field</th><th>Notes</th></tr>
+      <tr><td><code>fromDate</code> / <code>toDate</code></td><td>Optional here — defaults to the <strong>last 30 days</strong> (and one day ahead).</td></tr>
+      <tr><td><code>status</code></td><td><code>Active</code> / <code>Expired</code> / <code>Revoked</code>. Derived, so this is filtered in memory, not against the stored status.</td></tr>
+      <tr><td><code>likeFilters</code></td><td><code>search</code> (cross-field), <code>userName</code>, <code>employeeCode</code>, <code>fileName</code>.</td></tr>
+      <tr><td><code>page</code> / <code>pageSize</code> / <code>sortBy</code> / <code>sortDescending</code></td><td>Standard paging and sort.</td></tr>
+    </table>
+    <h5 class="section">Response <span class="tag">data</span></h5>
+<pre>{
+  "totalCount": 37,
+  "statusCounts": { "active": 4, "expired": 31, "revoked": 2, "all": 37 },
+  "data": [{
+    "overrideRequestId": "4b7e…", "activityId": 884530,
+    "userId": 412, "userName": "Lara Niles", "employeeCode": "FIN-2291",
+    "email": "lara@contoso.com",
+    "fileName": "Q3_vendor_payments.xlsx", "fileSize": 184320, "fileSizeFormatted": "180 KB",
+    "justification": "Vendor deadline.", "application": "chrome.exe",
+    "destination": "drive.google.com", "policyName": "Finance Restrict All",
+    "metaId": "a19f…", "severity": "High",
+    "dataTypes": ["PII","PCI"], "activity": "Upload",
+    "usedOn": "2026-10-27T10:30:00Z",
+
+    "accessWindowMinutes": 480, "durationUnit": "Hours",
+    "validFrom": "2026-10-27T10:30:00Z", "validUntil": "2026-10-27T18:30:00Z",
+
+    "timesUsed": 3, "lastUsedAt": "2026-10-27T13:02:11Z",
+    "usageEvents": [
+      { "sequence": 1, "activity": "Upload", "application": "chrome.exe",
+        "fileName": "Q3_vendor_payments.xlsx", "occurredAt": "2026-10-27T10:30:00Z" },
+      { "sequence": 2, "activity": "Upload", "application": "chrome.exe",
+        "fileName": "Q3_addendum.pdf", "occurredAt": "2026-10-27T13:02:11Z" }
+    ],
+
+    "status": "Active", "remainingMinutes": 184,
+    "revokedByUserName": null, "statusChangedAt": null
+  }]
+}</pre>
+    <p class="kv"><code>timesUsed</code> counts the blocked activity the override was raised on plus every override-applied activity of the same user inside the window, so it is always at least 1 and equals <code>usageEvents.length</code>. <code>remainingMinutes</code> appears on Active rows only; <code>revokedByUserName</code> on Revoked rows only.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="historygrouped">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetSelfOverrideHistoryGrouped</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">The same history rolled up for the "View by User" / "View by File" toggle. Each group carries its aggregates <em>and</em> its member rows, so expanding a group costs no second call.</p>
+    <h5 class="section">Request body</h5>
+<pre>{ "groupBy": "User", "status": "Active", "page": 1, "pageSize": 20,
+  "likeFilters": { "search": "payments" } }</pre>
+    <p class="kv"><code>groupBy</code>: <code>"User"</code> (default) or <code>"File"</code>. Rows with no file name stand alone in the File view rather than collapsing into one "(no file)" group.</p>
+    <h5 class="section">Response <span class="tag">data</span></h5>
+<pre>{
+  "totalCount": 9, "groupBy": "User",
+  "statusCounts": { "active": 4, "expired": 31, "revoked": 2, "all": 37 },
+  "data": [{
+    "groupKey": "user:412",
+    "userId": 412, "userName": "Lara Niles", "employeeCode": "FIN-2291",
+    "fileName": null, "fileSize": null, "fileSizeFormatted": null,
+    "applications": ["chrome.exe","Outlook"], "users": [],
+    "totalOverrides": 6, "activeCount": 1,
+    "dataTypes": ["PII","PCI"], "activities": ["Upload","Download"],
+    "lastOverrideAt": "2026-10-27T10:30:00Z",
+    "items": [ /* SelfOverrideHistoryItemDTO, newest first */ ]
+  }]
+}</pre>
+    <p class="kv">In the File view <code>userId</code>/<code>userName</code>/<code>employeeCode</code> are null and <code>users</code> carries the distinct names instead; <code>groupKey</code> is the lower-cased file name, or <code>content:{overrideRequestId}</code> for a row with no file.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="revoke">
+  <div class="head"><span class="method post">POST</span><span class="path">/RevokeSelfOverride</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">An admin closes an <strong>active</strong> self-override window early. The row then reads "Revoked by admin" in the history.</p>
+    <h5 class="section">Request body</h5>
+<pre>{ "overrideRequestId": "4b7e…", "revokedByUserId": 118,
+  "revokedByEmail": "admin@contoso.com", "comments": "Vendor deal closed." }</pre>
+    <h5 class="section">Responses</h5>
+<pre>200 { "success": true, "message": "…" }
+400 — not a self override, or its window is already closed
+404 — no such request</pre>
+  </div>
+</section>
+
+<h3 class="group">Agent</h3>
+
+<section class="endpoint" id="checkstatus">
+  <div class="head"><span class="method get">GET</span><span class="path">/CheckOverrideStatus?metaId={metaId}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">What the DLP agent polls before releasing a held transfer: the latest active override for a <code>MetaId</code>, plus the last landing-log row for that MetaId.</p>
+    <h5 class="section">Response <span class="tag">data</span></h5>
+<pre>{
+  "isOverrideApproved": true,
+  "message": "Override request is approved",
+  "metaId": "a19f…", "hashId": null,
+  "enrichedId": 884213,
+  "overrideRequestId": "0f0c…",
+  "approvedAt": "2026-10-27T11:02:00Z",
+  "approvedBy": "admin@contoso.com",
+
+  "validUntil": "2026-10-27T18:30:00Z",   <span class="tag">NEW</span>
+  "isExpired": false,                      <span class="tag">NEW</span>
+  "channelType": "Site",                   <span class="tag">NEW</span>
+  "channelName": "OneDrive",               <span class="tag">NEW</span>
+
+  "landingLog": { "logId": 55120, "endpointUserId": 412, "url": "drive.google.com",
+                  "processName": "chrome.exe", "fileFullPath": "C:\\…\\Q3.xlsx",
+                  "metaId": "a19f…", "processStatus": "Override Applied" /* … */ }
+}</pre>
+    <h5 class="section">The new fields</h5>
+    <table>
+      <tr><th>Field</th><th>Means</th></tr>
+      <tr><td><code>isExpired</code></td><td><code>true</code> once <code>validUntil</code> has passed, on the minute. <code>false</code> when the window is still open <em>and</em> when there is no window at all — a pending, rejected or cancelled request was never open, so it is not expired.</td></tr>
+      <tr><td><code>validUntil</code></td><td>When the granted window closes, server clock. <code>null</code> while pending, on a rejected or cancelled request, and on an approval given no end.</td></tr>
+      <tr><td><code>channelType</code> / <code>channelName</code></td><td>Where the override applies — see <a href="#channel">channels</a>. <strong>Both null means every channel</strong>, which is what every override before this change meant. Do not treat null as a non-match.</td></tr>
+    </table>
+    <div class="ok"><code>isOverrideApproved</code> is <strong>unchanged</strong>: it still reports the stored decision alone, so an approved-but-expired request still reads <code>true</code> there. That is deliberate — agents read it today, and flipping it would silently change what they release. Check <code>isExpired</code> as well before releasing a held transfer. The <code>message</code> now says "approved but expired at …" in that case.</div>
+    <div class="note">The same four fields are on <code>GET /CheckMetaStatus</code> (override status plus the MetaId's rename history) and on the ExeApi twins <code>V1/CheckOverrideStatus</code> and <code>V1/CheckMetaStatus</code> — one shared mapper, so the hosts cannot disagree. <code>CheckOverrideStatus</code> is marked TEMPORARY in the code: anonymous until the agent credential scheme lands.</div>
+  </div>
+</section>
+
+<h3 class="group">AI prompt overrides</h3>
+
+<p class="kv" style="margin:0 0 14px">Blocked AI prompts use the same <code>OverrideRequest</code> table, the same approval queue and the same monthly allowance pool, anchored on <code>AiPromptBlockLogId</code> instead of an activity. These three routes mirror ExeApi's <code>V1/…</code> versions and exist here because the EXE agent still points at this API. Approving or rejecting one goes through the ordinary <a href="#review">ReviewOverrideRequest</a>.</p>
+
+<section class="endpoint" id="promptsubmit">
+  <div class="head"><span class="method post">POST</span><span class="path">/SubmitPromptOverrideRequest</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <h5 class="section">Request body</h5>
+<pre>{ "aiPromptBlockLogId": 90412, "userId": 412,
+  "overrideType": "SelfOverride",
+  "businessJustification": "Drafting the vendor reply with the statement attached.",
+  "requestedDuration": 4, "durationUnit": "Hours" }</pre>
+    <h5 class="section">Behaviour</h5>
+    <table>
+      <tr><th>Case</th><th>Result</th></tr>
+      <tr><td>Self override</td><td>Auto-approved; block row becomes <code>"Override Applied"</code>; <code>overridesRemaining</code> returned.</td></tr>
+      <tr><td>Admin approval</td><td>Written <code>PENDING</code>, admins notified; block row keeps its status and gains the <code>OverrideRequestId</code>.</td></tr>
+      <tr><td>Prompt is not <code>Block</code></td><td>400 — a warned prompt already went through, so there is nothing to override. Checked before the allowance is spent.</td></tr>
+      <tr><td>Allowance spent</td><td>400 "Monthly self-override limit reached. Submit an admin approval request instead."</td></tr>
+      <tr><td>Pending request exists</td><td>400 "An override request is already pending for this blocked prompt."</td></tr>
+      <tr><td>Unknown <code>aiPromptBlockLogId</code></td><td>404</td></tr>
+    </table>
+    <div class="note">Simpler than the file route by design: the limit here is the configured <code>MonthlySelfOverrideLimit</code> without the per-policy matrix, because a blocked prompt's policy linkage is a name, not an id. These refusals return plain failures — <strong>no <code>errorCode</code></strong>.</div>
+  </div>
+</section>
+
+<section class="endpoint" id="promptstatus">
+  <div class="head"><span class="method get">GET</span><span class="path">/CheckPromptOverrideStatus?aiPromptBlockLogId={id}</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+<pre>{ "aiPromptBlockLogId": 90412,
+  "isOverrideApproved": true,
+  "status": "APPROVED",
+  "overrideRequestId": "6c33…",
+  "validUntil": "2026-10-28T10:30:00Z",
+  "approvedBy": "admin@contoso.com",
+  "message": "Override is approved and current." }</pre>
+    <p class="kv"><code>isOverrideApproved</code> is true only while the window is still open (<code>validUntil</code> null or in the future). <code>status</code> is <code>"None"</code> when no request exists. <code>aiPromptBlockLogId &lt;= 0</code> → 400.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="promptcancel">
+  <div class="head"><span class="method post">POST</span><span class="path">/CancelPromptOverrideRequest</span><span class="anonpill">ANON</span></div>
+  <div class="body">
+    <p class="desc">Same body as <a href="#cancel">CancelOverrideRequest</a> (<code>overrideRequestId</code>, <code>userId</code>, <code>cancellationReason</code>). Refuses with 400 when the id belongs to a <em>file</em> override — "cancel it via CancelOverrideRequest" — when the caller is not the requester, or when the request is no longer <code>PENDING</code>. 404 when unknown.</p>
+  </div>
+</section>
+
+<h3 class="group">Portal</h3>
+
+<section class="endpoint" id="overridelist">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetOverrideList</span><span class="jwtpill">JWT</span></div>
+  <div class="body">
+    <p class="desc">The Overrides tab of a user's detail page in the web console. Requires a Bearer token.</p>
+    <h5 class="section">Request body</h5>
+<pre>{ "userId": 412, "fromDate": "2026-10-01T00:00:00Z", "toDate": "2026-10-31T23:59:59Z",
+  "page": 1, "pageSize": 10 }</pre>
+    <h5 class="section">Response <span class="tag">PaginatedResponse&lt;OverrideListItemDto&gt;</span></h5>
+<pre>{ "totalCount": 6, "page": 1, "pageSize": 10,
+  "items": [{
+    "overrideRequestId": "4b7e…", "fileName": "Q3_vendor_payments.xlsx",
+    "fileSize": 184320, "justification": "Vendor deadline.",
+    "application": "chrome.exe", "contentType": "PII, PCI",
+    "dateRequested": "2026-10-27T10:30:00Z", "status": "APPROVED",
+    "overrideType": 1, "overrideTypeName": "Self Override"
+  }] }</pre>
+    <p class="kv"><code>overrideTypeName</code> is already the wording the tray and activity screens use — <code>"Self Override"</code> or <code>"Admin Approval"</code> — so it needs no mapping in the UI. Round-trip the numeric <code>overrideType</code> into filters.</p>
+  </div>
+</section>
+
+<h3 class="group">Reference</h3>
+
+<section class="intro" id="deploy">
+  <h2>Deployment note (SQL)</h2>
+  <p class="kv">The channel pair is two new columns on <code>dlp."OverrideRequest"</code>:</p>
+<pre>SFM.DLP.Infrastructure/Data/Migrations/AddChannelToOverrideRequest.sql
+
+ALTER TABLE dlp."OverrideRequest" ADD COLUMN IF NOT EXISTS "ChannelType" varchar(20)  NULL;
+ALTER TABLE dlp."OverrideRequest" ADD COLUMN IF NOT EXISTS "ChannelName" varchar(100) NULL;
+-- plus a narrow backfill from the row's existing Destination / Application</pre>
+  <div class="note"><strong>Run it before deploying the API, against every client database.</strong> EF selects both columns on every <code>OverrideRequest</code> query, so a database without them fails the approvals screens, the tray dialogs and the agent's status checks — not just the new fields. The script is guarded and safe to re-run.</div>
+  <p class="kv">The backfill is deliberately narrow: only the handful of hosts and applications the resolver names the same way, so backfilled rows and new rows agree. Everything else stays null, which already means "every channel". <code>isExpired</code> and <code>validUntil</code> need no migration — they are computed from the column that was always there.</p>
+</section>
+
+<section class="intro" id="gaps">
+  <h2>Known gaps</h2>
+  <table>
+    <tr><th>Gap</th><th>What to do</th></tr>
+    <tr><td><code>accessExpiresAt</code> on <strong>submit / review / revoke</strong> responses is always <code>null</code> — the field is declared but never populated on <code>TrayAppOverrideResponseDTO</code>.</td><td>Read the window from the request row instead: <code>accessExpiresAt</code> on <a href="#request">GetApprovalRequest</a> / <a href="#list">GetApprovalList</a>, or <code>validUntil</code> on <a href="#history">GetSelfOverrideHistory</a> and <a href="#promptstatus">CheckPromptOverrideStatus</a>. Both are the server's <code>ValidUntil</code>.</td></tr>
+    <tr><td>Approval endpoints are <code>[AllowAnonymous]</code> and trust the caller-supplied <code>userId</code>.</td><td><code>canApprove</code> is a display flag for enabling the Approve / Reject buttons. It is not a security boundary, and the server does not yet refuse a decision from a caller who lacks the role. Tracked in <code>TrayApp-Authentication-Plan.html</code>; the same applies to <code>SFM.DLP.ExeApi/Functions/ApprovalFunction.cs</code>.</td></tr>
+    <tr><td><a href="#checkstatus">CheckOverrideStatus</a>'s <code>isOverrideApproved</code> still ignores <code>validUntil</code>.</td><td>Left as it was on purpose — agents read that flag today. The window is now reported beside it: check <code>isExpired</code> (and <code>validUntil</code>) before releasing a held transfer.</td></tr>
+    <tr><td>Prompt overrides store no <a href="#channel">channel</a>.</td><td><code>channelType</code> / <code>channelName</code> stay null on prompt-anchored rows, which reads as "every channel". Only the file submit routes resolve a channel.</td></tr>
+    <tr><td>PolicyV2 approver <em>chips</em> (SecurityAdmin, ITAdmin, LineManager, …) do not yet decide who may approve.</td><td>Enforcement still reads role ids from <code>dlp."PolicyApprovalRoleMap"</code>, falling back to DLP Admin. The chips are stored on the request and drive <code>canApprove</code> matching, but the two vocabularies are not fully translated.</td></tr>
+    <tr><td><a href="#list">GetApprovalList</a> / <a href="#counts">GetApprovalStatusCounts</a> have no default date range.</td><td>Always send <code>fromDate</code> and <code>toDate</code>; a missing bound returns an empty grid rather than everything.</td></tr>
+  </table>
+  <p class="tag">Source: <code>SFM.DLP.API/Controllers/TrayAppController.cs</code>, <code>PromptGovernanceController.cs</code>, <code>LogController.cs</code>, <code>UserDetailsController.cs</code>; <code>SFM.DLP.Application/Services/ApprovalService.cs</code>, <code>OverrideRulesResolver.cs</code>; helpers <code>OverrideChannelResolver.cs</code>, <code>OverrideDuration.cs</code>, <code>MetaStatusMapper.cs</code>; DTOs in <code>SFM.DLP.Application/DTOs/TrayAppDTO.cs</code>. The <code>SFM.DLP.API/DTO</code> copies are compiled out — edit the Application ones.</p>
+</section>
+
+</main>
+</div>
+</body>
+</html>

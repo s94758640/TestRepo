@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIEM Integration - Complete Reference</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>SIEM Integration — complete reference</h1>
+<p><strong>One document covering:</strong> what a SIEM is · why we integrate · what exists today · how a customer connects · the API · the data we send · security decisions · what is not built yet.</p>
+<p><strong>Branch:</strong> <code>feature/siem-integration</code> · <strong>Commit:</strong> <code>99c0cfb</code> and later <strong>Audience:</strong> anyone picking this up — engineering, UX, sales engineering, support.</p>
+<hr>
+<h1>Part 1 — What this is</h1>
+<h2>1.1 What a SIEM is</h2>
+<p>A <strong>SIEM</strong> is a search engine for a company's logs. The well-known one is <strong>Splunk</strong>; the others are <strong>Microsoft Sentinel</strong>, <strong>IBM QRadar</strong> and <strong>Elastic Security</strong>.</p>
+<p>A bank runs twenty security systems and each writes its own logs in its own place. Checking all twenty takes hours. So the bank buys a SIEM, every system pipes its logs in, and there is one place to search.</p>
+<pre><code>
+Firewall     ─┐
+Antivirus    ─┤
+VPN          ─┼──►   their SIEM   ──►   one search box
+Windows      ─┤      (Splunk)           their security team, all day
+Defensely ←us─┘
+</code></pre>
+<p>Each contributing system is called a <strong>log source</strong>. This feature makes Defensely one of them.</p>
+<h2>1.2 Why we built it</h2>
+<p><strong>Commercial.</strong> Every enterprise security RFP asks <em>"Does your product integrate with our SIEM?"</em> Answering <strong>No</strong> loses the deal regardless of how good the detection is. This is the main driver.</p>
+<p><strong>Technical — correlation.</strong> Our event alone says:</p>
+<blockquote><em>Selva uploaded customers.xlsx to Dropbox at 11:47 PM. Blocked.</em></blockquote>
+<p>Their SIEM holds the other facts about the same person at the same time:</p>
+<table><thead><tr>
+<th>Time</th>
+<th>Source</th>
+<th>Fact</th>
+</tr></thead><tbody>
+<tr>
+<td>11:20 PM</td>
+<td>VPN</td>
+<td>login from a new country</td>
+</tr>
+<tr>
+<td>11:31 PM</td>
+<td>EDR</td>
+<td>USB device inserted</td>
+</tr>
+<tr>
+<td>11:40 PM</td>
+<td>SharePoint</td>
+<td>downloaded 4 GB</td>
+</tr>
+<tr>
+<td><strong>11:47 PM</strong></td>
+<td><strong>Defensely</strong></td>
+<td><strong>sensitive upload blocked</strong></td>
+</tr>
+<tr>
+<td>last week</td>
+<td>HR</td>
+<td>resigned</td>
+</tr>
+</tbody></table>
+<p>Individually noise. Together: <em>an employee exfiltrating data before leaving</em>. Only the SIEM can build that story, because only it holds all five sources.</p>
+<h2>1.3 The two directions</h2>
+<p>Both end with our events in their SIEM. Only the direction of the call changes.</p>
+<pre><code>
+PULL   their SIEM ──asks──► us        built, v1
+PUSH   us ──sends──► their SIEM       configuration + test built; delivery worker not yet
+</code></pre>
+<table><thead><tr>
+<th></th>
+<th>Pull</th>
+<th>Push</th>
+</tr></thead><tbody>
+<tr>
+<td>Who calls</td>
+<td>Their SIEM</td>
+<td>Us</td>
+</tr>
+<tr>
+<td>Latency</td>
+<td>~60s (their poll interval)</td>
+<td>~14s</td>
+</tr>
+<tr>
+<td>Works behind their firewall</td>
+<td><strong>Yes</strong></td>
+<td>No</td>
+</tr>
+<tr>
+<td>Admin pastes</td>
+<td>Nothing — <em>we</em> give <em>them</em> an id + secret</td>
+<td>Their URL + token</td>
+</tr>
+<tr>
+<td>Our SSRF exposure</td>
+<td>None</td>
+<td>Real — see §6.3</td>
+</tr>
+</tbody></table>
+<p><strong>Pull was built first</strong> because a Splunk or QRadar installed inside a customer's own building has no address we can reach. Banks and government customers are almost always in that situation.</p>
+<hr>
+<h1>Part 2 — What exists today</h1>
+<h2>2.1 Built and tested</h2>
+<table><thead><tr>
+<th>Area</th>
+<th>Detail</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Credentials</strong></td>
+<td><code>sfm."SiemApiClient"</code> in Nucleus. Hashed, rotation overlap, revoke</td>
+</tr>
+<tr>
+<td><strong>Token endpoint</strong></td>
+<td><code>POST /oauth/token</code> — OAuth 2.0 client credentials, RFC 6749</td>
+</tr>
+<tr>
+<td><strong>Event feed</strong></td>
+<td><code>GET /siem/events</code> — keyset cursor, 30s lag window</td>
+</tr>
+<tr>
+<td><strong>Formats</strong></td>
+<td>JSON (canonical), ECS (Elastic), CEF (ArcSight/Sentinel), LEEF (QRadar)</td>
+</tr>
+<tr>
+<td><strong>Admin API</strong></td>
+<td>create · list · verify · rotate · complete rotation · revoke</td>
+</tr>
+<tr>
+<td><strong>Audit trail</strong></td>
+<td><code>siem."SiemAuditLog"</code> — append-only, enforced by trigger</td>
+</tr>
+<tr>
+<td><strong>Rate limits</strong></td>
+<td>Chained per-<code>client_id</code>: 10/min token, 60/min feed, 2 concurrent</td>
+</tr>
+<tr>
+<td><strong>SSRF guard</strong></td>
+<td><code>OutboundUrlGuard</code> — DNS-rebinding safe</td>
+</tr>
+<tr>
+<td><strong>Tenant binding</strong></td>
+<td><code>TenantBindingMiddleware</code> — token decides the tenant, not a header</td>
+</tr>
+<tr>
+<td><strong>Push destinations</strong></td>
+<td>Connector table, provider catalog, create/test/toggle/delete/health</td>
+</tr>
+<tr>
+<td><strong>Push transports</strong></td>
+<td>Splunk HEC · Microsoft Sentinel (Logs Ingestion API) · IBM QRadar (syslog over TLS) · generic HTTPS webhook</td>
+</tr>
+<tr>
+<td><strong>Push delivery</strong></td>
+<td>Enqueue → claim → send → retry → dead-letter, with <code>SiemDeliveryWorker</code></td>
+</tr>
+</tbody></table>
+<p><strong>1820 tests pass.</strong> Everything above is unit-tested with fakes.</p>
+<h3>Push delivery, in detail</h3>
+<pre><code>
+SiemDeliveryWorker  every 15s, per tenant
+   │
+   ├─ EnqueueAsync   new events (past the 30s lag) → one queue row per enabled connector
+   │                 unique (connector, event) makes this idempotent across instances
+   │
+   └─ DrainAsync     claim with FOR UPDATE SKIP LOCKED → render → send
+                     success  → Sent, connector Connected
+                     retry    → 30s · 2m · 5m · 15m · 30m · 1h · 2h · 3h  (6.9h total)
+                     3 fails  → connector Failing (red pill, backlog banner)
+                     exhausted or non-retryable → DeadLettered
+</code></pre>
+<p><strong>Off by default</strong> — <code>Siem:DeliveryEnabled</code> must be set. Push makes outbound requests to customer-supplied addresses, so it does not start merely because the code shipped.</p>
+<h3>Filtering</h3>
+<p>A connector's optional <code>FilterJson</code> is evaluated at enqueue time by <code>NotificationRuleEvaluator</code> — the same evaluator the alert rules use, over the same 20 trigger fields, so an admin builds a SIEM filter with the existing condition builder rather than learning a second language.</p>
+<p>Three behaviours worth knowing:</p>
+<ul>
+<li><strong>No filter means send everything.</strong> The evaluator returns <code>false</code> for an empty condition, because for an alert rule "no condition" means "never fire" — here it means the opposite, so an absent filter never reaches it. Inverting this would silently stop every unfiltered destination.</li>
+<li><strong>An unreadable filter queues nothing and marks the connector <code>Failing</code></strong> with an actionable message. Fail closed, because sending more than the customer asked for costs them money and may exceed what they agreed to — but loudly, because a silent stop is worse than either.</li>
+<li><strong>The cursor advances past filtered-out events</strong>, not just queued ones. Otherwise a filter matching nothing would re-scan the same window forever and never move.</li>
+</ul>
+<p><strong>Multi-instance safe without leader election</strong>, which differs from the original plan. Two database guarantees replace it: the unique constraint on <code>(SiemConnectorId, EnrichedId)</code> makes enqueue idempotent, and <code>FOR UPDATE SKIP LOCKED</code> means two instances never claim the same row. That is why it runs in the API rather than <code>DLPProcessLaterService</code> — and why it is <em>not</em> the same answer as <code>LandingLogMonitorService</code>, which has neither protection and does send every alert twice when two pods run.</p>
+<h2>2.2 Not built</h2>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Backfill</strong></td>
+<td>"Send me the last 30 days" — the only remaining feature gap</td>
+</tr>
+</tbody></table>
+<h2>2.3 Not verified</h2>
+<p><strong>Nothing has run against a real database.</strong> All tests use fakes. The migrations are SQL no Postgres has executed, and the EF entity↔column mappings have never round-tripped. Migrations auto-run on deploy, so broken SQL fails loudly — but a mapping mismatch only appears on the first query.</p>
+<h2>2.4 Open blockers</h2>
+<table><thead><tr>
+<th></th>
+<th>Issue</th>
+<th>Impact</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>B1</strong></td>
+<td><code>Storage:CredentialEncryptionKey</code> is committed and in git history</td>
+<td>"Encrypted at rest" is not a claim we can make on a questionnaire. Must rotate to Key Vault <strong>before</strong> any customer push credential is stored</td>
+</tr>
+<tr>
+<td><strong>B2</strong></td>
+<td><code>TenantBinding__Mode</code> is still <code>Audit</code></td>
+<td>The cross-tenant header hole is open. Flip to <code>Enforce</code> once the <code>TenantBinding:</code> warnings are clean</td>
+</tr>
+<tr>
+<td><strong>B3</strong></td>
+<td>No <code>UseForwardedHeaders</code></td>
+<td><code>ActorIp</code> records the APIM gateway for every caller; the per-credential IP allowlist cannot work</td>
+</tr>
+</tbody></table>
+<p>B1 and B2 are pre-existing problems that SIEM made exploitable from outside the company — they are not SIEM bugs.</p>
+<hr>
+<h1>Part 3 — How a customer connects</h1>
+<h2>3.1 Pull (built)</h2>
+<table><thead><tr>
+<th>Step</th>
+<th>Who</th>
+<th>What</th>
+</tr></thead><tbody>
+<tr>
+<td>1</td>
+<td>Admin</td>
+<td>Defensely → Settings → Integrations → SIEM → <strong>Create API access</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Admin</td>
+<td>Names it, e.g. <code>Splunk — Production</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Us</strong></td>
+<td>Generate <code>client_id</code> + secret; secret shown <strong>once</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Admin</td>
+<td>Copies the secret, downloads the config snippet</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Admin</td>
+<td>Pastes it into their SIEM as a REST/HTTP input</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Their SIEM</td>
+<td><code>POST /oauth/token</code> → bearer token</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Their SIEM</td>
+<td><code>GET /siem/events</code> every 60s, paging by cursor</td>
+</tr>
+</tbody></table>
+<p>Target: under five minutes. Full guide with paste-ready Splunk, Elastic and Sentinel configs: <strong><code>SIEM-API-Integration.md</code></strong>.</p>
+<h2>3.2 Push (config only)</h2>
+<p>The admin picks a vendor, pastes a URL and token, chooses a format and filter, clicks <strong>Test connection</strong>, and saves. The connector saves <strong>paused</strong> — an explicit toggle starts it, so nobody begins streaming by clicking Save.</p>
+<p>Today the test works and the configuration persists. <strong>Nothing is delivered</strong> until the worker exists.</p>
+<hr>
+<h1>Part 4 — The API</h1>
+<h2>4.1 Consumed by the customer's SIEM</h2>
+<p>These two deliberately <strong>do not</strong> use the house <code>ApiResponse&lt;T&gt;</code> envelope. Splunk, Sentinel and Elastic parse RFC 6749 strictly and look for <code>access_token</code> at the root; wrapped, they fail with "no token in response".</p>
+<h3><code>POST /oauth/token</code></h3>
+<pre><code>
+Content-Type: application/x-www-form-urlencoded
+grant_type=client_credentials&amp;client_id=siem_7Kp2…&amp;client_secret=…
+</code></pre>
+<pre><code>
+{"access_token":"eyJ…","token_type":"Bearer","expires_in":3600,"scope":"siem:events.read"}
+</code></pre>
+<p>Credentials accepted in the body (<code>client_secret_post</code>) <strong>or</strong> an HTTP Basic header (<code>client_secret_basic</code>) — Elastic sends the first, Sentinel the second.</p>
+<p>Errors: <code>invalid_client</code> (401) · <code>invalid_request</code> · <code>invalid_scope</code> · <code>unsupported_grant_type</code> (400).</p>
+<h3><code>GET /siem/events</code></h3>
+<pre><code>
+?from=&amp;cursor=&amp;limit=&amp;format=json|ecs|cef
+</code></pre>
+<pre><code>
+{"events":[…],"next_cursor":"558213","has_more":false,"schema_version":"1.0"}
+</code></pre>
+<p><code>limit</code> default 100, clamped 1–1000 — <code>0</code> is <strong>not</strong> "all". <code>from</code> capped at a 7-day window. CEF returns <code>text/plain</code> with paging in <code>X-Next-Cursor</code> / <code>X-Has-More</code>.</p>
+<h2>4.2 Consumed by our dashboard</h2>
+<p>These <strong>do</strong> use the house envelope.</p>
+<table><thead><tr>
+<th>Route</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td><code>POST siem/clients/list</code></td>
+<td>Credential grid</td>
+</tr>
+<tr>
+<td><code>POST siem/clients</code></td>
+<td>Create — response carries the only copy of the secret</td>
+</tr>
+<tr>
+<td><code>POST siem/clients/{id}/verify</code></td>
+<td>Issues a token and reads one page, as their SIEM will</td>
+</tr>
+<tr>
+<td><code>POST siem/clients/{id}/rotate</code></td>
+<td>New secret; old works 24h</td>
+</tr>
+<tr>
+<td><code>POST siem/clients/{id}/rotate/complete</code></td>
+<td>End the overlap early</td>
+</tr>
+<tr>
+<td><code>POST siem/clients/{id}/revoke</code></td>
+<td>Immediate; both secrets die</td>
+</tr>
+<tr>
+<td><code>GET siem/field-map</code></td>
+<td>Field reference screen</td>
+</tr>
+<tr>
+<td><code>POST siem/audit/list</code></td>
+<td>Audit history</td>
+</tr>
+<tr>
+<td><code>GET siem/providers</code></td>
+<td>Vendor catalog for the connect wizard</td>
+</tr>
+<tr>
+<td><code>POST siem/connectors/list</code></td>
+<td>Destinations grid</td>
+</tr>
+<tr>
+<td><code>POST siem/connectors</code></td>
+<td>Create — saves <strong>paused</strong></td>
+</tr>
+<tr>
+<td><code>POST siem/connectors/{id}/test</code></td>
+<td>Sends one synthetic event</td>
+</tr>
+<tr>
+<td><code>POST siem/connectors/{id}/toggle?enabled=</code></td>
+<td>Start or pause sending</td>
+</tr>
+<tr>
+<td><code>POST siem/connectors/{id}/delete</code></td>
+<td>Remove</td>
+</tr>
+<tr>
+<td><code>POST siem/connectors/{id}/health</code></td>
+<td>Sent / failed / backlog / dead-lettered</td>
+</tr>
+</tbody></table>
+<p>All require an exact admin role match — see §6.5.</p>
+<p>Two deliberate behaviours in the connector flow:</p>
+<ul>
+<li><strong>A connector saves paused</strong>, and cannot be switched on until it has been tested. Enabling an untested destination means queuing events at a URL nobody has proven and finding out through a backlog.</li>
+<li><strong>Test returns <code>200</code> with <code>success: false</code></strong> when the collector rejects it — the same decision recorded on <code>cloud/connectors/test</code>. A wrong token is a result the wizard renders, not an exception.</li>
+</ul>
+<hr>
+<h1>Part 5 — The data we send</h1>
+<h2>5.1 One event</h2>
+<pre><code>
+{
+  "schema_version": "1.0",
+  "event_id": "558213",
+  "event_class": "file.transfer.blocked",
+  "@timestamp": "2026-10-15T11:47:02.000Z",
+  "tenant_id": "a311119f-4c2e-4e2a-9f11-7b3d5c8e1a02",
+  "vendor": "Defensely", "product": "DLP",
+  "user":        { "name": "selva.m@acme.com", "id": "EMP-4471" },
+  "host":        { "name": "LAP-4471", "id": "PF2X9KQ3", "os": "Windows 11" },
+  "file":        { "name": "customers.xlsx", "extension": "xlsx", "size": 2516582 },
+  "destination": { "app": "Dropbox", "domain": "dropbox.com" },
+  "dlp": { "transfer_type": "Upload", "content_type": "PII", "policy": "PII Block",
+           "action": "Block", "override_applied": false, "risk_score": 87 },
+  "event": { "severity": "Critical", "severity_num": 9 },
+  "incident_url": "https://qadlp.defensely.ai/incidents/558213"
+}
+</code></pre>
+<h2>5.2 Event classes</h2>
+<p><code>file.transfer.blocked</code> · <code>.warned</code> · <code>.allowed</code> · <code>.uncovered</code> (no policy covered it — a coverage gap worth alerting on) · <code>file.transfer</code> (unclassified).</p>
+<p>Prefix-matchable as <code>file.transfer.*</code>. These strings are published and will not be renamed.</p>
+<h2>5.3 Severity</h2>
+<p><code>Critical 9</code> · <code>High 7</code> · <code>Medium 5</code> · <code>Low 3</code> · <code>Unknown 0</code></p>
+<p>Spread, not consecutive, so <code>&gt;= 7</code> keeps meaning "High and above" if a level is inserted later. <strong><code>Unknown</code> is deliberately not folded into <code>Low</code></strong> — reporting an unknown severity as low asserts a judgement we did not make.</p>
+<h2>5.4 What is never sent</h2>
+<table><thead><tr>
+<th>Omitted</th>
+<th>Why</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Matched sensitive text</strong></td>
+<td>The actual card numbers. This is the data the product exists to protect</td>
+</tr>
+<tr>
+<td>Full file path</td>
+<td>A directory tree leaks project names, client names, and usually the person's name again</td>
+</tr>
+<tr>
+<td>Full URL</td>
+<td>Query strings routinely carry session tokens</td>
+</tr>
+<tr>
+<td>Classification payload, AI verdict</td>
+<td>Both quote the document</td>
+</tr>
+<tr>
+<td>Evidence video link</td>
+<td>Not a log field</td>
+</tr>
+</tbody></table>
+<p>An <strong>explicit allow-list</strong> in <code>SiemEventMapper</code>, never reflection over the entity — a column added to that 70-field table next year must not auto-publish to every customer. Tests assert the exclusions hold across all three formats.</p>
+<h3>The <code>masked</code> option is a summary, not masked content</h3>
+<p>A push destination may be set to <code>SensitivePolicy = masked</code>. That emits <strong>categories and counts only</strong>:</p>
+<pre><code>
+"dlp": { "sensitive_content": "{\"PII\":2,\"PHI\":1}" }
+</code></pre>
+<p><strong>It is not a masked copy of the matched values.</strong> The obvious implementation — passing the stored column through <code>SensitiveValueMasker</code> at egress — was written, tested, and rejected: that masker rewrites only the JSON shapes it recognises and <strong>returns anything else unchanged</strong>. A stored value in an unexpected shape would have been published raw, and the tenant most likely to have one is the tenant who switched write-masking off, whose column holds live card numbers. A masking function that silently no-ops on unknown input is not a control.</p>
+<p>Emitting structure is safe by construction: no value is ever copied, only key names and match counts. An analyst gets what they correlate on — <em>"two PII matches"</em> — and the values stay where they are. Anything unparseable emits nothing rather than a fallback that might contain data.</p>
+<p><strong>There is no setting that emits matched content in any form.</strong> The database column is constrained to <code>off</code>/<code>masked</code>, so even a bug in the API cannot persist anything else.</p>
+<h2>5.5 Field mapping</h2>
+<p>Served live from <code>GET siem/field-map</code>, generated from <code>SiemFieldMap</code> so it cannot drift from what the formatters emit.</p>
+<table><thead><tr>
+<th>Defensely</th>
+<th>Canonical</th>
+<th>ECS</th>
+<th>CEF</th>
+</tr></thead><tbody>
+<tr>
+<td>EnrichedId</td>
+<td><code>event_id</code></td>
+<td><code>event.id</code></td>
+<td><code>externalId</code></td>
+</tr>
+<tr>
+<td>ReceivedTime</td>
+<td><code>@timestamp</code></td>
+<td><code>@timestamp</code></td>
+<td><code>rt</code> (epoch ms)</td>
+</tr>
+<tr>
+<td>Username</td>
+<td><code>user.name</code></td>
+<td><code>user.name</code></td>
+<td><code>suser</code></td>
+</tr>
+<tr>
+<td>MachineName</td>
+<td><code>host.name</code></td>
+<td><code>host.hostname</code></td>
+<td><code>shost</code></td>
+</tr>
+<tr>
+<td>File name</td>
+<td><code>file.name</code></td>
+<td><code>file.name</code></td>
+<td><code>fname</code></td>
+</tr>
+<tr>
+<td>FileSize</td>
+<td><code>file.size</code></td>
+<td><code>file.size</code></td>
+<td><code>fsize</code></td>
+</tr>
+<tr>
+<td>AppDeviceName</td>
+<td><code>destination.app</code></td>
+<td><code>dlp.destination_app</code></td>
+<td><code>destinationServiceName</code></td>
+</tr>
+<tr>
+<td>URL host</td>
+<td><code>destination.domain</code></td>
+<td><code>destination.domain</code></td>
+<td><code>destinationDnsDomain</code></td>
+</tr>
+<tr>
+<td>ContentType</td>
+<td><code>dlp.content_type</code></td>
+<td><code>rule.category</code></td>
+<td><code>cs2</code></td>
+</tr>
+<tr>
+<td>PolicyName</td>
+<td><code>dlp.policy</code></td>
+<td><code>rule.name</code></td>
+<td><code>cs1</code></td>
+</tr>
+<tr>
+<td>PolicyAction</td>
+<td><code>dlp.action</code></td>
+<td><code>event.action</code></td>
+<td><code>act</code></td>
+</tr>
+<tr>
+<td>RiskScore</td>
+<td><code>dlp.risk_score</code></td>
+<td><code>event.risk_score</code></td>
+<td><code>cn1</code></td>
+</tr>
+<tr>
+<td>Severity (word)</td>
+<td><code>event.severity</code></td>
+<td><code>dlp.severity</code></td>
+<td><code>cs4</code></td>
+</tr>
+<tr>
+<td>Severity (number)</td>
+<td><code>event.severity_num</code></td>
+<td><code>event.severity</code></td>
+<td>header field 7</td>
+</tr>
+</tbody></table>
+<p>Two traps:</p>
+<ul>
+<li><strong>Severity appears twice.</strong> ECS types <code>event.severity</code> as a <em>number</em>; putting <code>"Critical"</code> there makes Elastic reject the document.</li>
+<li><strong>Not <code>dst</code>.</strong> In CEF <code>dst</code> is an <em>IP address</em> field — a hostname there is rejected or mis-indexed.</li>
+</ul>
+<hr>
+<h1>Part 6 — Security decisions</h1>
+<h2>6.1 Encrypt or hash?</h2>
+<blockquote><strong>Will we ever need to send this secret to someone else?</strong></blockquote>
+<table><thead><tr>
+<th>Answer</th>
+<th>Use</th>
+<th>Example</th>
+</tr></thead><tbody>
+<tr>
+<td>Yes — we replay it outbound</td>
+<td><strong>Encrypt</strong> (<code>SecretProtector</code>)</td>
+<td>Splunk HEC token: it goes in an <code>Authorization</code> header on every send</td>
+</tr>
+<tr>
+<td>No — we only check what is presented</td>
+<td><strong>Hash</strong> (<code>SiemClientSecret</code>)</td>
+<td>Our own <code>client_secret</code>: a leak then yields nothing spendable</td>
+</tr>
+</tbody></table>
+<p>These look inconsistent side by side and are not — applying either everywhere breaks something. Also in <code>DEPLOY-SECRETS.md</code>.</p>
+<p>HMAC-SHA256, not PBKDF2: these are 32 bytes of CSPRNG, so there is no dictionary to run, and a slow KDF would add ~100ms to every token request on an endpoint a fleet of collectors polls on a schedule.</p>
+<h2>6.2 Token isolation</h2>
+<p>SIEM tokens use a <strong>separate signing key, issuer and audience</strong> and a second JWT scheme, <code>SiemBearer</code>. Signed with the dashboard's <code>JwtSecurityKey</code>, a read-only feed token would be accepted by every <code>[Authorize]</code> controller — and several authorise on a role claim alone, so a feed credential handed to an external system would become a partial admin credential.</p>
+<h2>6.3 SSRF</h2>
+<p>Push posts to an address an admin typed in. <code>OutboundUrlGuard</code> enforces:</p>
+<ul>
+<li><strong>https only.</strong> No flag, no on-prem exception</li>
+<li>No credentials in the URL, no IP-literal hosts</li>
+<li>Port allow-list: 443, 8088, 9243, 6514</li>
+<li>Blocked ranges including <code>169.254.169.254</code> (cloud metadata), all RFC1918, CGNAT, loopback, link-local, ULA, multicast</li>
+<li><strong>IPv4-mapped IPv6 unwrapped first</strong> — <code>::ffff:169.254.169.254</code> is the standard bypass</li>
+<li><strong>Resolve, check, then dial the checked address.</strong> Validating the URL and letting <code>HttpClient</code> resolve independently does not stop DNS rebinding</li>
+<li><code>AllowAutoRedirect = false</code>, <code>UseProxy = false</code>, TLS 1.2+, 64 KB response cap</li>
+</ul>
+<p>There must be <strong>no</strong> code path that returns <code>true</code> from a certificate validation callback. A test asserts this.</p>
+<h2>6.4 Tenant binding</h2>
+<p><code>TenantBindingMiddleware</code> makes the <strong>token</strong> decide the tenant. Previously the <code>ClientGUID</code> header outranked the JWT claim, so any caller could read another tenant's stream by changing one header.</p>
+<p>Machine tokens bind in <strong>both</strong> modes — a SIEM token carries <code>client_guid</code>, not <code>ClientGUID</code>, so without this the feed would fall through to the default connection in Audit mode.</p>
+<h2>6.5 Authorisation</h2>
+<p>Admin endpoints use <strong>exact</strong> role matching from configuration, not the <code>roleName.Contains("Admin")</code> check used elsewhere — that passes for <code>"Non-Admin"</code> and <code>"Admin Assistant"</code>.</p>
+<h2>6.6 Audit</h2>
+<p><code>siem."SiemAuditLog"</code>, append-only <strong>enforced by trigger</strong>, not <code>REVOKE</code>: the table owner keeps those rights implicitly, so a trigger is the only form that makes the guarantee real. Secrets, hashes, salts and hints are never written to it — an audit log is read by more people than the credential list is.</p>
+<hr>
+<h1>Part 7 — Operations</h1>
+<h2>7.1 Configuration</h2>
+<table><thead><tr>
+<th>Setting</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Siem__TokenSigningKey</code></td>
+<td><strong>Secret.</strong> ≥32 bytes. <strong>Must not equal <code>JwtSecurityKey</code></strong></td>
+</tr>
+<tr>
+<td><code>Siem__SecretPepper</code></td>
+<td><strong>Secret.</strong> Changing it invalidates every credential</td>
+</tr>
+<tr>
+<td><code>Siem:PublicBaseUrl</code></td>
+<td>What the customer's SIEM calls — the APIM gateway</td>
+</tr>
+<tr>
+<td><code>Siem:IncidentBaseUrl</code></td>
+<td>Dashboard origin for deep links</td>
+</tr>
+<tr>
+<td><code>Siem:AdminRoleNames</code></td>
+<td>Exact matches</td>
+</tr>
+<tr>
+<td><code>Siem:DeliveryEnabled</code></td>
+<td><strong>Default false.</strong> Push does not run until set</td>
+</tr>
+<tr>
+<td><code>Siem:DeliveryIntervalSeconds</code></td>
+<td>Default 15, floor 5</td>
+</tr>
+<tr>
+<td><code>TenantBinding:Mode</code></td>
+<td><code>Audit</code> → <code>Enforce</code></td>
+</tr>
+</tbody></table>
+<p>Both secrets blank is the <strong>safe</strong> state: no credential can be issued and no token verified. That is intended, not an outage.</p>
+<p>Generate with — the Windows PowerShell 5.1 form, since that is what the dev machines run. The shorter static <code>GetBytes(32)</code> overload is .NET 5+ only and fails on 5.1:</p>
+<pre><code>
+$b = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+[Convert]::ToBase64String($b)
+</code></pre>
+<h2>7.2 Migrations</h2>
+<table><thead><tr>
+<th>Script</th>
+<th>Creates</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Nucleus/V0002__siem_api_client.sql</code></td>
+<td>Pull credentials (global DB)</td>
+</tr>
+<tr>
+<td><code>Dlp/V0017__siem_audit_log.sql</code></td>
+<td><code>siem</code> schema + audit table</td>
+</tr>
+<tr>
+<td><code>Dlp/V0018__siem_connector.sql</code></td>
+<td>Push connector, cursor, queue, attempts</td>
+</tr>
+</tbody></table>
+<p>Auto-run on deploy. <strong>Originally numbered V0007/V0008</strong> — the QA merge brought V0007–V0016 onto the branch, which collided. Caught by <code>Every_dlp_migration_has_its_own_version_number</code>.</p>
+<h2>7.3 Deployment checklist</h2>
+<ol>
+<li>Set both <code>Siem__</code> secrets from Key Vault</li>
+<li>Deploy — migrations run automatically</li>
+<li><strong>Register routes in APIM</strong>: <code>/oauth/token</code>, <code>/siem/events</code>, <code>/siem/clients</code>, <code>/siem/field-map</code>, <code>/siem/audit/list</code>. Without this the UI and customers cannot reach them</li>
+<li>Confirm a credential can be created and verified</li>
+<li>Watch <code>TenantBinding:</code> warnings before flipping to <code>Enforce</code></li>
+</ol>
+<h2>7.4 Post-deploy smoke test</h2>
+<p>Run these in order. Each one proves a different thing, so the <strong>first failure tells you what is wrong</strong> — which is faster than testing end to end and guessing.</p>
+<table><thead><tr>
+<th>#</th>
+<th>Proves</th>
+</tr></thead><tbody>
+<tr>
+<td>1</td>
+<td>Routes exist and APIM is registered</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Nucleus <code>V0002</code> ran <strong>and</strong> <code>Siem__SecretPepper</code> is set</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>Siem__TokenSigningKey</code> is set and valid</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Tenant binding works and the DLP-side mapping is correct</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Dlp <code>V0017</code> ran</td>
+</tr>
+</tbody></table>
+<pre><code>
+$base   = "https://qa-email.azure-api.net/qadlp"
+$jwt    = "&lt;a dashboard JWT for an admin role&gt;"
+$tenant = "&lt;that admin's ClientGUID&gt;"
+$h = @{ Authorization = "Bearer $jwt"; ClientGUID = $tenant }
+
+# 1 — routes live. 404 here means APIM was not updated, not that code is missing.
+Invoke-RestMethod "$base/siem/providers" -Headers $h | % data | ft key, isImplemented
+
+# 2 — create a credential. The secret appears once, in this response only.
+$new = Invoke-RestMethod "$base/siem/clients" -Method Post -Headers $h `
+       -ContentType application/json -Body '{"displayName":"Deploy smoke test"}'
+$id     = $new.data.client.clientId
+$secret = $new.data.clientSecret
+"client_id = $id"
+
+# 3 — exchange it for a token. Form-encoded, exactly as a SIEM would.
+$tok = Invoke-RestMethod "$base/oauth/token" -Method Post -Body @{
+    grant_type    = 'client_credentials'
+    client_id     = $id
+    client_secret = $secret
+}
+"expires_in = $($tok.expires_in)"
+
+# 4 — read the feed with that token. No ClientGUID header: the token carries it.
+$feed = Invoke-RestMethod "$base/siem/events?limit=5" `
+        -Headers @{ Authorization = "Bearer $($tok.access_token)" }
+"events = $($feed.events.Count), next_cursor = $($feed.next_cursor)"
+
+# 5 — the audit trail recorded step 2.
+(Invoke-RestMethod "$base/siem/audit/list" -Method Post -Headers $h `
+ -ContentType application/json -Body '{}').data.data | ft occurredAtUtc, action, actorUserName
+
+# 6 — clean up. Leaving a live credential from a smoke test is how one ends up in production.
+Invoke-RestMethod "$base/siem/clients/$id/revoke" -Method Post -Headers $h | % message
+</code></pre>
+<h3>Reading the failures</h3>
+<table><thead><tr>
+<th>Step</th>
+<th>Symptom</th>
+<th>Cause</th>
+</tr></thead><tbody>
+<tr>
+<td>1</td>
+<td><code>404</code></td>
+<td>Routes not registered in APIM</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>403</code></td>
+<td>The JWT's role is not in <code>Siem:AdminRoleNames</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>"SIEM access is not configured"</code></td>
+<td><code>Siem__SecretPepper</code> is unset</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>500</code>, relation does not exist</td>
+<td>Nucleus <code>V0002</code> did not run</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>invalid_request</code></td>
+<td><code>Siem__TokenSigningKey</code> unset or shorter than 32 bytes</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>invalid_client</code></td>
+<td>The secret was not copied correctly from step 2</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>403</code></td>
+<td>The token carries no tenant — check the <code>ClientGUID</code> claim on the JWT used in step 2</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>500</code></td>
+<td>EF mapping mismatch against the real schema — <strong>the most likely genuine bug</strong>, since this path has never run against a database</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>500</code></td>
+<td>Dlp <code>V0017</code> did not run</td>
+</tr>
+</tbody></table>
+<h3>Zero events is a pass</h3>
+<p><code>events = 0</code> at step 4 means the tenant is quiet, or everything is inside the 30-second lag window. It does <strong>not</strong> mean the feed is broken. Confirm with a wide window:</p>
+<pre><code>
+Invoke-RestMethod "$base/siem/events?from=$((Get-Date).AddDays(-7).ToString('yyyy-MM-ddTHH:mm:ssZ'))&amp;limit=5" `
+  -Headers @{ Authorization = "Bearer $($tok.access_token)" }
+</code></pre>
+<h3>Push</h3>
+<p>Push stays off unless <code>Siem:DeliveryEnabled</code> is set. To test it, create a connector, call <code>POST siem/connectors/{id}/test</code>, and only then toggle it on — the API refuses to enable a destination that has never been tested.</p>
+<hr>
+<h1>Part 8 — Troubleshooting</h1>
+<table><thead><tr>
+<th>Symptom</th>
+<th>Cause</th>
+</tr></thead><tbody>
+<tr>
+<td><code>401 invalid_client</code> always</td>
+<td>Wrong secret, or revoked. Check status; rotate if lost</td>
+</tr>
+<tr>
+<td><code>401</code> after an hour</td>
+<td>Token expired and is not being refreshed</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Polling faster than 1/min, a token per poll, or concurrent pollers</td>
+</tr>
+<tr>
+<td>Events stop, no error</td>
+<td>Cursor is past the newest event — normal in quiet periods. Keep the cursor; resetting to zero replays the window</td>
+</tr>
+<tr>
+<td>Newest events missing ~30s</td>
+<td>Expected. See §9.1</td>
+</tr>
+<tr>
+<td>Duplicates</td>
+<td>Expected — at-least-once. Deduplicate on <code>event_id</code></td>
+</tr>
+<tr>
+<td><code>400 unsupported_format</code></td>
+<td><code>json</code>, <code>ecs</code> or <code>cef</code> only</td>
+</tr>
+<tr>
+<td>Nothing arrives at all</td>
+<td>Confirm the credential's tenant is the one with activity</td>
+</tr>
+</tbody></table>
+<hr>
+<h1>Part 9 — Two things that look like bugs</h1>
+<h2>9.1 The feed lags 30 seconds</h2>
+<p><code>EnrichedId</code> is an identity column: ids are <strong>allocated</strong> in order but <strong>commit</strong> out of order. Serving the newest rows immediately means a poller that reads to id 500 and saves that cursor can permanently miss id 497 — with nothing to indicate anything went wrong.</p>
+<p>The honest fix is a monotonic outbox sequence written by the crunch step. This is the cheap version, and 30 seconds is invisible to SIEM ingestion.</p>
+<p><strong>Do not work around it by also filtering on time.</strong></p>
+<h2>9.2 Delivery is at-least-once</h2>
+<p>The same event can arrive twice — after a network timeout, or a replayed cursor. Deduplicate on <code>event_id</code>, which is stable and unique within a tenant.</p>
+<hr>
+<h1>Part 10 — Where the code lives</h1>
+<table><thead><tr>
+<th>Path</th>
+<th>Contents</th>
+</tr></thead><tbody>
+<tr>
+<td><code>SFM.DLP.SiemIntegration/</code></td>
+<td>Event contract, mapper, formatters, transports, provider catalog</td>
+</tr>
+<tr>
+<td><code>SFM.DLP.API/Services/Siem/</code></td>
+<td>Token, feed query, admin, audit, rate limits, options</td>
+</tr>
+<tr>
+<td><code>SFM.DLP.API/Controllers/Siem*.cs</code></td>
+<td>OAuth, events, admin, console</td>
+</tr>
+<tr>
+<td><code>SFM.DLP.API/Middleware/</code></td>
+<td>Tenant binding</td>
+</tr>
+<tr>
+<td><code>SFM.Common.Utilities/Security/</code></td>
+<td><code>SiemClientSecret</code>, <code>OutboundUrlGuard</code></td>
+</tr>
+<tr>
+<td><code>SFM.Nucleus.<em>/…/SiemApiClient</em></code></td>
+<td>Pull credential entity and repository</td>
+</tr>
+<tr>
+<td><code>SFM.Platform.Storage.Tests/Siem*.cs</code></td>
+<td>~220 tests</td>
+</tr>
+</tbody></table>
+<h2>Related documents</h2>
+<table><thead><tr>
+<th>Document</th>
+<th>For</th>
+</tr></thead><tbody>
+<tr>
+<td><strong><code>SIEM-API-Integration.md</code></strong></td>
+<td>The customer's SOC engineer — setup, paste-ready configs</td>
+</tr>
+<tr>
+<td><strong><code>SIEM-UI-Integration.md</code></strong></td>
+<td>UX and frontend — screens, fields, states, error copy</td>
+</tr>
+<tr>
+<td><strong><code>DEPLOY-SECRETS.md</code></strong></td>
+<td>DevOps — env vars, encrypt-vs-hash rule</td>
+</tr>
+<tr>
+<td><strong><code>DATABASE-CHANGES.md</code></strong></td>
+<td>Migration conventions</td>
+</tr>
+</tbody></table>
+<hr>
+<h1>Part 11 — What to do next</h1>
+<ol>
+<li><strong>Run against a real database.</strong> Nothing has. This is where problems will be, and it is the single highest-value step remaining</li>
+<li><strong>B1</strong> — rotate the encryption key to Key Vault. <strong>Required before any customer push token is stored</strong>, because that token is encrypted with it</li>
+<li><strong>B2</strong> — flip tenant binding to <code>Enforce</code> once the Audit logs are clean</li>
+<li><strong>B3</strong> — forwarded headers, which unblocks <code>ActorIp</code> and the IP allowlist</li>
+<li>Backfill — the last feature gap</li>
+</ol>
+<h3>A note on QRadar</h3>
+<p>The only transport that is not HTTP. Three consequences worth knowing:</p>
+<ul>
+<li><strong>Framing is ours.</strong> Messages use RFC 5425 octet counting — each prefixed with its byte length — not newline termination. Newline framing breaks the moment a value contains one, and silently: the collector reads half an event and treats the remainder as the next. The count is of <strong>UTF-8 bytes</strong>, which differs from character count for any non-ASCII filename, and a wrong count desynchronises every subsequent event rather than just the one.</li>
+<li><strong>LEEF is tab-delimited</strong>, and LEEF has no escape sequence for its own delimiter. A tab in a filename would split one attribute into two and QRadar would index the fragments without complaint, so tabs are replaced.</li>
+<li><strong>There is no delivery confirmation.</strong> Syslog over TCP tells us the socket accepted the bytes, not that QRadar parsed or stored them. Success here is a weaker claim than a 200 from Splunk, and the health screen should not imply otherwise.</li>
+</ul>
+<p>A custom CA <strong>pins</strong> to the customer's root (<code>CustomRootTrust</code>) rather than disabling validation. There is no code path that accepts any certificate.</p>
+<h3>A note on Sentinel</h3>
+<p>The transport uses the <strong>Logs Ingestion API</strong> (Data Collection Endpoint + Data Collection Rule), not the legacy HTTP Data Collection API. The legacy one is retiring, and its shared workspace key is a credential we would have to store and replay on every send. The newer path uses the customer's own app registration, so the credential is theirs and scoped by them.</p>
+<p>Entra token responses are cached per <code>tenantId|clientId</code> and refreshed two minutes early — without that, every batch would hit <code>login.microsoftonline.com</code>, which rate-limits per app registration.</p>
+<h3>Before the first push customer</h3>
+<p>Push is switched off by default, and should stay off until B1 is resolved. The pull path has no such dependency: its credentials are hashed, not encrypted, so the committed key does not affect them.</p>
+
+<div class="doc-foot">Defensely DLP &middot; SIEM Integration - Complete Reference &middot; generated 2026-10-30</div>
+</body></html>

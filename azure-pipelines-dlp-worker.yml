@@ -1,0 +1,232 @@
+# Azure DevOps Pipeline — DLPProcessLaterService (.NET 8 worker, Container App)
+# Build → SDK container publish to ACR → Deploy QA Container App
+#
+# This project has no Dockerfile — its publish profile uses the .NET SDK's
+# built-in container publish (/t:PublishContainer), so the pipeline does the
+# same: az acr login for registry credentials, then dotnet publish pushes the
+# image directly.
+#
+# Resource names come from DLPProcessLaterService/Properties/PublishProfiles/
+# qa-dlp-processlater.pubxml. The ACR (qaemail) is in the Defensely-Common
+# subscription — the qa-defensely-sc principal needs AcrPush on it.
+
+trigger:
+  branches:
+    include:
+      - Deployment/CICD-QA
+      - Deployment/CICD-Prod1
+      - Deployment/CICD-Prod2
+  paths:
+    include:
+      - DLPProcessLaterService/**
+      # Everything the worker compiles INTO its image. Listing only
+      # DLPProcessLaterService meant a change to any of these shipped to the API
+      # and never to the worker, leaving the two running different code with
+      # nothing reporting it — which is how a crawl failed with "No client is
+      # registered for provider 'Box'" while the API happily created and tested
+      # that same connector.
+      - SFM.DLP.CloudDiscovery/**
+      - SFM.DLP.DataDiscovery/**
+      - SFM.DLP.Infrastructure/**
+      - SFM.DLP.Domain/**
+      - SFM.Common.Utilities/**
+      - SFM.Platform.Storage/**
+      - SFM.GenericRepository/**
+      # The DLP scanner engine itself. A change to it is a change to what the worker
+      # detects, so it must trigger a build. It lives in this repo under ScannerEngine/
+      # (DLP.RegexFilter, DLP.Scanning.Shared, DLP.Database.Connectors,
+      # SFM.DLP.CloudClients) — vendored, no longer the shared/ submodule.
+      - ScannerEngine/**
+      - nuget.config
+      - azure-pipelines-dlp-worker.yml
+      - pipeline-templates/**
+
+pr: none
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: dotnetVersion
+    value: '8.0.x'
+  - name: projectPath
+    value: 'DLPProcessLaterService/DLPProcessLaterService.csproj'
+
+  # Registry per environment, resolved from the branch below. Production builds
+  # into its own ACR rather than QA's — see azure-pipelines-dlp-api.yml for the
+  # failure that prompted it.
+  #
+  # Only the NAME varies: DLPProd and qaemail are both in Defensely-Common, so
+  # the subscription is the same for both and stays here.
+  - name: acrSubscription
+    value: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # Resolved at compile time from the branch — see azure-pipelines-dlp-api.yml
+  # for why the branch selects the values rather than the file.
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA') }}:
+    - name: azureServiceConnection
+      value: 'qa-defensely-sc'
+    - name: imageName
+      value: 'qa-dlp-processlater'
+    - name: acrName
+      value: 'qaemail'
+    - name: acrLoginServer
+      value: 'qaemail.azurecr.io'
+
+  - ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: 'prod-defensely-sa'
+    # 'dlpprocesslaterservice', not 'prod-dlp-processlater'. That repository
+    # already exists in DLPProd and is what the running production worker was
+    # built into; pushing under a new name would leave two repositories for one
+    # service, with the live image in the one the pipeline no longer writes to.
+    - name: imageName
+      value: 'dlpprocesslaterservice'
+    - name: acrName
+      value: 'dlpprod'
+    - name: acrLoginServer
+      value: 'dlpprod-c5cbcmb9eqb7ecb2.azurecr.io'
+
+  - ${{ if not(in(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA', 'refs/heads/Deployment/CICD-Prod1', 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: ''
+    - name: imageName
+      value: ''
+    - name: acrName
+      value: ''
+    - name: acrLoginServer
+      value: ''
+
+  - name: qaContainerAppName
+    value: 'qa-dlp-processlater'
+  - name: qaResourceGroup
+    value: 'QA-DLP'
+
+  - name: prodSubscription
+    value: 'Defensely'
+  - name: prodResourceGroup
+    value: 'DLP-PROD-IN'
+  - name: prod1ContainerAppName
+    value: 'prod01-dlp-processlater'
+  - name: prod2ContainerAppName
+    value: 'prod02-dlp-processlater'
+
+stages:
+
+# ─── Build & Push ───────────────────────────────────────────────
+- stage: Build
+  displayName: 'Build & Push Image'
+  # Blank imageName means an unrecognised branch — skip rather than push an
+  # unreviewed image into a registry production pulls from.
+  condition: ne(variables['imageName'], '')
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: BuildJob
+    displayName: 'SDK Container Publish to ACR'
+    steps:
+    - checkout: self
+      # The scanning engine lives in this repo under ScannerEngine/ (vendored, no
+      # longer the DLP-RegexFilter submodule), so there is nothing extra to fetch.
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+
+    # Kept, though nothing in this repo restores from the ManageEndPoints feed any more —
+    # DLP.RegexFilter is built from source in this repo. It costs a few seconds, and it
+    # means going back to the package is a one-line csproj change rather than a pipeline
+    # edit as well. Remove it, and nuget.config's feed entry, once that is ruled out.
+    - task: NuGetAuthenticate@1
+      displayName: 'Authenticate to the ManageEndPoints feed'
+
+    - task: AzureCLI@2
+      displayName: 'Publish container image to ACR (dotnet /t:PublishContainer)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        inlineScript: |
+          az acr login --name $(acrName) --subscription $(acrSubscription)
+
+          dotnet publish $(projectPath) \
+            --configuration $(buildConfiguration) \
+            /t:PublishContainer \
+            -p ContainerRegistry=$(acrLoginServer) \
+            -p ContainerRepository=$(imageName) \
+            -p ContainerImageTags=$(Build.BuildId) \
+            -p ContainerRuntimeIdentifier=linux-x64
+
+# ─── Deploy to QA ──────────────────────────────────────────────
+- stage: DeployQA
+  displayName: 'Deploy to QA'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA'))
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - deployment: DeployQAJob
+    displayName: 'Deploy Worker to QA Container App'
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureCLI@2
+            displayName: 'Update QA Container App'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Deploying image tag: $IMAGE_TAG"
+                az containerapp update \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --image "$(acrLoginServer)/$(imageName):$IMAGE_TAG"
+
+# ─── Deploy to Production ──────────────────────────────────────
+#
+# No migration step: the worker shares the DLP schema but does not own it. The
+# DLP API's pipeline runs migrations, and this is deployed after it.
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd1
+    displayName: 'Deploy to PROD1'
+    branch: 'refs/heads/Deployment/CICD-Prod1'
+    adoEnvironment: 'PROD1'
+    variableGroup: 'defensely-prod1'
+    deploymentEnvironment: 'PROD1'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod1ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    healthCheck: false
+    setMigrationKey: false
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd2
+    displayName: 'Deploy to PROD2'
+    branch: 'refs/heads/Deployment/CICD-Prod2'
+    adoEnvironment: 'PROD2'
+    variableGroup: 'defensely-prod2'
+    deploymentEnvironment: 'PROD2'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod2ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    healthCheck: false
+    setMigrationKey: false

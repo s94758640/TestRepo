@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Feedback API — Documentation</title>
+<style>
+  /* Every colour is a token so the dark theme is a redefinition, not a
+     second stylesheet. Components below reference tokens only. */
+  :root{
+    --page:#f1f5f9; --panel:#ffffff; --panel-2:#fafbfc; --ink:#0f172a;
+    --ink-2:#334155; --muted:#64748b; --line:#e2e8f0; --inlay:#f1f5f9;
+    --get:#16a34a; --post:#2563eb; --patch:#d97706; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5; --newline:#a7f3d0;
+    --warnbg:#fffbeb; --warnline:#fde68a;
+    --okbg:#ecfdf5; --okline:#a7f3d0;
+    --type:#9333ea; --req:#dc2626;
+    --header:linear-gradient(135deg,#1e293b,#0f172a); --header-fg:#ffffff; --header-sub:#cbd5e1;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0b1120; --panel:#131c2e; --panel-2:#18223a; --ink:#e8eefc;
+      --ink-2:#c3cee3; --muted:#93a1bd; --line:#27324b; --inlay:#1d2740;
+      --get:#34d399; --post:#60a5fa; --patch:#fbbf24; --code:#060a14; --code-fg:#e6edf3;
+      --accent:#60a5fa; --chip:#23305a; --chip-fg:#c7d6ff;
+      --new:#34d399; --newbg:#112a24; --newline:#1f5e4c;
+      --warnbg:#2a2312; --warnline:#5e4a1f;
+      --okbg:#112a24; --okline:#1f5e4c;
+      --type:#c084fc; --req:#f87171;
+      --header:linear-gradient(135deg,#1b2742,#0b1120); --header-fg:#f1f5f9; --header-sub:#9fb0d0;
+    }
+  }
+  /* The viewer's own toggle has to win over the OS preference, both ways. */
+  :root[data-theme="dark"]{
+    --page:#0b1120; --panel:#131c2e; --panel-2:#18223a; --ink:#e8eefc;
+    --ink-2:#c3cee3; --muted:#93a1bd; --line:#27324b; --inlay:#1d2740;
+    --get:#34d399; --post:#60a5fa; --patch:#fbbf24; --code:#060a14; --code-fg:#e6edf3;
+    --accent:#60a5fa; --chip:#23305a; --chip-fg:#c7d6ff;
+    --new:#34d399; --newbg:#112a24; --newline:#1f5e4c;
+    --warnbg:#2a2312; --warnline:#5e4a1f;
+    --okbg:#112a24; --okline:#1f5e4c;
+    --type:#c084fc; --req:#f87171;
+    --header:linear-gradient(135deg,#1b2742,#0b1120); --header-fg:#f1f5f9; --header-sub:#9fb0d0;
+  }
+  :root[data-theme="light"]{
+    --page:#f1f5f9; --panel:#ffffff; --panel-2:#fafbfc; --ink:#0f172a;
+    --ink-2:#334155; --muted:#64748b; --line:#e2e8f0; --inlay:#f1f5f9;
+    --get:#16a34a; --post:#2563eb; --patch:#d97706; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5; --newline:#a7f3d0;
+    --warnbg:#fffbeb; --warnline:#fde68a;
+    --okbg:#ecfdf5; --okline:#a7f3d0;
+    --type:#9333ea; --req:#dc2626;
+    --header:linear-gradient(135deg,#1e293b,#0f172a); --header-fg:#ffffff; --header-sub:#cbd5e1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--page);line-height:1.5}
+  header.top{background:var(--header);color:var(--header-fg);padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:var(--header-sub);font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:280px;flex:0 0 280px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;font-size:13px}
+  nav.side a:hover{background:var(--inlay)}
+  nav.side a:focus-visible,main a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  main{flex:1;padding:24px 32px;min-width:0}
+  .intro{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .intro h2{margin-top:0}
+  .kv{font-size:14px}
+  .kv code{background:var(--inlay);padding:2px 6px;border-radius:4px;font-size:13px}
+  .endpoint{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+  .endpoint > .head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel-2);flex-wrap:wrap}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:4px 10px;border-radius:6px;letter-spacing:.04em}
+  .method.post{background:var(--post)} .method.get{background:var(--get)} .method.patch{background:var(--patch)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600}
+  .body{padding:18px 22px}
+  .desc{color:var(--ink-2);margin:0 0 14px}
+  h5.section{margin:18px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  /* Tables carry the route and key reference; they must scroll inside
+     themselves rather than push the page sideways on a phone. */
+  .intro > table,.body > table{display:block;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  td code{background:var(--inlay);padding:1px 5px;border-radius:4px}
+  .type{color:var(--type);font-family:ui-monospace,monospace;font-size:12px}
+  .req{color:var(--req);font-size:11px;font-weight:700}
+  .opt{color:var(--muted);font-size:11px;font-weight:600}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .newpill{display:inline-block;background:var(--newbg);color:var(--new);border:1px solid var(--newline);padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
+  .note{background:var(--warnbg);border:1px solid var(--warnline);border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .ok{background:var(--okbg);border:1px solid var(--okline);border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;margin-right:8px}
+  @media(max-width:1000px){nav.side{display:none}}
+  .tag{font-size:11px;color:var(--muted)}
+  h3.group{margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent);font-size:16px}
+  /* Change log: the delta since the last published revision. Dated rows,
+     because "what changed" is only useful against a date. */
+  .changelog{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .changelog h2{margin:0 0 4px}
+  .changelog .rev{font-size:12px;color:var(--muted);margin:0 0 14px}
+  .changelog ul{margin:0;padding-left:18px;font-size:14px}
+  .changelog li{margin-bottom:9px}
+  .changelog li:last-child{margin-bottom:0}
+  .changelog strong{color:var(--ink)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Feedback API — Documentation</h1>
+  <p>Tray app &amp; web portal · raise feedback, list it, triage it · for the tray and UI teams</p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Getting started</h4>
+  <a href="#changes">What changed</a>
+  <a href="#overview">What this is</a>
+  <a href="#conventions">Conventions &amp; headers</a>
+  <h4>Tray app</h4>
+  <a href="#tray1">1. Load the form options</a>
+  <a href="#tray2">2. Submit the feedback</a>
+  <h4>Web portal</h4>
+  <a href="#web1">1. Submit from a page</a>
+  <a href="#web1b">1b. The Log Summary panel</a>
+  <a href="#web2">2. The grid</a>
+  <a href="#web2b">2b. The "My feedback" tab</a>
+  <a href="#web3">3. The detail panel</a>
+  <a href="#web4">4. Triage</a>
+  <a href="#web5">5. Export</a>
+  <h4>Reference</h4>
+  <a href="#values">Allowed values</a>
+  <a href="#attachments">Attachment rules</a>
+  <a href="#gridkeys">Grid filter &amp; sort keys</a>
+  <a href="#exeapi">ExeApi V1 equivalents</a>
+  <a href="#deploy">Deployment note</a>
+</nav>
+
+<main>
+
+<section class="changelog" id="changes">
+  <h2>What changed</h2>
+  <p class="rev">29 Oct 2026 · answering the review of this API, then the QA findings · branch <code>feature/feedback</code></p>
+  <ul>
+    <li><strong>Linked log file name is the file name again.</strong> <code>linkedLog.fileName</code> and the grid's <code>linkedLogFileName</code> were returning the agent's whole path (<code>C:\Users\…\PHI.pdf</code>). The API runs on Linux, where a backslash is an ordinary filename character, so the Windows path was never split. Both now take the last segment on either separator. <strong>Rows already stored keep the full path</strong> — the value is a snapshot taken at submit time, so only feedback raised after this deploys is corrected.</li>
+
+    <li><strong>Description is now optional for <code>FalsePositive</code> and <code>FalseNegative</code></strong>, as the design has it. Still required for every other type. A multipart submit was being refused by model binding before that rule could run — <code>400 "Description: The Description field is required."</code> — because the field was declared non-nullable and MVC treats that as implicitly required. The field is nullable now, so the only thing deciding this is the rule above.</li>
+
+    <li><strong>The grid row carries the Linked Log, so no detail call per line.</strong> <code>linkedAiPromptBlockLogId</code>, <code>linkedLogActivity</code> and <code>linkedLogApplication</code> are on every <a href="#web2"><code>feedback/list</code></a> row now. A prompt has no file name, so those rows previously showed "--" and were indistinguishable from feedback linked to nothing; render them as <code>activity · application</code> ("Prompt · desktop"). The CSV export composes the same cell, falling back to <code>PROMPT-4768</code>. <code>LinkedLogActivity</code> and <code>LinkedLogApplication</code> also work as <code>likeFilters</code> keys — they always did; the key list on this page was incomplete.</li>
+
+    <li><strong>A feedback linked to a blocked AI prompt now gets a Linked Log card.</strong> Sending <code>LinkedAiPromptBlockLogId</code> stored only the id and the category, so the card rendered as dashes. The snapshot is now taken from the prompt-block log at submit time, the same as a transfer: <code>displayId</code> (<code>PROMPT-4768</code>), <code>status</code>, <code>activity</code>, <code>application</code>, <code>destination</code>, <code>policyName</code>, <code>userName</code> and <code>receivedTime</code>. <code>fileName</code> stays null — a prompt has no file. Existing rows keep their empty copy; re-test with a new submission.</li>
+
+    <li><strong>Attachments download under their own name.</strong> The link now carries a signed <code>Content-Disposition</code>, so a file saves as <code>Screenshot - DLP &gt; Logs.png</code> instead of the storage guid.</li>
+    <li><strong>Casing: nothing to change, and the examples on this page were wrong.</strong> Every endpoint returns <strong>camelCase</strong> — <code>success</code>, <code>message</code>, <code>data</code>, <code>totalCount</code>, <code>feedbackId</code> — and always has; all three hosts register MVC with <code>AddNewtonsoftJson</code>, which camel-cases property names. This page showed PascalCase throughout, which is the likeliest source of the report. Every example is now what the wire actually carries. <code>data.message</code> on a 400 works today. See <a href="#conventions">Casing</a> for the two things that are <em>not</em> camel-cased.</li>
+
+    <li><strong>Your feedback is scoped by the token.</strong> <code>feedback/list</code> no longer returns everyone's rows to everyone: an admin reads the tenant's, everyone else reads their own. The scope is applied under the request, so <code>raisedByUserId</code> in the body can narrow your own rows but never widen them. It covers the detail, attachment URLs, comments and triage too — the attachment route in particular used to mint a working link for anyone holding an id. <span class="newpill">NEW</span> <code>GET</code> / <code>POST feedback/mine</code> for the "My feedback" tab — no user id to send.</li>
+
+    <li><strong>No route returns 403.</strong> Access is scope, not refusal: feedback you may not touch is a <code>404</code>, on triage as well as read. There is no forbidden state to design for — if a row came back from the grid, every action on it will work.</li>
+
+    <li><strong>The ID column filters now.</strong> <code>DisplayId</code> is not a stored column, so it was being dropped silently and the column filtered on nothing. Both <code>displayId</code> and <code>feedbackNumber</code> now read the digits out of <code>FB-2052</code>, <code>fb2052</code> or <code>2052</code>, exact or partial. <code>subject</code>, <code>linkedLogFileName</code> and <code>raisedByName</code> already worked as <code>likeFilters</code> — the key list on this page was just incomplete. <code>raisedByUserId</code> is confirmed <strong>exact-match only</strong>.</li>
+
+    <li><strong>A <code>FEEDBACK</code> permission module</strong> with <code>VIEW</code> and <code>EDIT</code> is added to the role catalog by migration <code>V0002__feedback_permission_module.sql</code>, so the admin grid can be permission-gated. It appears in <code>GetModulesWithPermissions/1</code> once the environment is migrated — see <a href="#deploy">Deployment note</a>.</li>
+
+    <li><strong>"View in Logs" already has a target</strong> — <code>GET GetTransferLogDetails/{enrichedId}</code> returns the same row shape as <code>GetTransferLogs</code>. No new route was needed; it is documented on <a href="#web3">the detail panel</a>.</li>
+  </ul>
+  <div class="note"><strong>Not yet verified against a database.</strong> The above builds and the generated SQL was checked, but no request has gone through the stack yet. Treat the contract as firm and the behaviour as needing a QA pass.</div>
+</section>
+
+<section class="intro" id="overview">
+  <h2>What this is</h2>
+  <p class="kv">Employees raise feedback from the <strong>tray app</strong> — a false positive, a bug, an idea. Admins read and triage it in the <strong>web portal</strong>, on the Feedback &amp; Detection Reports screen. Feedback can optionally be attached to one DLP log, which the detail panel renders as the <em>Linked Log</em> card.</p>
+  <table>
+    <tr><th>Route</th><th>Who calls it</th><th>Auth</th></tr>
+    <tr><td><code>POST feedback/submit</code></td><td>tray app <em>and</em> portal</td><td>none required</td></tr>
+    <tr><td><code>GET feedback/lookups</code></td><td>tray app and portal</td><td>none required</td></tr>
+    <tr><td><code>POST feedback/list</code></td><td>portal</td><td>Bearer JWT — admin sees all, everyone else their own</td></tr>
+    <tr><td><code>GET feedback/mine</code> · <code>POST feedback/mine</code></td><td>portal</td><td>Bearer JWT — always the caller's own</td></tr>
+    <tr><td><code>GET feedback/{feedbackId}</code></td><td>portal</td><td>Bearer JWT — own feedback, or any if admin</td></tr>
+    <tr><td><code>GET feedback/attachment/{attachmentId}/url</code></td><td>portal</td><td>Bearer JWT — own feedback, or any if admin</td></tr>
+    <tr><td><code>PATCH feedback/{feedbackId}/status</code></td><td>portal</td><td>Bearer JWT — own feedback, or any if admin</td></tr>
+    <tr><td><code>POST feedback/{feedbackId}/assign</code></td><td>portal</td><td>Bearer JWT — own feedback, or any if admin</td></tr>
+    <tr><td><code>POST feedback/{feedbackId}/comment</code></td><td>portal</td><td>Bearer JWT — own feedback, or any if admin</td></tr>
+    <tr><td><code>POST feedback/export</code></td><td>portal</td><td>Bearer JWT — admin gets all, others get their own</td></tr>
+  </table>
+  <div class="note"><strong>Tray team:</strong> you only need the first two. Everything else is the admin screen.</div>
+  <div class="note"><strong>Who sees what is decided by the token, not by the request body.</strong> A caller whose role name contains "Admin" reads the tenant's feedback; everyone else reads only what they raised, on every route — grid, counts, detail, attachment URLs, comments and triage alike. Sending someone else's <code>RaisedByUserId</code> in <code>exactFilters</code> narrows your own rows; it cannot widen them.</div>
+  <div class="note"><strong>No route returns 403.</strong> Access is expressed as scope, not refusal: a feedback you may not touch is a <code>404</code>, on read and on triage alike. So there is no "forbidden" state for the UI to render — if a row came back from the grid, every action on it will work.</div>
+  <p class="kv">The submit route also exists on the <strong>Functions host</strong> as <code>POST V1/SubmitFeedback</code>. Same service behind it, same request and response — see <a href="#exeapi">ExeApi V1 equivalents</a>. Point at <code>feedback/submit</code> today; moving later is a URL change and nothing else.</p>
+</section>
+
+<section class="intro" id="conventions">
+  <h2>Conventions &amp; headers</h2>
+  <table>
+    <tr><th>Header</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>ClientGUID</code></td><td><span class="req">required</span></td><td>Tenant identifier — routes to the correct tenant DLP database. Every call, including the anonymous ones.</td></tr>
+    <tr><td><code>Content-Type</code></td><td><span class="req">required</span></td><td><code>multipart/form-data</code> for a submit with attachments, <code>application/json</code> otherwise.</td></tr>
+    <tr><td><code>Authorization</code></td><td>see table above</td><td><code>Bearer &lt;jwt&gt;</code>. On <code>feedback/submit</code> it is optional: when present, the token's <code>UserId</code> claim wins over the <code>UserId</code> in the body.</td></tr>
+  </table>
+
+  <h5 class="section">Casing</h5>
+  <p class="kv"><strong>Responses are camelCase</strong> — <code>success</code>, <code>message</code>, <code>data</code>, <code>totalCount</code>, <code>feedbackId</code> — the same as every other DLP, Identity and Nucleus endpoint. All three hosts register MVC with <code>AddNewtonsoftJson</code>, whose default naming strategy camel-cases property names. Read errors from <code>data.message</code> exactly as you do on the Logs screens.</p>
+  <div class="note"><strong>Two things are NOT camel-cased, and both matter.</strong><br/>
+  • <strong>Dictionary keys.</strong> Newtonsoft's camelCase strategy leaves them alone, so <code>typeCounts</code> and <code>statusCounts</code> come back keyed <code>"FalsePositive"</code>, <code>"InReview"</code> — the stored values, which is what you filter by. The property is camelCase, the keys inside it are not.<br/>
+  • <strong>Filter keys you send.</strong> <code>exactFilters</code> / <code>likeFilters</code> are keyed by column name — <code>"FeedbackType"</code>, <code>"Subject"</code>. They are matched case-insensitively, so <code>"feedbackType"</code> also works, but the PascalCase spelling is the canonical one and is what this page uses.</div>
+  <div class="note"><strong>Requests are case-insensitive.</strong> The body binder matches <code>"pageSize"</code> and <code>"PageSize"</code> alike, so an older client sending PascalCase keeps working. New code should send camelCase.</div>
+  <div class="note">
+    <strong>Envelope.</strong> Every JSON response is <code>{ "success", "message", "data", "errors" }</code>. The samples below show the <code>data</code> contents only.<br/>
+    <strong>Dates.</strong> ISO-8601 UTC on the wire; the client localises.
+  </div>
+</section>
+
+<h3 class="group">Tray app — two calls, start to finish</h3>
+
+<div class="endpoint" id="tray1">
+  <div class="head">
+    <span class="step">1</span><span class="method get">GET</span><span class="path">/feedback/lookups</span>
+    <span class="tag">no token needed</span>
+  </div>
+  <div class="body">
+    <p class="desc">The type chips, the impact buttons and the attachment limits, so the form does not hardcode its own copy of them. Call once when the Feedback screen opens.</p>
+    <h5 class="section">Example</h5>
+<pre>curl -X GET "{dlp-api}/feedback/lookups" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555"</pre>
+    <h5 class="section">Response — Data</h5>
+<pre>{
+  "types":   ["FalsePositive","FalseNegative","Bug","Improvement","FeatureRequest","Question","Other"],
+  "impacts": ["Low","Medium","High"],
+  "statuses":["New","InReview","Resolved","Closed"],
+  "sources": ["TrayApp","WebPortal"],
+  "maxAttachmentBytes": 10485760,
+  "maxAttachmentCount": 5,
+  "allowedAttachmentExtensions": [".png",".jpg",".jpeg",".pdf",".log"]
+}</pre>
+    <div class="ok"><strong>Render the chips from <code>types</code>, in the order returned.</strong> That order is the one the design shows: False positive, False negative, Bug / Issue, Improvement, Feature request, Question, Other.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="tray2">
+  <div class="head">
+    <span class="step">2</span><span class="method post">POST</span><span class="path">/feedback/submit</span>
+    <span class="tag">no token needed</span>
+  </div>
+  <div class="body">
+    <p class="desc">Send the form. Use <code>multipart/form-data</code> when the user attached files, plain JSON when they did not — both are accepted.</p>
+    <h5 class="section">Fields</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+      <tr><td><code>FeedbackType</code></td><td class="type">string</td><td><span class="req">required</span></td><td>One of <code>Types</code> from step 1.</td></tr>
+      <tr><td><code>Subject</code></td><td class="type">string</td><td><span class="req">required</span></td><td>Max 300 characters.</td></tr>
+      <tr><td><code>Description</code></td><td class="type">string</td><td><span class="req">required</span> <span class="opt">— except FalsePositive / FalseNegative</span></td><td>No length limit. <strong>Optional for <code>FalsePositive</code> and <code>FalseNegative</code></strong>: those are raised against a log whose context is already on the record, and the design marks the box optional there. Omitted or empty stores as an empty string. Required for every other type.</td></tr>
+      <tr><td><code>UserId</code></td><td class="type">int</td><td><span class="req">required</span></td><td>The signed-in employee. Name, email and role are looked up and stored for you.</td></tr>
+      <tr><td><code>Impact</code></td><td class="type">string</td><td><span class="opt">optional</span></td><td>Defaults to <code>Medium</code>.</td></tr>
+      <tr><td><code>Source</code></td><td class="type">string</td><td><span class="opt">optional</span></td><td>Send <code>TrayApp</code>. Defaults to <code>WebPortal</code>.</td></tr>
+      <tr><td><code>PageModule</code></td><td class="type">string</td><td><span class="opt">optional</span></td><td>Where the user was, e.g. <code>Tray &gt; Activity</code>. Shown as a grid column.</td></tr>
+      <tr><td><code>AgentVersion</code></td><td class="type">string</td><td><span class="opt">optional</span></td><td>The build in your footer, e.g. <code>V1.01.011</code>.</td></tr>
+      <tr><td><code>LinkedActivityId</code></td><td class="type">int</td><td><span class="opt">optional</span></td><td>The <code>EnrichedId</code> of the activity being complained about. Send it when feedback is raised from an activity row.</td></tr>
+      <tr><td><code>LinkedAiPromptBlockLogId</code></td><td class="type">long</td><td><span class="opt">optional</span></td><td>Use instead of the above when the subject is a blocked AI prompt.</td></tr>
+      <tr><td><code>attachments</code></td><td class="type">file[]</td><td><span class="opt">optional</span></td><td>Up to 5 files — see <a href="#attachments">attachment rules</a>.</td></tr>
+    </table>
+
+    <h5 class="section">Example — a false positive raised from an activity row, with a screenshot</h5>
+<pre>curl -X POST "{dlp-api}/feedback/submit" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -F "FeedbackType=FalsePositive" \
+     -F "Subject=Insurance_2022.Csv blocked but not sensitive" \
+     -F "Description=Template file with placeholder policy numbers only, no real customer data." \
+     -F "Impact=Medium" \
+     -F "Source=TrayApp" \
+     -F "PageModule=Tray &gt; Activity" \
+     -F "AgentVersion=V1.01.011" \
+     -F "UserId=4821" \
+     -F "LinkedActivityId=48214" \
+     -F "attachments=@C:\Users\oliver\Desktop\blocked.png"</pre>
+
+    <h5 class="section">The same thing with no attachment</h5>
+<pre>curl -X POST "{dlp-api}/feedback/submit" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "feedbackType": "FalsePositive",
+       "subject": "Insurance_2022.Csv blocked but not sensitive",
+       "description": "Template file with placeholder policy numbers only.",
+       "impact": "Medium",
+       "source": "TrayApp",
+       "userId": 4821,
+       "linkedActivityId": 48214
+     }'</pre>
+
+    <h5 class="section">Response — data</h5>
+    <p class="kv">The full saved record, same shape as <a href="#web3">the detail panel</a>. The two fields worth showing the user:</p>
+<pre>{
+  "feedbackId": "8f0b…",
+  "displayId": "FB-2052",
+  "status": "New",
+  ...
+}</pre>
+    <div class="ok"><strong>Show <code>displayId</code> in the confirmation toast</strong> — "Submitted as FB-2052". It is the number support will ask for.</div>
+    <div class="note"><strong>Refusals come back as <code>400</code></strong> with the reason already written for a human: <code>{"success":false,"message":"'notes.exe' is not an allowed file type. Allowed: .png, .jpg, .jpeg, .pdf, .log."}</code> — show <code>message</code> as-is rather than writing your own text.</div>
+    <div class="note"><strong>If the linked activity has been purged</strong>, the submit still succeeds — the feedback is saved without the Linked Log card. It is never rejected for that.</div>
+  </div>
+</div>
+
+<h3 class="group">Web portal</h3>
+
+<div class="endpoint" id="web1">
+  <div class="head">
+    <span class="step">1</span><span class="method post">POST</span><span class="path">/feedback/submit</span>
+  </div>
+  <div class="body">
+    <p class="desc">The same route the tray uses. Two differences for the portal.</p>
+    <table>
+      <tr><td><code>Source</code></td><td>Send <code>WebPortal</code>.</td></tr>
+      <tr><td><code>PageModule</code></td><td>Send the screen the user was on when they clicked the feedback icon, formatted <code>DLP &gt; Logs</code>. This fills the Page / Module column.</td></tr>
+    </table>
+    <div class="ok">Send the Bearer token and you can leave <code>UserId</code> out — the token's <code>UserId</code> claim is used, and it overrides the body if both are present.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web1b">
+  <div class="head">
+    <span class="step">1b</span><span class="method post">POST</span><span class="path">/feedback/submit</span>
+    <span class="tag">Log Summary redesign — the slide-over Feedback panel</span>
+  </div>
+  <div class="body">
+    <p class="desc">The Log Summary redesign (Oct 2026) opens this panel over the Logs screen, pre-wired to the event the user was looking at. Same <code>feedback/submit</code> route — this section only says what to put in each field so the panel matches the design.</p>
+    <table>
+      <tr><th>Panel element</th><th>Send</th></tr>
+      <tr><td>Feedback type chips</td><td><code>FeedbackType</code> — render the chips from <code>GET feedback/lookups</code> → <code>Types</code>, in order.</td></tr>
+      <tr><td>Linked log card</td><td><code>LinkedActivityId</code> = the row's <code>enrichedId</code> from <code>GetTransferLogs</code> / <code>GetTransferLogsByUrl</code>. For a blocked AI prompt row (<code>category: "Content"</code>) send <code>LinkedAiPromptBlockLogId</code> = the row's <code>aiPromptBlockLogId</code> instead. The ✕ on the card just means "send neither".</td></tr>
+      <tr><td>Pre-filled subject</td><td><code>Subject</code> — the UI composes it ("False negative: Medical_recoders.Pdf allowed but contains sensitive data"); the API stores whatever is sent.</td></tr>
+      <tr><td>Page / module ("Detected from where you opened this")</td><td><code>PageModule</code> — the screen the panel was opened from, e.g. <code>DLP &gt; Logs</code>. The dropdown is client-side; the API takes free text.</td></tr>
+      <tr><td>Impact buttons</td><td><code>Impact</code> — <code>Low</code> / <code>Medium</code> / <code>High</code> from lookups. Omitted = <code>Medium</code>.</td></tr>
+      <tr><td>"Include screenshot of this page" toggle</td><td>Capture client-side on submit and append it as the first <code>attachments</code> file (<code>multipart/form-data</code>). There is no server-side capture — the toggle is purely a client behaviour.</td></tr>
+      <tr><td>Attach files</td><td><code>attachments</code> — same <a href="#attachments">rules</a>: 5 files, 10 MB each, <code>.png .jpg .jpeg .pdf .log</code>.</td></tr>
+    </table>
+    <div class="ok"><strong>One submit call does the whole panel.</strong> Screenshot + attachments + linked log all travel in the same <code>multipart/form-data</code> request; the response's <code>DisplayId</code> ("FB-2052") feeds the confirmation toast.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web2">
+  <div class="head">
+    <span class="step">2</span><span class="method post">POST</span><span class="path">/feedback/list</span>
+  </div>
+  <div class="body">
+    <p class="desc">The grid. Server-side sort, filter, free-text search, date range and pagination — all in one body. <code>POST</code> rather than <code>GET</code> because the filter dictionaries do not fit a query string, the same as <code>GetTransferLogs</code>.</p>
+
+    <h5 class="section">Example — page 1, false positives and false negatives, searched, newest first</h5>
+<pre>curl -X POST "{dlp-api}/feedback/list" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "page": 1,
+       "pageSize": 25,
+       "sortBy": "RaisedOn",
+       "sortDescending": true,
+       "fromDate": "2026-09-12",
+       "toDate": "2026-10-26",
+       "search": "insurance",
+       "status": "New",
+       "exactFilters": { "FeedbackType": ["FalsePositive","FalseNegative"] }
+     }'</pre>
+
+    <h5 class="section">Response — data</h5>
+<pre>{
+  "totalCount": 134,
+  "data": [
+    {
+      "feedbackId": "8f0b…",
+      "displayId": "FB-2052",
+      "feedbackNumber": 2052,
+      "feedbackType": "FalsePositive",
+      "subject": "Insurance_2022.Csv blocked but not sensitive",
+      "linkedLogFileName": "Insurance_2022.Csv",
+      "linkedActivityId": 48214,
+      "linkedAiPromptBlockLogId": null,
+      "linkedLogActivity": "Upload",
+      "linkedLogApplication": "MS Edge",
+      "pageModule": "DLP > Logs",
+      "impact": "Medium",
+      "status": "New",
+      "source": "WebPortal",
+      "raisedByName": "Aaron Kim",
+      "raisedByRoleName": "Security Admin",
+      "raisedByInitials": "AK",
+      "raisedOn": "2026-10-26T12:41:00Z",
+      "hasAttachments": true
+    }
+  ],
+  "typeCounts":   { "FalsePositive": 41, "FalseNegative": 22, "Bug": 18, "Improvement": 9,
+                    "FeatureRequest": 14, "Question": 6, "Other": 3 },
+  "statusCounts": { "New": 57, "InReview": 40, "Resolved": 29, "Closed": 8 },
+  "appliedSort":  { "sortBy": "RaisedOn", "sortDescending": true,
+                    "resolved": "RaisedOn", "page": 1, "pageSize": 25 }
+}</pre>
+
+    <div class="ok">
+      <strong>Five things worth knowing about this response.</strong><br/>
+      • <code>totalCount</code> is the count <em>after</em> filtering, before paging — use it for the pager.<br/>
+      • <code>typeCounts</code> and <code>statusCounts</code> are taken <em>before</em> the type and status filters narrow the set, so the dropdowns keep every option and show a count for each. Selecting "Bug" does not make every other option read zero.<br/>
+      • <strong>Their KEYS stay PascalCase</strong> — <code>"FalsePositive"</code>, <code>"InReview"</code>. Property names are camel-cased by the serializer; dictionary keys are not, and these keys are the stored values you filter by. Do not lower-case them before sending them back in <code>exactFilters</code>.<br/>
+      • <code>raisedByInitials</code> is computed server-side so the avatar chip matches everywhere.<br/>
+      • <code>appliedSort.resolved</code> is the sort actually used. If you send a key the server does not sort by, it falls back to <code>RaisedOn</code> and says so here rather than silently returning a different order.
+    </div>
+    <div class="note"><strong>A date with no time means the whole of that day.</strong> <code>"toDate": "2026-10-26"</code> includes everything raised on the 26th, not just 00:00.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web2b">
+  <div class="head">
+    <span class="step">2b</span><span class="method get">GET</span><span class="path">/feedback/mine</span>
+    <span class="tag">the "My feedback" tab</span>
+  </div>
+  <div class="body">
+    <p class="desc">The panel's second tab — the signed-in user's own submissions ("My feedback <strong>3</strong>"). The user comes from the token; there is no id to send and none to get wrong. Response is identical to <a href="#web2"><code>feedback/list</code></a>.</p>
+    <h5 class="section">Example — the caller's own feedback, newest first</h5>
+<pre>curl "{dlp-api}/feedback/mine?page=1&amp;pageSize=25" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;"</pre>
+    <p class="kv">Query parameters: <code>page</code> (default 1), <code>pageSize</code> (default 25, max 200), <code>search</code>, <code>status</code>. Sorting is RaisedOn descending.</p>
+
+    <h5 class="section">Same thing with a full filter body</h5>
+    <p class="kv">When the tab needs the grid's sorting or column filters, <code>POST</code> the same route with a <code>feedback/list</code> body. The scope still comes from the token.</p>
+<pre>curl -X POST "{dlp-api}/feedback/mine" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "page": 1,
+       "pageSize": 25,
+       "sortBy": "RaisedOn",
+       "sortDescending": true,
+       "exactFilters": { "Status": ["New","InReview"] }
+     }'</pre>
+    <p class="kv">Render each card from the list item: <code>DisplayId</code> (FB-2038) · <code>FeedbackType</code> · <code>PageModule</code> on the first line, <code>Subject</code> as the title, <code>RaisedOn</code> below. <code>TotalCount</code> is the tab's badge number. Clicking a card opens <a href="#web3">the detail panel</a> by <code>FeedbackId</code>.</p>
+    <div class="note"><strong>Use this route rather than <code>feedback/list</code> with a <code>RaisedByUserId</code> filter.</strong> <code>feedback/mine</code> is scoped to the caller even when the caller is an admin, so an admin's "My feedback" tab shows their own submissions instead of the whole tenant's.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web3">
+  <div class="head">
+    <span class="step">3</span><span class="method get">GET</span><span class="path">/feedback/{feedbackId}</span>
+  </div>
+  <div class="body">
+    <p class="desc">The slide-over panel: the full description, the Linked Log card, the attachments and the triage conversation.</p>
+    <h5 class="section">Example</h5>
+<pre>curl -X GET "{dlp-api}/feedback/8f0b1c2d-3e4f-5678-9abc-def012345678" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;"</pre>
+    <h5 class="section">Response — Data</h5>
+<pre>{
+  "feedbackId": "8f0b…",
+  "displayId": "FB-2052",
+  "feedbackType": "FalsePositive",
+  "subject": "Insurance_2022.Csv blocked but not sensitive",
+  "description": "Template file with placeholder policy numbers only, no real customer data.",
+  "impact": "Medium",
+  "status": "New",
+  "source": "WebPortal",
+  "pageModule": "DLP > Logs",
+  "agentVersion": null,
+  "raisedByUserId": 4821,
+  "raisedByName": "Aaron Kim",
+  "raisedByEmail": "aaron.kim@example.com",
+  "raisedByRoleName": "Security Admin",
+  "raisedByInitials": "AK",
+  "raisedOn": "2026-10-26T12:41:00Z",
+  "assignedToUserId": null,
+  "assignedToName": null,
+  "resolutionNotes": null,
+  "resolvedByName": null,
+  "resolvedAt": null,
+
+  "linkedLog": {
+    "activityId": 48214,
+    "aiPromptBlockLogId": null,
+    "category": "File",
+    "displayId": "LOG-48214",
+    "fileName": "Insurance_2022.Csv",
+    "status": "Block",
+    "activity": "Upload",
+    "application": "MS Edge",
+    "destination": "https://drive.example.com/upload",
+    "policyName": "Finance Restrict All",
+    "userName": "Oliver",
+    "receivedTime": "2025-11-12T15:00:00Z",
+    "isResolvable": true
+  },
+
+  "attachments": [
+    {
+      "feedbackAttachmentId": "a1b2…",
+      "fileName": "Screenshot - DLP > Logs.png",
+      "contentType": "image/png",
+      "fileSizeBytes": 319488,
+      "url": "https://…?sv=…&amp;se=…&amp;sig=…",
+      "uploadedAt": "2026-10-26T12:41:03Z"
+    }
+  ],
+
+  "comments": []
+}</pre>
+    <div class="ok">
+      <strong>The Linked Log card is a snapshot</strong>, stored when the feedback was raised. It still reads correctly after the policy is renamed or the log is purged — which is the point.<br/>
+      <strong>Use <code>IsResolvable</code> to decide whether to show "View in Logs".</strong> When it is <code>false</code> the log row is gone and the link would lead nowhere; render the card without the link.<br/>
+      <code>LinkedLog</code> is <code>null</code> when the feedback is about no log at all — hide the card entirely.
+    </div>
+    <div class="note"><strong>Where "View in Logs" goes:</strong> <code>GET {dlp-api}/GetTransferLogDetails/{ActivityId}</code>, passing <code>linkedLog.activityId</code> (the EnrichedId). <strong>No <code>Log/</code> prefix</strong> — LogController declares no route prefix, so its actions sit at the root, the same as <code>GetTransferLogs</code>. Its <code>Data.Log</code> is the same row shape <code>GetTransferLogs</code> returns, so the Logs screen can open the entry with the panel it already has; the response also carries the File Flow rail, <code>HasShadowCopy</code>, and the Activity and Policy Enforcement sections.<br/>
+    <code>IsResolvable</code> is only ever <code>true</code> for a file transfer — a feedback linked to a blocked AI prompt (<code>AiPromptBlockLogId</code>) never offers the link, so no prompt-by-id route is needed for this card.</div>
+    <div class="note"><strong>For a blocked AI prompt the card is filled from the prompt-block log</strong>, in the same vocabulary the Logs grid uses for those rows: <code>displayId</code> is <code>PROMPT-4768</code> (a separate id space from <code>LOG-</code>, so the two cannot be confused), <code>activity</code> is <code>Prompt</code> or <code>Content</code> — what the verdict was about — <code>application</code> is where it was typed (the browser, or the capture source), and <code>destination</code> is the AI service it was headed for. <code>fileName</code> is <strong>null</strong>: a prompt has no file, so title the card from <code>application</code> and <code>activity</code>.</div>
+    <div class="note"><strong>Attachment <code>url</code> expires after 15 minutes.</strong> Do not cache it or put it in a saved report. If a user leaves the panel open and the link stops working, re-fetch it:<br/>
+      <code>GET /feedback/attachment/{attachmentId}/url</code> → <code>{"success":true,"data":"https://…"}</code></div>
+    <div class="ok"><strong>The link downloads under the original file name.</strong> Objects are stored under a guid, so the URL carries a signed <code>Content-Disposition</code> that saves the file as <code>Screenshot - DLP &gt; Logs.png</code> rather than <code>cdac2357-….png</code>. It is signed into the URL, so editing the query string invalidates it. Azure and S3 only — the local FileSystem provider used in dev serves the stored name.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web4">
+  <div class="head">
+    <span class="step">4</span><span class="method patch">PATCH</span><span class="path">/feedback/{feedbackId}/status</span>
+  </div>
+  <div class="body">
+    <p class="desc">Move the item through <code>New → InReview → Resolved</code> or <code>Closed</code>. Two sibling routes sit beside it: <code>POST .../assign</code> and <code>POST .../comment</code>. All three return the updated detail object, so re-render the panel from the response instead of re-fetching.</p>
+    <h5 class="section">Example — resolve it with a note</h5>
+<pre>curl -X PATCH "{dlp-api}/feedback/8f0b1c2d-3e4f-5678-9abc-def012345678/status" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;" \
+     -H "Content-Type: application/json" \
+     -d '{ "status": "Resolved", "resolutionNotes": "Policy tuned to skip template files." }'</pre>
+    <h5 class="section">The other two</h5>
+<pre># assign — send "assignedToUserId": null to clear it
+POST /feedback/{feedbackId}/assign    { "assignedToUserId": 907 }
+
+# comment — IsInternal defaults to true
+POST /feedback/{feedbackId}/comment   { "body": "Reproduced on build 1.01.011.", "isInternal": true }</pre>
+    <div class="ok"><strong>Moving out of Resolved or Closed clears the resolution stamp</strong> — <code>ResolvedByName</code> and <code>ResolvedAt</code> go back to <code>null</code>, so a reopened item never claims it was closed by someone who has since been overruled.</div>
+    <div class="note"><strong>Who did it</strong> is taken from the Bearer token. You do not need to send <code>ActedByUserId</code> or <code>AuthorUserId</code>.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="web5">
+  <div class="head">
+    <span class="step">5</span><span class="method post">POST</span><span class="path">/feedback/export</span>
+  </div>
+  <div class="body">
+    <p class="desc">The filtered grid as a CSV file, unpaged. Send the <em>same body</em> as <code>feedback/list</code> — <code>Page</code> and <code>PageSize</code> are ignored.</p>
+    <h5 class="section">Example</h5>
+<pre>curl -X POST "{dlp-api}/feedback/export" \
+     -H "ClientGUID: 11111111-2222-3333-4444-555555555555" \
+     -H "Authorization: Bearer &lt;jwt&gt;" \
+     -H "Content-Type: application/json" \
+     -d '{ "fromDate": "2026-09-12", "toDate": "2026-10-26",
+           "exactFilters": { "FeedbackType": ["FalsePositive"] } }' \
+     -o feedback.csv</pre>
+    <div class="note">Returns <code>text/csv</code>, not the JSON envelope. The filename comes back in <code>Content-Disposition</code> as <code>feedback-YYYYMMDD-HHmm.csv</code>.</div>
+  </div>
+</div>
+
+<h3 class="group">Reference</h3>
+
+<section class="intro" id="values">
+  <h2>Allowed values</h2>
+  <p class="kv">Fetch these from <a href="#tray1"><code>GET feedback/lookups</code></a> rather than hardcoding them. Listed here so you can read the samples.</p>
+  <table>
+    <tr><th>Field</th><th>Values</th><th>Default</th></tr>
+    <tr><td><code>FeedbackType</code></td><td><span class="pill">FalsePositive</span><span class="pill">FalseNegative</span><span class="pill">Bug</span><span class="pill">Improvement</span><span class="pill">FeatureRequest</span><span class="pill">Question</span><span class="pill">Other</span></td><td>—  <span class="req">required</span></td></tr>
+    <tr><td><code>Impact</code></td><td><span class="pill">Low</span><span class="pill">Medium</span><span class="pill">High</span></td><td><code>Medium</code></td></tr>
+    <tr><td><code>Status</code></td><td><span class="pill">New</span><span class="pill">InReview</span><span class="pill">Resolved</span><span class="pill">Closed</span></td><td><code>New</code></td></tr>
+    <tr><td><code>Source</code></td><td><span class="pill">TrayApp</span><span class="pill">WebPortal</span></td><td><code>WebPortal</code></td></tr>
+  </table>
+  <div class="note">Values are matched case-insensitively on the way in and stored in the spelling above, so <code>"bug"</code> is accepted and comes back as <code>"Bug"</code>. Anything not on the list is a <code>400</code> naming the allowed set.</div>
+</section>
+
+<section class="intro" id="attachments">
+  <h2>Attachment rules</h2>
+  <table>
+    <tr><td>Maximum files per submission</td><td><strong>5</strong></td></tr>
+    <tr><td>Maximum size per file</td><td><strong>10 MB</strong></td></tr>
+    <tr><td>Allowed extensions</td><td><code>.png</code> <code>.jpg</code> <code>.jpeg</code> <code>.pdf</code> <code>.log</code></td></tr>
+  </table>
+  <div class="note"><strong>The file's contents are checked, not just its name.</strong> A renamed executable is refused even if it ends in <code>.png</code>. For <code>.log</code>, anything that is really an executable or a zip is refused.</div>
+  <div class="ok"><strong>Validation happens before anything is stored.</strong> If one file in a batch is refused the whole submission is refused and nothing is written — no half-saved feedback, no orphaned files. Fix the one file and resend.</div>
+</section>
+
+<section class="intro" id="gridkeys">
+  <h2>Grid filter &amp; sort keys</h2>
+  <h5 class="section">Filtering</h5>
+  <table>
+    <tr><th>Where</th><th>Key</th><th>Behaviour</th></tr>
+    <tr><td><code>fromDate</code> / <code>toDate</code></td><td>—</td><td>Window on <code>RaisedOn</code>. A bare date includes the whole day.</td></tr>
+    <tr><td><code>status</code> <span class="tag">top level</span></td><td>—</td><td>Single status. Equivalent to putting it in <code>exactFilters</code>; use whichever suits the UI.</td></tr>
+    <tr><td><code>search</code></td><td>—</td><td>One box, matched against Subject, Description, Raised By, Page / Module, the linked file name, and the readable id. <code>FB-2052</code> and <code>2052</code> both find the same row. A literal <code>%</code> or <code>_</code> matches itself.</td></tr>
+    <tr><td><code>exactFilters</code></td><td><code>FeedbackType</code>, <code>Impact</code>, <code>Source</code>, <code>Status</code>, <code>PageModule</code>, <code>RaisedByUserId</code>, <code>DisplayId</code> / <code>FeedbackNumber</code>, <code>AssignedToUserId</code>, <code>RaisedByRoleName</code></td><td>Multi-select. Values OR'ed within a key, keys AND'ed together: <code>{"FeedbackType":["Bug","Question"],"Impact":["High"]}</code> means <em>(Bug or Question) and High</em>. Numeric keys are sent as strings like the rest.</td></tr>
+    <tr><td><code>likeFilters</code></td><td><code>Subject</code>, <code>LinkedLog</code>, <code>LinkedLogFileName</code>, <code>LinkedLogActivity</code>, <code>LinkedLogApplication</code>, <code>RaisedByName</code>, <code>DisplayId</code>, <code>PageModule</code>, <code>Description</code>, <code>AssignedToName</code>, <code>RaisedByRoleName</code>, plus the four vocabulary keys</td><td>Contains-match instead of exact, case-insensitive. Same OR / AND rule. One key per column is how the grid filters each column independently.</td></tr>
+  </table>
+  <div class="note">A single value may be sent as a scalar instead of an array — <code>{"FeedbackType":"Bug"}</code> works. An unrecognised key is <strong>ignored, not rejected</strong>, so a typo silently widens the results; check your key spelling against this table if a filter looks like it did nothing.</div>
+  <div class="note"><strong><code>LinkedLog</code> is the grid's Linked Log column, as one key.</strong> That column is rendered from three stored values — the file name for a transfer, the activity and the application for a blocked AI prompt — so no single column key can filter it. <code>{"LinkedLog":["Prompt"]}</code> matches any of the three; values within the key are OR'ed as everywhere else, so <code>["Prompt","png"]</code> returns the prompt-linked rows AND the .png ones. The three individual keys still work when you want to be specific.</div>
+  <div class="note"><strong>Two keys behave specially.</strong><br/>
+  • <code>DisplayId</code> is not a stored column — "FB-2052" is rendered from <code>FeedbackNumber</code> — so the server reads the digits out of whatever you send: <code>FB-2052</code>, <code>fb2052</code> and <code>2052</code> are the same id. In <code>exactFilters</code> it matches that one row; in <code>likeFilters</code> it is a contains-match on the number, so <code>205</code> finds FB-2052 and FB-1205. <code>FeedbackNumber</code> accepts the same two forms.<br/>
+  • <code>RaisedByUserId</code> is <strong>exact-match only</strong>. A contains-match on an int has no meaning, and a <code>likeFilters</code> entry for it is ignored. It is also not how you scope to one person — that comes from the token; use <a href="#web2b"><code>feedback/mine</code></a>.</div>
+
+  <h5 class="section">Sorting</h5>
+  <p class="kv"><code>SortBy</code> accepts: <code>RaisedOn</code> <span class="tag">default</span>, <code>FeedbackNumber</code>, <code>FeedbackType</code>, <code>Subject</code>, <code>Impact</code>, <code>Status</code>, <code>Source</code>, <code>PageModule</code>, <code>RaisedByName</code>. With <code>SortDescending</code> true or false. Anything else falls back to <code>RaisedOn</code> descending, reported in <code>AppliedSort.Resolved</code>.</p>
+  <div class="ok">Sort the <strong>ID</strong> column by <code>FeedbackNumber</code>, not <code>DisplayId</code> — <code>DisplayId</code> is text and would order FB-999 after FB-1000. Text columns sort case-insensitively.</div>
+
+  <h5 class="section">Paging</h5>
+  <p class="kv"><code>Page</code> is 1-based; <code>PageSize</code> defaults to 25. Rows that share a timestamp are broken by <code>FeedbackNumber</code> descending, so no row ever appears on two pages or on none.</p>
+</section>
+
+<section class="intro" id="exeapi">
+  <h2>ExeApi V1 equivalents</h2>
+  <p class="kv">The tray app points at the DLP-API host today and migrates to the Functions host later. Both routes already exist there, running the same service, so the migration is a base-URL change with no contract change.</p>
+  <table>
+    <tr><th>DLP-API (today)</th><th>ExeApi V1 (later)</th></tr>
+    <tr><td><code>POST {dlp-api}/feedback/submit</code></td><td><code>POST {exe-api}/V1/SubmitFeedback</code></td></tr>
+    <tr><td><code>GET {dlp-api}/feedback/lookups</code></td><td><code>GET {exe-api}/V1/GetFeedbackLookups</code></td></tr>
+  </table>
+  <div class="note"><strong>One difference, and it is in the headers.</strong> The Functions host identifies the caller with the agent scheme it already uses everywhere — <code>Authorization: {ClientGUID}_{serialNumber}</code> — instead of a separate <code>ClientGUID</code> header. The body, the fields, the validation and the response are identical.</div>
+  <div class="note">The admin routes — list, detail, triage, export — stay on DLP-API and are <strong>not</strong> mirrored. The Functions host is agent-facing.</div>
+</section>
+
+<section class="intro" id="deploy">
+  <h2>Deployment note</h2>
+  <p class="kv">Two things have to happen before any of the above answers in an environment.</p>
+  <table>
+    <tr><td><span class="step">1</span> Run the Dlp migration</td><td><code>V0012__feedback.sql</code> creates <code>dlp."Feedback"</code>, <code>dlp."FeedbackAttachment"</code> and <code>dlp."FeedbackComment"</code> on every tenant database.<br/><code>POST {dlp-api}/admin/migration/run?set=Dlp</code> with the migration key, then check <code>GET {dlp-api}/admin/migration/status</code>.</td></tr>
+    <tr><td><span class="step">2</span> Run the Common migration <span class="newpill">NEW</span></td><td><code>V0002__feedback_permission_module.sql</code> adds the <code>FEEDBACK</code> module with <code>VIEW</code> and <code>EDIT</code> and grants both to Admin. It is in the <strong>Common</strong> set because <code>Module</code> / <code>Permission</code> live in the tenant's user database, not the <code>dlp</code> schema.<br/><code>POST {dlp-api}/admin/migration/run?set=Common</code>.<br/><strong>Until this runs, <code>GetModulesWithPermissions/1</code> has no Feedback module</strong> and the grid cannot be permission-gated — the role screen simply will not list it.</td></tr>
+    <tr><td><span class="step">3</span> Register the APIM operations</td><td>Eleven on the DLP API (the two <code>feedback/mine</code> verbs are new), two on the Exe API. <strong>A deployed route returns 404 until it exists in APIM</strong> — this is the usual cause of "the endpoint is missing".</td></tr>
+  </table>
+  <div class="note"><strong>Admin is matched on the role name</strong> containing "Admin", the same rule the Discovery routes use, read from the token and falling back to the user record. Provisioning creates <code>Admin</code> and <code>User</code>, so this holds for a standard tenant — but a customer who renamed their triage role to something without "Admin" in it will see only their own feedback in the grid. Worth checking the <code>Role</code> table before this reaches production. The <code>FEEDBACK</code> permission above is what eventually replaces the name match.</div>
+  <div class="note"><strong>Storage.</strong> Attachments go to the <code>feedback-attachments</code> container in whatever the tenant's configured object store is — Azure Blob, S3 or a folder on disk. No per-tenant setup is needed; an unconfigured tenant falls back to the deployment's own storage settings.</div>
+</section>
+
+<p class="tag" style="margin:30px 0 10px">Feedback module · tray app and web portal · one service on two hosts.</p>
+
+</main>
+</div>
+</body>
+</html>

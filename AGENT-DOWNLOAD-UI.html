@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AGENT-DOWNLOAD-UI</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Download the agent — UI integration</h1>
+<p>For the team building the <strong>Download Agent</strong> button in the portal.</p>
+<p>Clicking Download produces <strong>two files</strong> in the user's Downloads folder:</p>
+<pre><code>
+DlpInstaller.msi      the installer — identical for every customer
+DlpInstaller.json     that customer's configuration
+</code></pre>
+<p>The user double-clicks the MSI. It reads the JSON sitting beside it and configures itself. No command line, nothing to type.</p>
+<hr>
+<h2>The two calls</h2>
+<p><strong>1 · Get the installer URL</strong></p>
+<pre><code>
+GET /qadlp/V1/DownloadAgent
+ClientGUID: &lt;tenant guid&gt;
+</code></pre>
+<pre><code>
+{
+  "success": true,
+  "data": {
+    "installerUrl": "https://qadlpinstaller.blob.core.windows.net/installer/...?sv=...&amp;sig=...",
+    "version": "1.2.32"
+  }
+}
+</code></pre>
+<p>Send the browser to <code>installerUrl</code>. It downloads <strong>straight from storage</strong>, not through the API — that is what makes it fast.</p>
+<p><strong>2 · Get the configuration file</strong></p>
+<pre><code>
+GET /qadlp/DownloadAgentConfig
+ClientGUID: &lt;tenant guid&gt;
+</code></pre>
+<p>Responds with a file, not JSON to read:</p>
+<pre><code>
+Content-Disposition: attachment; filename="DlpInstaller.json"
+</code></pre>
+<p>Send the browser to it the same way. Do not parse it, do not display it — just let it download.</p>
+<hr>
+<h2>Working example</h2>
+<pre><code>
+async function downloadAgent() {
+  const res  = await fetch('/qadlp/V1/DownloadAgent', {
+    headers: { 'ClientGUID': clientGuid },
+  });
+  const json = await res.json();
+
+  if (!json.success) {
+    showError(json.message);
+    return;
+  }
+
+  // 1 · the installer, straight from storage
+  window.location = json.data.installerUrl;
+
+  // 2 · the config file, a moment later so the browser does not
+  //     treat the two as one burst and block the second
+  setTimeout(() =&gt; {
+    window.location = '/qadlp/DownloadAgentConfig?t=' + Date.now();
+  }, 500);
+}
+</code></pre>
+<p>The <code>?t=</code> is only to stop the browser reusing a cached response when somebody downloads twice.</p>
+<hr>
+<h2>Four things to tell the user</h2>
+<p><strong>Expect a browser prompt.</strong> The first time, Chrome and Edge ask <em>"Allow multiple downloads?"</em>. They must allow it, or only the MSI arrives.</p>
+<p><strong>Keep both files together.</strong> The installer looks for the JSON in its own folder. Any folder works — Downloads, Desktop, a shared drive — as long as both files are in it. Copying only the MSI to another machine will not install.</p>
+<p><strong>Do not rename them.</strong> A second download becomes <code>DlpInstaller (1).json</code>, which still works, but a renamed or deleted JSON does not.</p>
+<p><strong>The installer URL expires.</strong> It is valid for a short window, so generate it when the button is clicked rather than when the page loads.</p>
+<hr>
+<h2>Errors</h2>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td><code>400</code> on either call</td>
+<td>No <code>ClientGUID</code> was sent, or the environment is misconfigured. Show <code>message</code> — it names what is missing.</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>The route is not registered in the gateway. Tell us; it is our side.</td>
+</tr>
+<tr>
+<td>Only one file downloads</td>
+<td>The browser blocked the second. Prompt the user to allow multiple downloads and retry.</td>
+</tr>
+<tr>
+<td>The JSON downloads but is empty</td>
+<td>Do not ship it to a user — tell us. It means the configuration could not be built, and an agent installed from it would report to nobody.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>What we need from you</h2>
+<p>Nothing to store, nothing to compute. The whole integration is: call one endpoint for a URL, send the browser to two places.</p>
+<p>The base URL differs per environment — ask us for yours; do not compile it in.</p>
+
+<div class="doc-foot">Defensely DLP &middot; AGENT-DOWNLOAD-UI &middot; generated 2026-10-22</div>
+</body></html>

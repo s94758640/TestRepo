@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DLP Service Control — full plan</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1b2027; --muted:#5d6775; --line:#dde2ea; --soft:#f5f7fa;
+    --accent:#1f5fa9; --accent-soft:#e9f0f9; --ok:#1b7a4b; --ok-soft:#e8f5ee;
+    --warn:#8d5400; --warn-soft:#fdf3e3; --stop:#a32a24; --stop-soft:#fdeeed;
+    --code-bg:#f3f5f9;
+    --mono:Consolas,"Cascadia Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme=light]){
+      --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+      --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+      --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+      --code-bg:#1a1e25; color-scheme:dark;
+    }
+  }
+  :root[data-theme=dark]{
+    --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+    --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+    --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+    --code-bg:#1a1e25; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.6 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:1000px;margin:0 auto;padding:36px 20px 80px}
+  h1{font-size:29px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 12px;padding-top:12px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h3{font-size:16px;margin:26px 0 8px}
+  p,li{max-width:80ch}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:22px}
+  .box{border-left:4px solid var(--accent);background:var(--accent-soft);
+       padding:12px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+  .box.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+  .box.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .box.stop{border-left-color:var(--stop);background:var(--stop-soft)}
+  .box b:first-child{display:block;margin-bottom:4px}
+  code{font-family:var(--mono);font-size:13px;background:var(--code-bg);
+       border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:7px;
+      padding:13px 15px;overflow-x:auto;font:13px/1.55 var(--mono);margin:10px 0}
+  pre code{background:none;border:0;padding:0}
+  .tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:7px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{background:var(--soft);font-weight:600;font-size:12px;letter-spacing:.03em;
+     text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;font:600 11px/1.5 var(--mono);padding:1px 8px;border-radius:10px;
+       background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .tag.done{background:var(--ok-soft);color:var(--ok)}
+  .tag.todo{background:var(--warn-soft);color:var(--warn)}
+  .tag.no{background:var(--stop-soft);color:var(--stop)}
+  nav{background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:12px 18px;margin:18px 0 0}
+  nav ol{columns:2;column-gap:30px;margin:0;padding-left:20px;font-size:14px}
+  nav a{color:var(--accent);text-decoration:none}
+  nav a:hover{text-decoration:underline}
+  a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+  .states{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:10px 0 14px}
+  .st{border:1px solid var(--line);background:var(--soft);border-radius:5px;
+      padding:3px 10px;font:13px var(--mono)}
+  .st.fin{border-color:var(--ok);color:var(--ok)}
+  .st.bad{border-color:var(--stop);color:var(--stop)}
+  @media(max-width:620px){nav ol{columns:1}h1{font-size:24px}}
+  @media print{nav{display:none}h2{break-after:avoid}pre,table{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>DLP Service Control — full plan</h1>
+<div class="meta">
+  Stop / Start / Restart <code>DLPService</code> on an endpoint from the admin console, within
+  10 seconds, without the endpoint polling.<br>
+  Backend plan against <b>DLP Service Control: Backend Requirements v1.0</b> (EXE team,
+  20 Nov 2026) · branch <code>feature/common-fix-21-11-2026</code>
+</div>
+
+<div class="box">
+  <b>Where this stands</b>
+  The spec is accepted as written — protocol, state machine, business rules and the thirteen
+  acceptance tests all implement here unchanged. <b>Nothing we decided changes the agent.</b>
+  The data layer is built. No design question is outstanding; one question remains for the EXE
+  team and it is about how the serial is derived, not about the design.
+</div>
+
+<nav><ol>
+  <li><a href="#parts">The moving parts</a></li>
+  <li><a href="#flow">End-to-end flow</a></li>
+  <li><a href="#ui">UI — the console</a></li>
+  <li><a href="#api">Backend — REST</a></li>
+  <li><a href="#ws">Backend — WebSocket</a></li>
+  <li><a href="#data">Data model and states</a></li>
+  <li><a href="#delivery">Delivery across replicas</a></li>
+  <li><a href="#transport">Why raw WebSocket</a></li>
+  <li><a href="#infra">Infrastructure</a></li>
+  <li><a href="#security">Security</a></li>
+  <li><a href="#phases">Phases and status</a></li>
+  <li><a href="#tests">Acceptance tests</a></li>
+  <li><a href="#open">Open items</a></li>
+  <li><a href="#future">Future: the polled endpoints</a></li>
+</ol></nav>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="parts">1. The moving parts</h2>
+
+<div class="tw"><table>
+  <tr><th>Piece</th><th>What it is</th><th>Owner</th></tr>
+  <tr><td><b>React console</b></td>
+      <td>The admin screen. A per-endpoint toggle plus Restart. Talks only to our API — never
+          to the endpoint.</td><td>UI team</td></tr>
+  <tr><td><b>DLP API</b></td>
+      <td>ASP.NET Core 8, Azure Container Apps, multi-replica, multi-tenant (database per
+          tenant, selected by <code>ClientGUID</code>).</td><td>Us</td></tr>
+  <tr><td><b>iseccmd</b></td>
+      <td>Windows service "CmdTaskRunner", runs as SYSTEM on the endpoint. Holds one outbound
+          WebSocket to us. <b>Finished and tested.</b></td><td>EXE team</td></tr>
+  <tr><td><b>DLPService</b></td>
+      <td>The Windows service being stopped or started, through the Service Control
+          Manager.</td><td>EXE team</td></tr>
+</table></div>
+
+<h3>Which machines this covers</h3>
+<p>Windows endpoints running both <code>DLPService</code> and <code>iseccmd</code>. The
+endpoint is identified on the wire by its <b>serial</b>, which we verified against QA — see
+<a href="#open">§13</a>, because it is not always the BIOS serial.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="flow">2. End-to-end flow</h2>
+
+<pre><code>0.  iseccmd boots
+    → wss://{BaseUrl}/ws/endpoint-commands?serial=PW0F6X3B   (ClientGUID header)
+    → we validate, register serial → socket, replay any open commands
+    → socket stays open: agent pings every 30 s, we MUST answer pong
+
+1.  Admin clicks Stop
+    → POST /api/endpoints/{serial}/service-command   { action:"Stop", persist:true }
+
+2.  we supersede any open command for that serial, insert the new one as Pending
+
+3.  socket is up → push  {"type":"ServiceCommand", commandId, action, persist}
+    → state Delivered
+    → 202 { commandId, state:"Delivered", endpointConnected:true }
+
+4.  agent → ServiceCommandAck            (sent before it runs)   → state Acked
+
+5.  agent → Service Control Manager: stop DLPService
+                                     set start type Disabled      (persist only)
+
+6.  agent → ServiceCommandResult { success, finalStatus, startType, elapsedMs, message }
+    → state Succeeded or Failed, CompletedAt stamped
+
+7.  console polls GET /api/service-commands/{commandId} every 1 s until the state is final
+</code></pre>
+
+<div class="box ok">
+  <b>The budget</b>
+  10 seconds from click to result. The agent's own sample reports
+  <code>elapsedMs: 2310</code> for a Stop, so the transport has roughly 7 seconds of headroom.
+</div>
+
+<h3>The four deviations</h3>
+<div class="tw"><table>
+  <tr><th>Situation</th><th>What happens</th></tr>
+  <tr><td><b>Endpoint offline at click</b></td>
+      <td>Row stays <code>Pending</code>; the 202 returns
+          <code>endpointConnected:false</code>. On the agent's next connect we push every open
+          command, oldest first. <b>Stop and Start never expire</b> — they are the state the
+          admin wants, still true an hour later. A <b>Restart older than 10 minutes becomes
+          <code>Expired</code></b> and is not run: it was about a moment that has passed.</td></tr>
+  <tr><td><b>Second click while one is open</b></td>
+      <td>The new command supersedes the old. At most one open command per endpoint. Offline
+          Stop then Start means only the Start runs.</td></tr>
+  <tr><td><b>Socket drops mid-execution</b></td>
+      <td>The agent posts the result to <code>/ReportServiceCommandResult</code> instead. Same
+          state transition, matched on <code>commandId</code>.</td></tr>
+  <tr><td><b>Same command pushed twice</b></td>
+      <td>The agent does not re-run it — it replays the stored result, or re-acks if still
+          executing. This is what makes replay-on-connect unconditionally safe.</td></tr>
+</table></div>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="ui">3. UI — what the console does</h2>
+
+<p>Three calls, one of them on a timer. The console never contacts the endpoint.</p>
+
+<div class="tw"><table>
+  <tr><th>Moment</th><th>Call</th><th>What the UI shows</th></tr>
+  <tr><td>Screen loads</td><td><code>GET /api/endpoints/{serial}/push-status</code></td>
+      <td>Online / offline beside the toggle, <b>before</b> the admin clicks</td></tr>
+  <tr><td>Admin clicks</td><td><code>POST /api/endpoints/{serial}/service-command</code></td>
+      <td>Toggle goes to a pending look; disable it until the command is final</td></tr>
+  <tr><td>Every 1 s after</td><td><code>GET /api/service-commands/{commandId}</code></td>
+      <td>Poll until <code>state</code> is final, for up to about 60 s</td></tr>
+</table></div>
+
+<h3>States the UI has to render</h3>
+<div class="tw"><table>
+  <tr><th>Response</th><th>Meaning</th><th>Show</th></tr>
+  <tr><td><code>state:"Delivered"</code>, <code>endpointConnected:true</code></td>
+      <td>On its way</td><td>Spinner on the toggle</td></tr>
+  <tr><td><code>state:"Pending"</code>, <code>endpointConnected:false</code></td>
+      <td>Saved, endpoint offline</td>
+      <td><b>Not an error.</b> "Will apply when the endpoint comes online" — and stop polling
+          early, it may be hours</td></tr>
+  <tr><td><code>state:"Succeeded"</code></td><td>Done</td>
+      <td>Toggle to the new position; <code>finalStatus</code> / <code>startType</code> are
+          what the machine reported</td></tr>
+  <tr><td><code>state:"Failed"</code></td><td>The machine refused or timed out</td>
+      <td>Revert the toggle and show <code>message</code> — it is the agent's own text</td></tr>
+  <tr><td><code>state:"Superseded"</code></td><td>The admin clicked again</td>
+      <td>Drop this one silently; the newer command owns the toggle</td></tr>
+  <tr><td><code>state:"Expired"</code></td><td>A stale Restart, never run</td>
+      <td>"The endpoint came back too late — restart again if you still need it"</td></tr>
+</table></div>
+
+<div class="box warn">
+  <b>The "off" toggle means <code>persist:true</code></b>
+  <code>persist</code> applies to <b>Stop only</b>. True also sets the service start type to
+  <code>Disabled</code>, so it stays off across a reboot — which is what an admin means by
+  turning DLP off. Send <code>false</code> for a one-time stop that comes back on reboot.
+  Ignored for Start and Restart.
+</div>
+
+<div class="box warn">
+  <b>Stop polling on a final state, and cap it</b>
+  Final means <code>Succeeded</code>, <code>Failed</code>, <code>Superseded</code> or
+  <code>Expired</code>. A command that is still <code>Pending</code> after ~60 s is waiting on
+  an offline endpoint; keep the row in its "will apply later" look rather than polling for
+  hours.
+</div>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="api">4. Backend — REST for the console</h2>
+
+<p>Admin-gated, tenant-scoped. JSON camelCase.</p>
+
+<h3>4.1 Send a command</h3>
+<pre><code>POST /api/endpoints/{serial}/service-command
+{ "action": "Stop", "persist": true }
+
+202 Accepted
+Location: /api/service-commands/{commandId}
+{
+  "commandId": "47cb2222d24a4ca5b62d0f1190923fd1",
+  "serial": "PW0F6X3B",
+  "action": "Stop",
+  "state": "Delivered",
+  "endpointConnected": true,
+  "finalStatus": null, "startType": null, "elapsedMs": null, "message": null,
+  "createdAt": "2026-11-20T10:15:02.113+00:00",
+  "completedAt": null
+}</code></pre>
+<p><code>action</code> is case-insensitive and must be Stop, Start or Restart — anything else
+is <code>400</code>. Non-admin is <code>401/403</code>.</p>
+
+<h3>4.2 Status · 4.3 Online check</h3>
+<pre><code>GET /api/service-commands/{commandId}      → 200 (same body) | 404
+GET /api/endpoints/{serial}/push-status    → 200 { "serial":"PW0F6X3B", "connected":true }</code></pre>
+
+<h3>4.4 HTTP fallback, for the agent</h3>
+<p>Used only when the socket is down as a result becomes ready. PascalCase body, bound
+case-insensitively, sitting beside the existing <code>GetEndPointCommand</code>.</p>
+<pre><code>POST {BaseUrl}/ReportServiceCommandResult
+{ "Serialnumber":"PW0F6X3B", "CommandId":"47cb…", "ExitCode":0, "Output":"OK",
+  "Action":"Stop", "ServiceName":"DLPService", "Success":true,
+  "FinalStatus":"Stopped", "StartType":"Disabled", "ElapsedMs":2310 }</code></pre>
+<p><code>400</code> missing CommandId/Serialnumber · <code>401</code> invalid client ·
+<code>404</code> unknown command, or it belongs to another serial.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="ws">5. Backend — the WebSocket</h2>
+
+<div class="tw"><table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>URL</td><td><code>{BaseUrl}/ws/endpoint-commands?serial={serial}</code> — the same
+      BaseUrl the agent already uses for <code>GetEndPointCommand</code></td></tr>
+  <tr><td>Connections per endpoint</td><td>One. A second socket for the same serial wins and
+      the old one is aborted</td></tr>
+  <tr><td>On connect</td><td>Push every open command for that serial, oldest first</td></tr>
+  <tr><td>Keep-alive</td><td>Agent pings every 30 s. <b>We must answer <code>pong</code></b> or
+      it rebuilds the connection after 75 s of silence. We never originate a ping</td></tr>
+  <tr><td>Idle timeout</td><td>Drop a socket silent for 90 s</td></tr>
+  <tr><td>Frames</td><td>UTF-8 JSON text, one message per frame, camelCase, max 64 KB</td></tr>
+</table></div>
+
+<h3>Messages</h3>
+<div class="tw"><table>
+  <tr><th>Direction</th><th>type</th><th>When</th></tr>
+  <tr><td>agent → us</td><td><code>hello</code></td><td>On connect. Log the version</td></tr>
+  <tr><td>agent → us</td><td><code>ping</code></td><td>Every 30 s</td></tr>
+  <tr><td>us → agent</td><td><code>pong</code></td><td>Answer to every ping <span class="tag">required</span></td></tr>
+  <tr><td>us → agent</td><td><code>ServiceCommand</code></td><td>On click, or replaying on connect</td></tr>
+  <tr><td>agent → us</td><td><code>ServiceCommandAck</code></td><td>On receipt, before running</td></tr>
+  <tr><td>agent → us</td><td><code>ServiceCommandResult</code></td><td>When the service settles, fails or times out</td></tr>
+</table></div>
+<p>Unknown message types are ignored on both sides — which is what makes the protocol
+extensible later (<a href="#future">§14</a>).</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="data">6. Data model and states</h2>
+
+<p><code>dlp."ServiceCommand"</code>, one row per click. <b>Per tenant</b>, like every table in
+<code>dlp</code> — migration <code>V0054__service_command.sql</code> must run against every
+tenant database, not only the template.</p>
+
+<div class="states">
+  <span class="st">Pending</span>→<span class="st">Delivered</span>→<span class="st">Acked</span>→
+  <span class="st fin">Succeeded</span><span class="st bad">Failed</span>
+  &nbsp;also <span class="st bad">Superseded</span><span class="st bad">Expired</span>
+</div>
+
+<div class="tw"><table>
+  <tr><th>State</th><th>Set when</th></tr>
+  <tr><td><code>Pending</code></td><td>Created while offline, or the send failed</td></tr>
+  <tr><td><code>Delivered</code></td><td>Written to the socket</td></tr>
+  <tr><td><code>Acked</code></td><td><code>ServiceCommandAck</code> received</td></tr>
+  <tr><td><code>Succeeded</code> / <code>Failed</code></td><td><code>ServiceCommandResult</code>, by its <code>success</code></td></tr>
+  <tr><td><code>Superseded</code></td><td>A newer command was created for the same serial</td></tr>
+  <tr><td><code>Expired</code></td><td>A Restart that reconnected more than 10 minutes late</td></tr>
+</table></div>
+
+<p><b>Open</b> = Pending, Delivered, Acked. Only open rows are replayed and only open rows
+change state on a result. <b>Result fields are stored on every row that receives one</b>,
+including Superseded and Failed — a Stop that failed because the service was already stopped
+reads very differently from one that timed out.</p>
+
+<div class="box ok">
+  <b>One addition to the spec, database-level only</b>
+  Rule 1 — "at most one open command per endpoint" — is enforced by a partial unique index as
+  well as in code. Two admins clicking in the same instant is exactly what the service layer
+  cannot serialise on its own, and the failure is otherwise silent: two open rows, both
+  replayed, the agent running whichever lands last.
+  <pre><code>CREATE UNIQUE INDEX "UX_ServiceCommand_OneOpenPerSerial"
+    ON dlp."ServiceCommand" ("Serial")
+    WHERE "State" IN ('Pending','Delivered','Acked');</code></pre>
+  No protocol change. The second insert fails loudly and the caller retries after superseding.
+</div>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="delivery">7. Delivery across replicas</h2>
+
+<div class="box stop">
+  <b>The problem the spec treats as optional, and we cannot</b>
+  §9 says "a single instance needs neither". We run <b>multiple replicas</b> on Container Apps,
+  with no request affinity:
+  <pre><code>admin clicks  →  POST lands on replica A   (holds no socket)
+agent socket  →  held by replica B   (never hears about it)</code></pre>
+  With 2 replicas that is a 50% failure rate, with 3 it is 67% — and <b>low admin volume does
+  not help</b>. Each click is an independent coin flip, and the failure is silent: the row sits
+  <code>Pending</code> until the socket next drops.
+</div>
+
+<h3>How we solve it — the socket holder polls the table</h3>
+<pre><code>Replica B holds sockets for serials [X, Y, Z]
+
+every ~2 s:  SELECT * FROM dlp."ServiceCommand"
+             WHERE "State" = 'Pending' AND "Serial" = ANY(@serialsIHold)
+             → push each, mark Delivered</code></pre>
+
+<div class="tw"><table>
+  <tr><th>Why not Service Bus or Redis</th><th></th></tr>
+  <tr><td>Latency</td><td>2 s worst case + ~2.3 s execution, inside a 10 s budget</td></tr>
+  <tr><td>Infrastructure</td><td><b>None added.</b> No topic, subscription or new service</td></tr>
+  <tr><td>Failure handling</td><td>Self-healing — a missed push retries next tick. No delivery
+      guarantees, dead-lettering or ordering to reason about</td></tr>
+  <tr><td>Code paths</td><td><b>One.</b> This is the same query replay-on-connect already needs,
+      so offline-reconnect and wrong-replica share it</td></tr>
+  <tr><td>Cost at rest</td><td>3 replicas × one indexed query every 2 s, on
+      <code>IX_ServiceCommand_Open_CreatedAt</code></td></tr>
+</table></div>
+
+<p>Service Bus buys sub-second instead of up-to-2-second delivery. The budget is 10 seconds, so
+it is not worth the dependency. It stays the upgrade path if measurement ever says otherwise.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="transport">8. Why raw WebSocket, not SignalR</h2>
+
+<p>Settled deliberately, because it is expensive to change after the agent ships against it.
+<b>Neither SignalR nor Web PubSub is referenced anywhere in the solution today.</b></p>
+
+<div class="tw"><table>
+  <tr><th></th><th>Client protocol</th><th>Fits this agent?</th></tr>
+  <tr><td><b>Azure SignalR Service</b></td>
+      <td>SignalR only — HTTP negotiate, handshake frame, <code></code> separators,
+          integer <code>type</code> inside an envelope</td>
+      <td><span class="tag no">No</span> the agent sends <code>{"type":"ping"}</code> bare</td></tr>
+  <tr><td><b>Azure Web PubSub</b></td><td>Raw WebSocket, arbitrary frames</td>
+      <td><span class="tag todo">Protocol yes</span> but its own hostname and an access token,
+          so the agent's connect URL and flow change</td></tr>
+  <tr><td><b>Self-hosted</b></td><td>Raw WebSocket</td>
+      <td><span class="tag done">Yes, unchanged</span></td></tr>
+</table></div>
+
+<p>SignalR is out on protocol grounds whatever is provisioned — adopting it means the EXE team
+rewriting and re-testing the endpoint half that is already finished. Web PubSub keeps the
+protocol but moves the hostname, which is also an agent change, to buy capacity and metrics we
+do not need at one idle socket per endpoint and two frames a minute.</p>
+
+<div class="box ok">
+  <b>We are not blind without a managed service</b>
+  <code>dlp."ServiceCommand"</code> records the whole lifecycle —
+  <code>CreatedAt</code> → <code>DeliveredAt</code> → <code>AckedAt</code> →
+  <code>CompletedAt</code> → <code>ElapsedMs</code>. "How long from click to result", "how many
+  never acked", "which endpoints never deliver" are SQL questions. That answers
+  <i>does the feature work</i> better than a connection count does.
+</div>
+
+<p><b>Triggers to revisit:</b> connection count outgrowing a replica (measure before a third
+feature moves onto the socket), or deploy churn becoming painful — every revision drops every
+socket at once and all agents reconnect together.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="infra">9. Infrastructure</h2>
+
+<div class="tw"><table>
+  <tr><th>Item</th><th>What is needed</th></tr>
+  <tr><td>ASP.NET Core</td>
+      <td><code>app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) })</code>
+          before mapping the socket path</td></tr>
+  <tr><td><b>APIM</b> <span class="tag todo">needs work</span></td>
+      <td>Our import pipeline publishes from an OpenAPI document, and <b>a WebSocket is not an
+          OpenAPI operation</b> — it will never appear there. It needs a separate WebSocket API
+          (<code>az apim api create --api-type websocket</code>). QA and prod are separately
+          hosted with different base URLs, so this is one task per environment.</td></tr>
+  <tr><td>Container Apps ingress</td>
+      <td>Allow <code>Upgrade: websocket</code>; idle timeout above the spec's 90 s</td></tr>
+  <tr><td>Capacity</td><td>One idle socket per endpoint, ~2 small frames a minute</td></tr>
+  <tr><td>Deploys</td><td>Every revision drops all sockets. Agents reconnect on 2–60 s jittered
+      backoff and open commands replay, so nothing is lost — but stagger the replay</td></tr>
+</table></div>
+
+<div class="box warn">
+  <b>The APIM step is the one that bites silently</b>
+  An unregistered route returns a gateway 404 that looks like a wrong URL. This is the same
+  shape as the migration that left every web drill-down returning 500 — verify it before
+  promising QA a date.
+</div>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="security">10. Security</h2>
+
+<div class="tw"><table>
+  <tr><th>Surface</th><th>Rule</th></tr>
+  <tr><td>Socket upgrade</td>
+      <td>Validate <code>ClientGUID</code> resolves to an active tenant — the same check
+          <code>TenantBindingMiddleware</code> already performs — <b>and</b> that the serial is
+          registered under that client. Presence alone is not enough</td></tr>
+  <tr><td>Other headers</td>
+      <td>The spec also names <code>CompanyGUID</code> and <code>X-Desktop-Client</code>.
+          Neither exists anywhere in our API, so there is nothing to validate them against:
+          accepted and ignored. The agent may keep sending them</td></tr>
+  <tr><td>Console API</td>
+      <td>Admin role on all three routes; a tenant admin reaches only their own tenant's
+          endpoints</td></tr>
+  <tr><td>Ownership</td>
+      <td>An ack or result is applied only when the command's serial equals the sender's.
+          Endpoint A must never be able to close B's command</td></tr>
+  <tr><td>Transport</td><td>Production <code>BaseUrl</code> is https, so the socket is wss</td></tr>
+  <tr><td>Limits</td><td>Serial ≤ 128 chars; reject frames over 64 KB; ignore unknown types;
+      never log full ClientGUID values</td></tr>
+  <tr><td>Audit</td><td><code>RequestedBy</code> on every row — the only way to answer "who
+      turned this machine's DLP off"</td></tr>
+</table></div>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="phases">11. Phases and status</h2>
+
+<div class="tw"><table>
+  <tr><th>Phase</th><th>Contents</th><th>State</th></tr>
+  <tr><td>1 — data layer</td>
+      <td><code>V0054__service_command.sql</code>, <code>ServiceCommand</code> entity, EF
+          mapping, wired into <code>OnModelCreatingPartial</code></td>
+      <td><span class="tag done">done, builds clean</span></td></tr>
+  <tr><td>2 — REST</td><td>The three console routes, admin-gated, tenant-scoped</td>
+      <td><span class="tag">ready</span></td></tr>
+  <tr><td>3 — WebSocket</td>
+      <td>Upgrade, auth, registry, replay, ping/pong, ack, result, idle drop, newest-wins</td>
+      <td><span class="tag">ready</span></td></tr>
+  <tr><td>4 — HTTP fallback</td><td><code>ReportServiceCommandResult</code></td>
+      <td><span class="tag">ready</span></td></tr>
+  <tr><td>5 — cross-replica</td><td>Socket-holder poll (<a href="#delivery">§7</a>)</td>
+      <td><span class="tag">ready</span></td></tr>
+  <tr><td>6 — infrastructure</td><td>APIM WebSocket API per environment, ingress check</td>
+      <td><span class="tag todo">needs an ops task</span></td></tr>
+  <tr><td>7 — acceptance</td><td>Tests 1–13</td>
+      <td><span class="tag todo">needs a QA endpoint on the new agent</span></td></tr>
+</table></div>
+
+<h3>Repository notes</h3>
+<p>Migration numbering moves fast on this repo — <code>V0054</code> was next at the time of
+writing; <b>re-check before merging</b>. The migration must reach <b>every tenant database</b>,
+resolved through <code>sfm."Client"."DlpName"</code> in Nucleus.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="tests">12. Acceptance tests</h2>
+
+<p>The spec's thirteen, taken as the contract. Tests 1–9 and 11 can run against a scripted
+socket client without the real agent; 10, 12 and 13 are plain API tests.</p>
+
+<div class="tw"><table>
+  <tr><th>#</th><th>Scenario</th><th>Expected</th></tr>
+  <tr><td>1</td><td>Online, Stop</td><td><code>Succeeded</code>, Stopped, Disabled, &lt; 10 s</td></tr>
+  <tr><td>2</td><td>Online, Start</td><td><code>Succeeded</code>, Running, Automatic</td></tr>
+  <tr><td>3</td><td>Online, Restart</td><td><code>Succeeded</code>, Running</td></tr>
+  <tr><td>4</td><td>Offline Stop, endpoint returns</td><td>202 Pending + <code>endpointConnected:false</code>; pushed on connect; ends Succeeded</td></tr>
+  <tr><td>5</td><td>Offline Stop then Start</td><td>Stop <code>Superseded</code>; only Start runs</td></tr>
+  <tr><td>6</td><td>Offline Restart, returns after 15 min</td><td><code>Expired</code>, not executed</td></tr>
+  <tr><td>7</td><td>Idle 10 minutes</td><td>Connection stays up; a click still runs instantly</td></tr>
+  <tr><td>8</td><td>Socket drops mid-execution</td><td>Result arrives via the fallback or after reconnect; state final</td></tr>
+  <tr><td>9</td><td>Same command pushed twice</td><td>Run once; the second push gets the stored result</td></tr>
+  <tr><td>10</td><td>Invalid ClientGUID on upgrade</td><td><code>401</code>, no connection registered</td></tr>
+  <tr><td>11</td><td>A sends a result for B's commandId</td><td>Ignored / 404; B unchanged</td></tr>
+  <tr><td>12</td><td><code>action:"Delete"</code></td><td><code>400</code></td></tr>
+  <tr><td>13</td><td>Non-admin calls the send API</td><td><code>401/403</code></td></tr>
+</table></div>
+
+<p><b>Add one.</b> Two admins clicking the same endpoint simultaneously: exactly one command
+survives open, the other is superseded, and the agent runs one action. That is the case the
+unique index exists for.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="open">13. Open items</h2>
+
+<div class="box warn">
+  <b>The serial is not always a BIOS serial — this is the one real question</b>
+  Checked against QA: 68 endpoint rows, 49 distinct serials, <b>none shared between
+  machines</b>, no nulls or empties, all uppercase. So serial is a safe identity and
+  one-socket-per-serial holds. Compare case-insensitively and trimmed.
+  <br><br>
+  But the column holds two shapes: real service tags
+  (<code>PW0F6X3B</code>, <code>5CD2026Q39</code>, <code>F0WJNQ2</code>) <b>and</b> a 32-char
+  dashed fallback (<code>1415-6109-6884-2945-9939-7533-26</code>, one of them zeroed
+  <code>0000-0000-…</code>) written when the BIOS reports nothing usable. Lengths run 7 to 57.
+  <br><br>
+  <b>Does <code>iseccmd</code> derive the serial the same way the registering agent did,
+  including that fallback?</b> If it only reads the BIOS, every machine stored with a dashed id
+  fails the upgrade and shows as permanently offline, with nothing on screen to explain it. One
+  machine from each group settles it.
+</div>
+
+<div class="tw"><table>
+  <tr><th>Item</th><th>Needed for</th></tr>
+  <tr><td>Which <code>iseccmd</code> build carries this, and is it on QA endpoints?</td>
+      <td>Acceptance tests 1–9</td></tr>
+  <tr><td>The agent's configured BaseUrl in QA and prod</td>
+      <td>The exact path APIM must expose, per environment</td></tr>
+  <tr><td>The six reference implementation files named in §11 of the spec</td>
+      <td>Not received — not blocking, useful as a cross-check</td></tr>
+</table></div>
+
+<p><b>Implementation note:</b> a serial matches several endpoint rows — 19 of the 68 are repeat
+registrations of the same machine. The ownership check is "does <i>any</i> row with this serial
+belong to this client", an <code>EXISTS</code>, never <code>Single()</code>, which would throw
+on exactly the endpoints most likely to be in use.</p>
+
+<!-- ───────────────────────────────────────────── -->
+<h2 id="future">14. Future — moving the polled endpoints onto this socket</h2>
+
+<p>Service control is the first user of this transport, and it will not be the only one —
+<b>but nor will it be many. Four or five polled endpoints move onto the socket at most,
+ever</b>; everything else keeps polling. <b>Nothing in the protocol needs to change to add
+them</b>: <code>type</code> is a string and both sides ignore what they do not know, so new
+message types are additive and an old agent simply ignores them.</p>
+
+<div class="box ok">
+  <b>That bound is a design input, not a caveat</b>
+  No message bus, no envelope, no routing layer — four or five <code>type</code> values on a
+  flat protocol is the right size, and a managed transport (<a href="#transport">§8</a>) stays
+  off the table permanently rather than deferred. It also means the socket never quietly
+  becomes load-bearing for half the product, which is the failure mode worth avoiding.
+</div>
+
+<h3>Two free decisions to take now</h3>
+<p>Keep the registry and the delivery poll <b>generic</b> — "send this frame to this serial",
+not "send this ServiceCommand". Service control becomes one caller of a transport rather than
+being the transport. Costs nothing today; retrofitting means reopening the socket handler.</p>
+
+<h3>The rule that makes migration safe: push the notification, not the payload</h3>
+<pre><code>us    → agent   {"type":"PolicyChanged","endpointUserId":4821}
+agent → us      GET V2/PolicySnapshot/4821        ← the existing route, unchanged</code></pre>
+<p>Because the frame cap is 64 KB and a policy snapshot will exceed it; because the HTTP route
+stays the source of truth so cold start and socket-down need no second code path; and because
+ordering, retry and chunking stay off the socket entirely.</p>
+
+<div class="box stop">
+  <b>Never remove a poll — lengthen it</b>
+  Every migrated endpoint keeps its poll as a slow safety net, say 15 minutes instead of 30
+  seconds. Push becomes the fast path, polling the floor. An endpoint that works
+  <i>only</i> over the socket turns every socket outage into a correctness bug rather than a
+  latency one.
+</div>
+
+<h3>Candidates, best first</h3>
+<div class="tw"><table>
+  <tr><th>Polled today</th><th>Why</th></tr>
+  <tr><td><code>CheckOverrideStatus</code>, <code>CheckPromptOverrideStatus</code>, <code>CheckMetaStatus</code></td>
+      <td><b>A user is blocked at their screen</b> waiting for an admin decision while the agent
+          polls. The strongest case in the list</td></tr>
+  <tr><td><code>V2/PolicyCheck</code> + <code>V2/PolicySnapshot</code></td>
+      <td><code>PolicyCheck</code> already <i>is</i> "has it changed?" — exactly the question a
+          push answers</td></tr>
+  <tr><td><code>GetDiscoveryScanJob</code></td><td>Scans would start on click</td></tr>
+  <tr><td><code>GetEndpointExeSettings</code>, <code>GetAgentProxyExclusions</code></td>
+      <td>Config applies immediately instead of on a timer</td></tr>
+  <tr><td><code>GetAlertMessagesByEndpointUser</code></td><td>Messages shown when sent</td></tr>
+  <tr><td><code>GetEndPointCommand</code></td>
+      <td>The existing pull command channel. <b>Do this last</b>, if at all — it has a real
+          contract and is the least painful poll of the set</td></tr>
+</table></div>
+
+<p>Not candidates: everything the agent <b>writes</b> (<code>InsertLandLog</code>,
+<code>UpdateEndpointStatus</code>, <code>Submit*</code>, <code>Upsert*</code>) and the
+<code>Download*</code> routes — already request/response with no waiting.</p>
+
+<h3>Sequencing, and what would make it a bad idea</h3>
+<ol>
+  <li><b>Ship service control</b> and prove the socket in production.</li>
+  <li><b>Then one migration</b> — override status, highest value and lowest risk.</li>
+  <li><b>Measure before the third.</b> Sockets per replica, memory, reconnect storms after a
+      deploy.</li>
+</ol>
+<p>One socket carrying everything concentrates failure: today a flaky socket costs service
+control, after four migrations it costs approvals, policy delivery and scans at once. The
+lengthened polls are what keep that a latency problem rather than an outage. And every
+migration is EXE-team work too — which is why user-visible waits lead and config refresh
+trails.</p>
+
+<p style="color:var(--muted);font-size:13px;margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+Companion to <code>DLP-SERVICE-CONTROL-IMPLEMENTATION-PLAN.md</code> (the working plan) and the
+EXE team's <b>DLP Service Control: Backend Requirements v1.0</b>.</p>
+
+</main>
+</body>
+</html>

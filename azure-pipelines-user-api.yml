@@ -1,0 +1,280 @@
+# Azure DevOps Pipeline — SFM.Identity.API (.NET 8, Container App "qa-com-user-api")
+# Build → SDK container publish to ACR → Deploy QA Container App → Health Check
+#
+# This project has no Dockerfile — its publish profile uses the .NET SDK's
+# built-in container publish (/t:PublishContainer), so the pipeline does the
+# same rather than `az acr build` (which needs a Dockerfile).
+#
+# Resource names come from SFM.Identity.API/Properties/PublishProfiles/
+# qa-com-user-api.pubxml. NOTE the container app AND the ACR both live in the
+# Defensely-Common subscription — a different one from the DLP container apps —
+# so every az call passes --subscription explicitly, and the qa-defensely-sc
+# principal needs Contributor on RG QA-Common plus AcrPush on qaemail.
+
+trigger:
+  branches:
+    include:
+      - Deployment/CICD-QA
+      - Deployment/CICD-Prod1
+      - Deployment/CICD-Prod2
+  paths:
+    include:
+      - SFM.Identity.API/**
+      - SFM.Identity.Application/**
+      - SFM.Identity.Domain/**
+      - SFM.Identity.Infrastructure/**
+      - SFM.Common.Utilities/**
+      # Everything this image COMPILES, not just the projects named after it.
+      # SFM.Identity.Infrastructure's GenericRepository<T> derives from the
+      # shared one, and SFM.Identity.API reads the licence catalogue through
+      # SFM.Nucleus.Infrastructure — so a change to either ships in this image
+      # and has to be able to trigger this build.
+      #
+      # Missing them meant a fix merged to CICD-QA deployed to the DLP API and
+      # the worker (whose pipelines do list SFM.GenericRepository) and never
+      # here, leaving QA's user API serving an older image with nothing
+      # reporting it: the endpoint grid's Applied Policy sort kept returning
+      # totalCount 55 with an empty data array for a day after the fix was in
+      # the branch (bug 10673).
+      - SFM.GenericRepository/**
+      - SFM.Nucleus.Infrastructure/**
+      - azure-pipelines-user-api.yml
+      - pipeline-templates/**
+
+pr: none
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: dotnetVersion
+    value: '8.0.x'
+  - name: projectPath
+    value: 'SFM.Identity.API/SFM.Identity.API.csproj'
+
+  # Registry per environment, resolved from the branch below. Production builds
+  # into its own ACR rather than QA's — see azure-pipelines-dlp-api.yml for the
+  # failure that prompted it.
+  #
+  # Only the NAME varies: DLPProd and qaemail are both in the subscription
+  # below, so it serves both.
+
+  # Defensely-Common — holds both registries, this container app, and its
+  # production counterparts.
+  - name: azureSubscriptionId
+    value: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # Resolved at compile time from the branch — see azure-pipelines-dlp-api.yml
+  # for why the branch selects the values rather than the file.
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA') }}:
+    - name: azureServiceConnection
+      value: 'qa-defensely-sc'
+    - name: imageName
+      value: 'qa-com-user-api'
+    - name: acrName
+      value: 'qaemail'
+    - name: acrLoginServer
+      value: 'qaemail.azurecr.io'
+
+  - ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: 'prod-defensely-sa'
+    - name: imageName
+      value: 'prod-com-user-api'
+    - name: acrName
+      value: 'dlpprod'
+    - name: acrLoginServer
+      value: 'dlpprod-c5cbcmb9eqb7ecb2.azurecr.io'
+
+  - ${{ if not(in(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA', 'refs/heads/Deployment/CICD-Prod1', 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: ''
+    - name: imageName
+      value: ''
+    - name: acrName
+      value: ''
+    - name: acrLoginServer
+      value: ''
+
+  - name: qaContainerAppName
+    value: 'qa-com-user-api'
+  - name: qaResourceGroup
+    value: 'QA-Common'
+
+  # Production User APIs live in Defensely-Common / DLP-Prod-IN — the same
+  # subscription as the registry, and a different one from the DLP API and
+  # worker.
+  - name: prodSubscription
+    value: 'Defensely-Common'
+  - name: prodResourceGroup
+    value: 'DLP-Prod-IN'
+  - name: prod1ContainerAppName
+    value: 'prod01-com-user'
+  - name: prod2ContainerAppName
+    value: 'prod02-com-user'
+
+stages:
+
+# ─── Build & Push ───────────────────────────────────────────────
+- stage: Build
+  condition: ne(variables['imageName'], '')
+  displayName: 'Build & Push Image'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: BuildJob
+    displayName: 'SDK Container Publish to ACR'
+    steps:
+    - checkout: self
+      # Nothing extra to fetch: the scanning engine is vendored in this repo under
+      # ScannerEngine/ now (no longer the DLP-RegexFilter submodule).
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+
+    - task: AzureCLI@2
+      displayName: 'Publish container image to ACR (dotnet /t:PublishContainer)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        inlineScript: |
+          az acr login --name $(acrName) --subscription $(azureSubscriptionId)
+
+          dotnet publish $(projectPath) \
+            --configuration $(buildConfiguration) \
+            /t:PublishContainer \
+            -p ContainerRegistry=$(acrLoginServer) \
+            -p ContainerRepository=$(imageName) \
+            -p ContainerImageTags=$(Build.BuildId) \
+            -p ContainerRuntimeIdentifier=linux-x64
+
+# ─── Deploy to QA ──────────────────────────────────────────────
+- stage: DeployQA
+  displayName: 'Deploy to QA'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA'))
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - deployment: DeployQAJob
+    displayName: 'Deploy User API to QA Container App'
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureCLI@2
+            displayName: 'Update QA Container App'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Deploying image tag: $IMAGE_TAG"
+                az containerapp update \
+                  --subscription $(azureSubscriptionId) \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --image "$(acrLoginServer)/$(imageName):$IMAGE_TAG" \
+                  --set-env-vars \
+                    "Deployment__Environment=QA" \
+                    "Deployment__BuildId=$IMAGE_TAG" \
+                    "EnableSwagger=true"
+                # Deployment__BuildId lets /health report which build is serving.
+                # EnableSwagger is a property of the QA deployment, not of the
+                # build: the same image in production gets no such variable and
+                # serves no Swagger. QA needs it on — the team browses it, and the
+                # APIM import pipeline reads its spec from this backend.
+
+          - task: AzureCLI@2
+            displayName: 'Health Check (wait for revision ready)'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                QA_URL=$(az containerapp show \
+                  --subscription $(azureSubscriptionId) \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --query "properties.configuration.ingress.fqdn" -o tsv)
+
+                echo "Waiting 60s for new revision to activate..."
+                sleep 60
+
+                # /health, not /swagger/index.html. Swagger is gated on the
+                # EnableSwagger flag and is off in production, so probing it tied
+                # "can this deploy" to "does this publish its full API surface".
+                #
+                # The build id is checked as well as the status: a 200 on its own
+                # is also what the PREVIOUS revision returns while the new one is
+                # still starting, so status alone can pass a rollout that never
+                # happened.
+                echo "Checking https://$QA_URL/health ..."
+                for i in $(seq 1 40); do
+                  STATUS=$(curl -s -o /tmp/health.json --max-time 10 \
+                    -w "%{http_code}" "https://$QA_URL/health" || true)
+
+                  if [ "$STATUS" = "200" ]; then
+                    cat /tmp/health.json; echo
+                    SERVED=$(python3 -c "import json; print(json.load(open('/tmp/health.json')).get('buildId',''))" 2>/dev/null || echo "")
+                    if [ "$SERVED" = "$IMAGE_TAG" ]; then
+                      echo "Health check passed on attempt $i — serving build $SERVED"
+                      exit 0
+                    fi
+                    echo "Attempt $i: healthy but serving build '$SERVED', waiting for '$IMAGE_TAG'..."
+                  else
+                    echo "Attempt $i: HTTP $STATUS — retrying in 15s..."
+                  fi
+                  sleep 15
+                done
+                echo "##vso[task.logissue type=error]Health check failed after 40 attempts"
+                exit 1
+
+# ─── Deploy to Production ──────────────────────────────────────
+#
+# No migration step: Identity shares the Common database but the DLP API's
+# pipeline owns the schema and migrates it.
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd1
+    displayName: 'Deploy to PROD1'
+    branch: 'refs/heads/Deployment/CICD-Prod1'
+    adoEnvironment: 'PROD1'
+    variableGroup: 'defensely-prod1'
+    deploymentEnvironment: 'PROD1'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod1ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    setMigrationKey: false
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd2
+    displayName: 'Deploy to PROD2'
+    branch: 'refs/heads/Deployment/CICD-Prod2'
+    adoEnvironment: 'PROD2'
+    variableGroup: 'defensely-prod2'
+    deploymentEnvironment: 'PROD2'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod2ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    setMigrationKey: false

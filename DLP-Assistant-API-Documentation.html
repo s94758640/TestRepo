@@ -1,0 +1,579 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>SFM DLP — Assistant API handover</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: one column of prose at ~72ch, with full-width rule-bound bands for
+     each answer; wide tables and transcripts scroll inside their own box. */
+  :root {
+    --bg: #f7f8f9;
+    --surface: #ffffff;
+    --fg: #15191d;
+    --muted: #5c6672;
+    --line: #dde1e6;
+    --accent: #0f6b75;
+    --accent-soft: #e3f1f2;
+    --warn: #8a5a00;
+    --warn-soft: #fdf2db;
+    --crit: #9b2226;
+    --code-bg: #f1f3f5;
+
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1216;
+      --surface: #161b21;
+      --fg: #e6eaee;
+      --muted: #97a2ae;
+      --line: #2a323b;
+      --accent: #4fc3cd;
+      --accent-soft: #11292c;
+      --warn: #e0b065;
+      --warn-soft: #2b2314;
+      --crit: #ef8a8d;
+      --code-bg: #10151a;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0e1216;
+    --surface: #161b21;
+    --fg: #e6eaee;
+    --muted: #97a2ae;
+    --line: #2a323b;
+    --accent: #4fc3cd;
+    --accent-soft: #11292c;
+    --warn: #e0b065;
+    --warn-soft: #2b2314;
+    --crit: #ef8a8d;
+    --code-bg: #10151a;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 72px;
+  }
+
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-block: 0 28px;
+    border-bottom: 2px solid var(--fg);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    margin: 0;
+    max-width: 68ch;
+    color: var(--muted);
+    font-size: 17px;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  p { margin: 0; max-width: 72ch; }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-block: 36px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  section:last-of-type { border-bottom: none; }
+
+  .section-head {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .card.flag {
+    border-left: 4px solid var(--warn);
+    background: var(--warn-soft);
+  }
+
+  .card.answer {
+    border-left: 4px solid var(--accent);
+  }
+
+  .route {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 15px;
+  }
+
+  .verb {
+    background: var(--accent);
+    color: var(--surface);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  code, pre {
+    font-family: var(--mono);
+    font-size: 13.5px;
+  }
+
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+
+  pre code { background: none; padding: 0; }
+
+  .scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14.5px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  td code, th code { white-space: nowrap; }
+
+  ul, ol {
+    margin: 0;
+    padding-left: 22px;
+    max-width: 72ch;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .verdict {
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  dl.facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 18px;
+    margin: 0;
+    font-size: 14.5px;
+  }
+
+  dl.facts dt {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  dl.facts dd { margin: 0; min-width: 0; }
+
+  @media (max-width: 520px) {
+    dl.facts { grid-template-columns: 1fr; gap: 2px 0; }
+    dl.facts dd { margin-bottom: 10px; }
+  }
+
+  footer.colophon {
+    padding-block: 28px 0;
+    border-top: 2px solid var(--fg);
+    color: var(--muted);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">DLP API â†’ AI assistant team Â· 17 Nov 2026</div>
+    <h1>DLP Assistant Handover</h1>
+    <p class="standfirst">The streaming endpoint, the session event and the stored tables are built and the solution
+      compiles. Below: the contract we are holding up, the two values we still need from you, and answers to B1â€“B5.</p>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">A1</div>
+      <h2>The streaming endpoint</h2>
+    </div>
+
+    <div class="card">
+      <div class="route"><span class="verb">POST</span> <span>{dlp-api}/chatbot/ask/stream</span></div>
+      <dl class="facts">
+        <dt>Headers</dt>
+        <dd><code>Authorization: Bearer â€¦</code> and <code>ClientGUID</code> â€” the same two every DLP endpoint takes.
+          The token must be the signed-in user's; nothing here runs as a service account.</dd>
+        <dt>Body</dt>
+        <dd><code>{ "question": "â€¦", "sessionId": null }</code>. Send <code>sessionId: null</code> (or omit it) for a
+          new conversation.</dd>
+        <dt>Response</dt>
+        <dd><code>text/event-stream</code>, HTTP 200. Frames are written and flushed one at a time with response
+          buffering turned off, <code>Cache-Control: no-cache, no-transform</code> and
+          <code>X-Accel-Buffering: no</code>. There is no compression on this route.</dd>
+        <dt>Ceiling</dt>
+        <dd>600 s per turn (<code>DlpAssistant:StreamTimeoutSeconds</code>). The HTTP client's own timeout is disabled â€”
+          it covers reading the body, so any finite value would cut a long answer off mid-sentence.</dd>
+      </dl>
+    </div>
+
+    <h3>What we send you</h3>
+    <pre><code>POST {ai-service}/chat
+X-Internal-Key: &lt;shared secret&gt;
+Accept: text/event-stream
+
+{
+  "question": "who was blocked yesterday",
+  "history": [                                  // last 10 turns of this session, oldest first
+    { "role": "user",      "content": "â€¦" },
+    { "role": "assistant", "content": "â€¦" }
+  ],
+  "context": {
+    "dlpApiUrl":   "https://qa-email.azure-api.net/qadlp",
+    "userApiUrl":  "https://qa-email.azure-api.net/qauser",
+    "accessToken": "&lt;the caller's own bearer token, verbatim&gt;",
+    "clientGuid":  "â€¦"
+  }
+}</code></pre>
+
+    <p>Turns that errored are left out of <code>history</code> â€” replaying an apology teaches the assistant to
+      apologise again. A new <code>sessionId</code> sends <code>history: []</code>.</p>
+
+    <h3>What the browser gets back</h3>
+    <pre><code>event: session
+data: {"sessionId":"c89919ce-f7b8-42b2-8f69-453657fc4902"}
+
+event: status
+data: {"text":"Reading transfer logsâ€¦"}          â† yours, forwarded unchanged
+
+event: table
+data: {"tool":"transfer_logs","columns":[â€¦],"rows":[â€¦],"totalCount":31}
+
+event: delta
+data: {"text":"Four people"}
+
+event: done
+data: {}</code></pre>
+
+    <p>Every frame after <code>session</code> is yours, passed through field for field. We read <code>event:</code> and
+      <code>data:</code> on the way past only to store the turn; nothing is rewritten, reordered or held back.</p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">A2 Â· A3</div>
+      <h2>Session id, and tables in history</h2>
+    </div>
+
+    <p>The <code>session</code> event is always first, for a new conversation and an existing one alike, and it is
+      written before we call you â€” so the panel has the id to restore with even if the answer then fails. An
+      unparseable <code>sessionId</code> is treated as absent rather than refused; the only consequence is a new
+      conversation.</p>
+
+    <p>These are the same sessions <code>/chatbot/ask</code> uses, so <code>/chatbot/history</code> and
+      <code>/chatbot/history/messages</code> list and replay both kinds of turn with no new call.</p>
+
+    <h3>New field on <code>POST {dlp-api}/chatbot/history/messages</code></h3>
+    <pre><code>{
+  "question": "who was blocked yesterday",
+  "answer":   "Four peopleâ€¦",
+  "columns":  [],                                // unchanged
+  "rows":     [],                                // unchanged
+  "tables": [                                    // NEW â€” streamed turns only
+    { "tool": "transfer_logs",
+      "columns": [ { "key": "userName", "label": "User" } ],
+      "rows": [ [ "A. Patel" ] ],
+      "totalCount": 31 }
+  ]
+}</code></pre>
+
+    <p>Stored verbatim as the <code>table</code> events passed through, so a replayed turn draws what the panel drew
+      live. An answer can carry several. The field is <strong>omitted</strong>, not null, on every
+      <code>/chatbot/ask</code> turn and on anything recorded before today â€” as you said, the panel handles both.
+      Fields we don't know about round-trip rather than being dropped, so you can add one to the event without waiting
+      for us.</p>
+
+    <div class="card flag">
+      <h3>Two things to flag</h3>
+      <ul>
+        <li><strong>There is no clear-session endpoint today.</strong> Nothing in the DLP API ends a conversation
+          server-side; the panel starts a new one by sending <code>sessionId: null</code>. If you need a real delete or
+          a soft-close, say so and we will add it â€” the <code>IsActive</code> column is already there, unused.</li>
+        <li><strong>A new route 404s at the gateway until APIM is re-imported.</strong> The deploy alone is not enough;
+          <code>azure-pipelines-dlp-apim.yml</code> has to be run by hand for <code>/chatbot/ask/stream</code> to
+          resolve. Worth knowing before anyone reports the endpoint missing. We will also confirm APIM passes
+          <code>text/event-stream</code> through without buffering before you test end to end.</li>
+      </ul>
+    </div>
+
+    <h3>What we need from you</h3>
+    <p>Two values, and then this goes live: the AI service URL (<code>DlpAssistant:BaseUrl</code>) and the shared secret
+      (<code>DlpAssistant:InternalKey</code>). Until both are set, <code>DlpAssistant:Enabled</code> stays
+      <code>false</code> and the endpoint answers one <code>error</code> event followed by <code>done</code> â€” so your
+      panel's flag can be flipped without waiting on our deploy. A blank internal key stops the request outright: the
+      body carries a live user session token and we won't send that to an endpoint that authenticates nobody.</p>
+
+    <p>Errors always arrive as an SSE <code>error</code> event with HTTP 200, never as a status code â€” by the time
+      anything can fail the response has begun. We always terminate the stream with <code>done</code>, including when
+      you never sent one, so the panel is never left waiting.</p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">B1</div>
+      <h2>Which number is "incidents"</h2>
+    </div>
+
+    <p>All five, and none of them. They count five different things over five different tables; the only one that means
+      "incidents" in the product's sense is the dashboard's.</p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Call Â· field</th><th>QA</th><th>What it actually counts</th><th>Source</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>dashboard/v2/overview/summary</code><br><code>totalIncidents</code></td>
+            <td class="num">29,984</td>
+            <td>Events whose outcome is <strong>Block, Warn or Override</strong>. Override is in on purpose: a transfer
+              blocked and then let through on approval is a violation that happened.</td>
+            <td><code>dlp."vw_CombinedActivityLogs"</code> (file transfers + AI prompts) <em>plus</em>
+              <code>WebFilteringLogs</code>, on <code>EventTime</code>, upper bound exclusive.</td>
+          </tr>
+          <tr>
+            <td><code>GetTopMatchedPolicy</code><br><code>totalIncidents</code></td>
+            <td class="num">27,016</td>
+            <td><strong>Every crunch row in the window</strong> â€” Allows included, rows that matched no policy
+              included. It is the denominator behind each policy's <code>percentage</code> and nothing more. The name is
+              wrong; don't read it as a count of incidents.</td>
+            <td><code>crunch."LandingLogsCrunched"</code> alone, on <code>ReceivedTime</code>, both bounds inclusive.</td>
+          </tr>
+          <tr>
+            <td><code>GetIncidentTransferLogs</code><br><code>totalCount</code></td>
+            <td class="num">4</td>
+            <td>Rows a <strong>human moved to Investigation</strong> from the Log Summary (<code>IsInvestigation =
+              true</code>). This is the Investigation queue, not an incident feed â€” which is exactly why a day with 31
+              blocked transfers shows zero here.</td>
+            <td><code>crunch."LandingLogsCrunched"</code> where <code>IsInvestigation</code>.</td>
+          </tr>
+          <tr>
+            <td><code>GetUserActivityRiskStats</code><br><code>totalViolations</code></td>
+            <td class="num">565</td>
+            <td>Sum of <code>high_risk_event_count_d</code> across the window, for the <strong>high-risk users
+              only</strong>. Severity-based (High + Critical events), not policy-action based, and scoped to users above
+              the risk floor.</td>
+            <td><code>public.dlp_core_dailyrisksnapshot</code> â€” the daily risk snapshots, not the logs.</td>
+          </tr>
+          <tr>
+            <td><code>GetTransferLogs</code> (groupBy event)<br><code>policyActionCounts.Block</code></td>
+            <td class="num">26,235</td>
+            <td>Events the grid <strong>displays</strong> as Block â€” the computed action, after
+              <code>ProcessStatus</code> is taken into account (see B3).</td>
+            <td>The same combined view, narrowed to the grid's filter set.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>For "how many incidents", use <code>overview/summary.totalIncidents</code>: it is the number the Overview tile
+      shows, so the assistant and the dashboard will agree. For "who got blocked", <code>GetTransferLogs</code> is the
+      right call and what you are already doing. Treat <code>GetTopMatchedPolicy.totalIncidents</code> as a denominator
+      and <code>GetIncidentTransferLogs</code> as "what is under investigation".</p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">B2</div>
+      <h2><code>MachineName</code> is the right key</h2>
+    </div>
+
+    <p class="verdict">Confirmed â€” keep sending <code>MachineName</code>.</p>
+
+    <p>The grid filter binds by reflection to the <strong>entity</strong>, and the entity column is
+      <code>MachineName</code>. <code>deviceName</code> exists only on the DTO, where it is populated from
+      <code>MachineName</code>. A key that binds to nothing is swallowed and the filter is skipped, which is why any
+      value returned every row â€” a known rough edge in the generic filter, not something specific to this endpoint.</p>
+
+    <div class="card flag">
+      <p><strong>One trap:</strong> <code>deviceName</code> does not mean the same thing everywhere. On
+        <code>GetIncidentTransferLogs</code> it is the machine. On the grouped <code>GetTransferLogs</code> views it is
+        <code>AppDeviceName</code> â€” the application or USB device involved, a different column entirely. Filter the
+        machine with <code>MachineName</code> on both.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">B3</div>
+      <h2>Use <code>likeFilters</code> for <code>policyAction</code></h2>
+    </div>
+
+    <p class="verdict">Confirmed â€” <code>likeFilters</code> is correct, and the exact count is the one that is wrong.</p>
+
+    <p><code>policyAction</code> is not a plain column. The value the grid shows is computed:
+      <code>ProcessStatus == "Completed" ? PolicyAction : ProcessStatus</code>. An event still in flight â€” Under Review,
+      Override Applied, Override Rejected â€” keeps <code>Block</code> in the raw column while the grid shows it under its
+      process status instead.</p>
+
+    <p>We lift <code>likeFilters.policyAction</code> out of the generic pipeline and turn it into a SQL predicate that
+      knows about that rule, and <code>policyActionCounts</code> is built from the same computed value â€” which is why
+      the two always agree. <code>exactFilters.policyAction</code> is not lifted: it falls through to the reflection
+      filter and matches the raw column, so it sweeps up rows whose displayed action is something else.</p>
+
+    <p>Your 308-row gap on Block, 204 on Allow and 1 on Warn is exactly that set. You can see it without changing
+      anything: send <code>exactFilters</code> for Block and read <code>policyActionCounts</code> in the same response â€”
+      Block reads 26,235 and the extra 308 appear under their process-status names.</p>
+
+    <p>This is an inconsistency on our side, not a second meaning. <code>notExactFilters</code> is already lifted the
+      same way <code>likeFilters</code> is; only the positive exact filter was missed. Say the word and we will lift it
+      so the two agree, but nothing about your integration needs to change.</p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">B4</div>
+      <h2>Grouped views need <code>sortBy</code></h2>
+    </div>
+
+    <p class="verdict">Confirmed and expected. <code>sortBy: "totalActivity"</code> is the right fix.</p>
+
+    <p>The grouped views project a <code>GROUP BY</code> with no default <code>ORDER BY</code>, so PostgreSQL is free to
+      return groups in any order â€” and may return them in a different order on the next call, which makes paging
+      unstable as well as unranked. Only the event grid carries a tie-break of its own. Treat it as a rule for every
+      grouped or paged grid you page through: no <code>sortBy</code>, no guaranteed order.</p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div class="eyebrow">B5</div>
+      <h2>A null <code>licenseStatus</code> is expected</h2>
+    </div>
+
+    <p class="verdict">Confirmed. Showing "--" is right.</p>
+
+    <p><code>Endpoint."LicenseStatus"</code> is a nullable boolean written only by the explicit admin toggle
+      (<code>UpdateEndpointLicense</code>, and its agent-side equivalent). Nothing sets it when an agent registers, so a
+      machine nobody has ever toggled stays null for its whole life â€” null means "not set", not "unlicensed", and
+      treating it as <code>false</code> would tell someone their endpoint is off when nobody has decided anything. The
+      contract saying <code>boolean</code> is the contract being loose; the column is <code>bool?</code>.</p>
+  </section>
+
+  <footer class="colophon">
+    Code is in on <code>Deployment/QA_V1</code>: new endpoint and service, <code>Tables</code> column on
+    <code>dlp."ChatMessage"</code> (migration <code>V0038</code>), and a <code>DlpAssistant</code> configuration
+    block. Nothing on <code>/chatbot/ask</code>, chat history or any existing endpoint changed. Migrations do not run
+    at start-up — a QA deploy applies them only when <code>runMigrations</code> is ticked on the pipeline run.
+  </footer>
+
+</div>
+</body>
+</html>
+

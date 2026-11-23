@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Service Control — UI API</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1b2027; --muted:#5d6775; --line:#dde2ea; --soft:#f5f7fa;
+    --accent:#1f5fa9; --accent-soft:#e9f0f9; --ok:#1b7a4b; --ok-soft:#e8f5ee;
+    --warn:#8d5400; --warn-soft:#fdf3e3; --stop:#a32a24; --stop-soft:#fdeeed;
+    --code-bg:#f3f5f9; --mono:Consolas,"Cascadia Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme=light]){
+      --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+      --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+      --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+      --code-bg:#1a1e25; color-scheme:dark;
+    }
+  }
+  :root[data-theme=dark]{
+    --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+    --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+    --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+    --code-bg:#1a1e25; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.6 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:960px;margin:0 auto;padding:36px 20px 80px}
+  h1{font-size:28px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:20px;margin:40px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:24px 0 8px}
+  p,li{max-width:80ch}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .box{border-left:4px solid var(--accent);background:var(--accent-soft);
+       padding:12px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+  .box.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+  .box.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .box.stop{border-left-color:var(--stop);background:var(--stop-soft)}
+  .box b:first-child{display:block;margin-bottom:4px}
+  code{font-family:var(--mono);font-size:13px;background:var(--code-bg);
+       border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:7px;
+      padding:13px 15px;overflow-x:auto;font:13px/1.55 var(--mono);margin:10px 0}
+  pre code{background:none;border:0;padding:0}
+  .tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:7px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:540px}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{background:var(--soft);font-weight:600;font-size:12px;letter-spacing:.03em;
+     text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .m{display:inline-block;font:700 11px/1.5 var(--mono);padding:2px 8px;border-radius:4px;
+     color:#fff;background:var(--accent);margin-right:8px}
+  .m.get{background:var(--ok)}
+  .st{display:inline-block;font:13px var(--mono);border:1px solid var(--line);
+      background:var(--soft);border-radius:5px;padding:2px 9px}
+  .st.fin{border-color:var(--ok);color:var(--ok)}
+  .st.bad{border-color:var(--stop);color:var(--stop)}
+  @media print{h2{break-after:avoid}pre,table{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Service Control — API for the console</h1>
+<div class="meta">
+  Stop / Start / Restart <code>DLPService</code> on an endpoint from the admin console ·
+  three endpoints, one of them polled · 23 Nov 2026
+</div>
+
+<div class="box">
+  <b>The shape of it</b>
+  The console never talks to the endpoint. It posts a command to us, we push it to the
+  endpoint's agent over a socket we already hold, and the agent reports back. You poll one
+  endpoint until the command reaches a final state — normally within ten seconds.
+  <br><br>
+  <b>There is no websocket for you.</b> That is between us and the agent. Your side is three
+  ordinary REST calls.
+</div>
+
+<!-- ───────────────────────────── -->
+<h2>1. The flow</h2>
+
+<pre><code>screen loads   GET  /api/endpoints/{serial}/push-status     → is the endpoint reachable?
+
+admin clicks   POST /api/endpoints/{serial}/service-command → 202 { commandId, state }
+
+every 1s       GET  /api/service-commands/{commandId}       → until state is final
+                                                              (cap it, see §5)</code></pre>
+
+<div class="tw"><table>
+  <tr><th>Auth</th><td>Your existing console JWT, plus the <code>ClientGUID</code> header you
+      already send. <b>Admin role required</b> on all three — a read-only role gets 403</td></tr>
+  <tr><th>Casing</th><td>camelCase in and out</td></tr>
+  <tr><th><code>serial</code></th><td>The endpoint's serial as you already display it.
+      Compared case-insensitively</td></tr>
+</table></div>
+
+<!-- ───────────────────────────── -->
+<h2>2. Send a command</h2>
+
+<p><span class="m">POST</span><code>/api/endpoints/{serial}/service-command</code></p>
+
+<pre><code>{ "action": "Stop", "persist": true }</code></pre>
+
+<div class="tw"><table>
+  <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+  <tr><td><code>action</code></td><td>string</td>
+      <td><code>Stop</code> | <code>Start</code> | <code>Restart</code>. Case-insensitive —
+          <code>"stop"</code> is fine. Anything else is <b>400</b></td></tr>
+  <tr><td><code>persist</code></td><td>bool, default <code>true</code></td>
+      <td><b>Stop only.</b> <code>true</code> also disables the service's start type so it stays
+          off after a reboot. <b>Ignored for Start and Restart</b> — we force it to false and
+          the response shows that</td></tr>
+</table></div>
+
+<p><b>202 Accepted</b>, with <code>Location: /api/service-commands/{commandId}</code></p>
+
+<pre><code>{
+  "commandId": "47cb2222d24a4ca5b62d0f1190923fd1",
+  "serial": "PW0F6X3B",
+  "action": "Stop",
+  "state": "Delivered",
+  "endpointConnected": true,
+  "finalStatus": null,
+  "startType": null,
+  "elapsedMs": null,
+  "message": null,
+  "createdAt": "2026-11-23T10:15:02.113+00:00",
+  "completedAt": null
+}</code></pre>
+
+<div class="box warn">
+  <b>The "off" toggle means <code>persist: true</code></b>
+  An admin turning DLP <em>off</em> expects it to stay off across a reboot, which is what
+  <code>persist</code> does. Send <code>false</code> only for a one-time stop that comes back
+  on restart. If your UI has a single on/off toggle, it is <code>persist: true</code>.
+</div>
+
+<h3>Errors</h3>
+<div class="tw"><table>
+  <tr><td><code>400</code></td><td>Unknown <code>action</code>, or a serial over 128 characters</td></tr>
+  <tr><td><code>401</code></td><td>No token</td></tr>
+  <tr><td><code>403</code></td><td>Signed in, but not an admin role</td></tr>
+  <tr><td><code>404</code></td><td>No active endpoint with that serial in this tenant</td></tr>
+</table></div>
+
+<!-- ───────────────────────────── -->
+<h2>3. Poll for the result</h2>
+
+<p><span class="m get">GET</span><code>/api/service-commands/{commandId}</code> → <b>200</b>
+(same body as above) or <b>404</b></p>
+
+<p>Call it every second until <code>state</code> is final.</p>
+
+<div class="tw"><table>
+  <tr><th>state</th><th>Meaning</th><th>What to show</th></tr>
+  <tr><td><span class="st">Pending</span></td>
+      <td>Saved; the endpoint is offline or we have not pushed it yet</td>
+      <td>With <code>endpointConnected:false</code> this is <b>not an error</b> — see the box
+          below</td></tr>
+  <tr><td><span class="st">Delivered</span></td><td>Sent to the endpoint</td>
+      <td>Spinner on the toggle</td></tr>
+  <tr><td><span class="st">Acked</span></td><td>The agent has it and is working</td>
+      <td>Spinner</td></tr>
+  <tr><td><span class="st fin">Succeeded</span></td><td>Done</td>
+      <td>Move the toggle. <code>finalStatus</code> and <code>startType</code> are what the
+          machine reported</td></tr>
+  <tr><td><span class="st bad">Failed</span></td><td>The machine refused or timed out</td>
+      <td>Revert the toggle and show <code>message</code> — it is the agent's own text, e.g.
+          <i>"Timed out waiting for the service to change state."</i></td></tr>
+  <tr><td><span class="st bad">Superseded</span></td><td>The admin clicked again</td>
+      <td>Drop this one silently; the newer command owns the toggle</td></tr>
+  <tr><td><span class="st bad">Expired</span></td><td>A stale Restart, never run</td>
+      <td>"The endpoint came back too late — restart again if you still need it"</td></tr>
+</table></div>
+
+<p><b>Final =</b> <code>Succeeded</code>, <code>Failed</code>, <code>Superseded</code>,
+<code>Expired</code>. Stop polling on any of them.</p>
+
+<!-- ───────────────────────────── -->
+<h2>4. Is the endpoint reachable?</h2>
+
+<p><span class="m get">GET</span><code>/api/endpoints/{serial}/push-status</code></p>
+
+<pre><code>{ "serial": "PW0F6X3B", "connected": true }</code></pre>
+
+<p>Call it when the screen loads so the toggle can say online or offline <em>before</em> the
+admin clicks. It is cheap — an in-memory check, no database read.</p>
+
+<p><code>connected:false</code> does not disable the control. A command for an offline endpoint
+is saved and runs when the machine comes back; it is useful to tell the admin that in advance,
+not to stop them.</p>
+
+<!-- ───────────────────────────── -->
+<h2>5. Four behaviours to build for</h2>
+
+<div class="box warn">
+  <b>Offline is a normal outcome, not a failure</b>
+  <code>state:"Pending"</code> with <code>endpointConnected:false</code> means the command is
+  stored and will be pushed the moment the endpoint reconnects — which could be minutes or
+  days. <b>Stop polling after about 60 seconds</b> and leave the row in a "will apply when the
+  endpoint comes online" state. Polling for hours achieves nothing.
+</div>
+
+<div class="box">
+  <b>A second click supersedes the first</b>
+  Only one command per endpoint is ever outstanding. If an admin clicks Stop and then Start
+  before the first finishes, the Stop becomes <code>Superseded</code> and only the Start runs.
+  Handle <code>Superseded</code> by ignoring that poll, not by showing an error — it is the
+  system doing what the admin asked.
+</div>
+
+<div class="box">
+  <b>Disable the control while a command is open</b>
+  Not strictly required — the server is safe either way — but it keeps the toggle honest. Two
+  rapid clicks produce two commands, and the first one's poll will come back
+  <code>Superseded</code>, which looks like a glitch if the UI has already moved on.
+</div>
+
+<div class="box stop">
+  <b>Trust <code>finalStatus</code>, not the action you sent</b>
+  <code>Succeeded</code> means the command ran; <code>finalStatus</code> says what state the
+  service actually ended in — <code>Stopped</code>, <code>Running</code>, and so on. A Stop
+  that succeeds on an already-stopped service still reports <code>Stopped</code>. Drive the
+  toggle from <code>finalStatus</code> and it will always match the machine.
+</div>
+
+<!-- ───────────────────────────── -->
+<h2>6. Trying it before the agent exists</h2>
+
+<p>The endpoint agent build is <b>not on QA endpoints yet</b>. Until it is, these behave fully
+and are worth building against:</p>
+
+<div class="tw"><table>
+  <tr><td><code>push-status</code></td><td>Works now — reports <code>connected:false</code> for
+      every endpoint until agents connect</td></tr>
+  <tr><td><code>POST …/service-command</code></td><td>Works now — returns 202 with
+      <code>Pending</code> and <code>endpointConnected:false</code>, exactly the offline path</td></tr>
+  <tr><td><code>GET …/service-commands/{id}</code></td><td>Works now — stays <code>Pending</code></td></tr>
+</table></div>
+
+<p>So the whole offline flow, the supersede behaviour and every error case are testable today.
+What cannot happen yet is a command reaching <code>Succeeded</code>, because nothing is
+listening on the endpoint.</p>
+
+<div class="box warn">
+  <b>Swagger is switched off on QA</b>
+  The host only serves it when <code>EnableSwagger</code> is exactly <code>"true"</code>, and
+  that value lives in the local development settings, which QA does not load. If you want the
+  Swagger UI on QA, it needs <code>EnableSwagger=true</code> adding as an app setting on the
+  container app. Otherwise use the examples above directly — every call here is a plain REST
+  request with your usual token and <code>ClientGUID</code> header.
+</div>
+
+<p style="color:var(--muted);font-size:13px;margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+The socket between the backend and the endpoint agent is documented separately in
+<b>DLP-Service-Control-EXE-Handover.html</b>; nothing there affects the console.</p>
+
+</main>
+</body>
+</html>

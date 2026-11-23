@@ -1,0 +1,269 @@
+# Azure DevOps Pipeline — SFM.DLP.ExeApi + SFM.DLP.LogTrigger (Azure Functions v4, .NET 8)
+# Build → Publish → Zip → Deploy both function apps to QA
+# Modeled on Effortly azure-pipelines-functions.yml.
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ BEFORE FIRST RUN — replace every __TODO__ value below with the real │
+# │ names from the Azure portal / Azure DevOps. Nothing is assumed.     │
+# └─────────────────────────────────────────────────────────────────────┘
+
+trigger:
+  branches:
+    include:
+      - Deployment/CICD-QA
+      - Deployment/CICD-Prod1
+      - Deployment/CICD-Prod2
+  paths:
+    include:
+      - SFM.DLP.ExeApi/**
+      - SFM.DLP.LogTrigger/**
+      - SFM.DLP.Application/**
+      - SFM.DLP.CloudDiscovery/**
+      - SFM.DLP.Infrastructure/**
+      - SFM.DLP.Domain/**
+      - SFM.Common.Utilities/**
+      - SFM.Nucleus.Infrastructure/**
+      - SFM.Platform.Storage/**
+      - SFM.GenericRepository/**
+      # SFM.DLP.CloudDiscovery references SFM.DLP.CloudClients, which lives in the
+      # ScannerEngine/ folder (vendored, no longer a submodule), so both functions
+      # compile it into their image. A change to the engine must trigger a build.
+      - ScannerEngine/**
+      - nuget.config
+      - azure-pipelines-dlp-functions.yml
+
+pr: none
+
+variables:
+  buildConfiguration: 'Release'
+  dotnetVersion: '8.0.x'
+  exeApiProject: 'SFM.DLP.ExeApi/SFM.DLP.ExeApi.csproj'
+  logTriggerProject: 'SFM.DLP.LogTrigger/SFM.DLP.Trigger.csproj'
+
+  # ── Resource names (from the projects' PublishProfiles *.pubxml) ─────
+  #
+  # Two function apps per environment, from two separate projects:
+  #   ExeApi      the HTTP API every deployed agent calls
+  #   LogTrigger  the timer jobs (AssetAppSync, DiscoveryScanScheduler, …)
+  #
+  # They cannot share one app: a zip deploy replaces the whole app, so whichever
+  # was deployed last would be the only one running.
+  qaExeApiFunctionApp: 'qadlp-exe-api'
+  qaLogTriggerFunctionApp: 'qadlp'
+
+  prod1ExeApiFunctionApp: 'prod01-dlp-exe-api'
+  prod1LogTriggerFunctionApp: 'prod01-dlp-service'
+  prod2ExeApiFunctionApp: 'prod02-dlp-exe-api'
+  prod2LogTriggerFunctionApp: 'prod02-dlp-service'
+
+  # The service connection is the only value that differs by branch here — the
+  # function app names are chosen per stage rather than computed, because a
+  # wrong name deploys working code to the wrong customer's agents.
+  ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2')) }}:
+    azureServiceConnection: 'prod-defensely-sa'
+  ${{ if not(in(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1', 'refs/heads/Deployment/CICD-Prod2')) }}:
+    azureServiceConnection: 'qa-defensely-sc'
+
+stages:
+
+# ─── Build ─────────────────────────────────────────────────────
+- stage: Build
+  displayName: 'Build & Publish'
+  pool:
+    vmImage: 'windows-latest'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build & Publish Both Function Apps'
+    steps:
+    - checkout: self
+      # The scanning engine lives in this repo under ScannerEngine/ (vendored, no
+      # longer the DLP-RegexFilter submodule), so there is nothing extra to fetch.
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+
+    # ── ExeApi ──
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish ExeApi'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(exeApiProject)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/exeapi-publish'
+        zipAfterPublish: false
+        # Without this the task nests the output in a project-named subfolder,
+        # pushing host.json off the zip root and breaking the function app.
+        modifyOutputPath: false
+
+    - powershell: |
+        $hostJson = Get-ChildItem "$(Build.ArtifactStagingDirectory)/exeapi-publish" -Filter "host.json"
+        if (-not $hostJson) {
+          Write-Host "##vso[task.logissue type=error]host.json NOT at the root of ExeApi publish output!"
+          exit 1
+        }
+        Write-Host "host.json OK: $($hostJson.FullName)"
+      displayName: 'Verify ExeApi publish output'
+
+    - task: ArchiveFiles@2
+      displayName: 'Zip ExeApi'
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/exeapi-publish'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/drop/exeapi.zip'
+        replaceExistingArchive: true
+
+    # ── LogTrigger ──
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish LogTrigger'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(logTriggerProject)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/logtrigger-publish'
+        zipAfterPublish: false
+        modifyOutputPath: false
+
+    - powershell: |
+        $hostJson = Get-ChildItem "$(Build.ArtifactStagingDirectory)/logtrigger-publish" -Filter "host.json"
+        if (-not $hostJson) {
+          Write-Host "##vso[task.logissue type=error]host.json NOT at the root of LogTrigger publish output!"
+          exit 1
+        }
+        Write-Host "host.json OK: $($hostJson.FullName)"
+      displayName: 'Verify LogTrigger publish output'
+
+    - task: ArchiveFiles@2
+      displayName: 'Zip LogTrigger'
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/logtrigger-publish'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/drop/logtrigger.zip'
+        replaceExistingArchive: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Upload Artifacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/drop'
+        ArtifactName: 'functions-drop'
+
+# ─── Deploy to QA ──────────────────────────────────────────────
+- stage: DeployQA
+  displayName: 'Deploy to QA'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA'))
+  pool:
+    vmImage: 'windows-latest'
+  jobs:
+  - deployment: DeployQAJob
+    displayName: 'Deploy Function Apps to QA'
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          # runFromPackage stores the zip as the immutable package AND sets
+          # WEBSITE_RUN_FROM_PACKAGE consistently in one atomic step. The
+          # previous zipDeploy + manual WEBSITE_RUN_FROM_PACKAGE=1 combination
+          # left the host pointing at a package that was never stored —
+          # "ServiceUnavailable from host runtime", no functions loaded.
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy ExeApi (QA)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(qaExeApiFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/exeapi.zip'
+              deploymentMethod: 'runFromPackage'
+
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy LogTrigger (QA)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(qaLogTriggerFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/logtrigger.zip'
+              deploymentMethod: 'runFromPackage'
+
+# ─── Deploy to Production ──────────────────────────────────────
+#
+# Agent-facing, and the riskiest deploy in the estate: the ExeApi is what every
+# installed agent calls, and there is no gateway entry in front of it to roll
+# back behind. A bad deploy is felt by every endpoint in the field immediately.
+#
+# Both function apps deploy together because they ship from the same build —
+# but they are separate apps, so a failure in one leaves the other on its
+# previous package rather than taking both down.
+
+- stage: DeployProd1
+  displayName: 'Deploy to PROD1'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'))
+  pool:
+    vmImage: 'windows-latest'
+  jobs:
+  - deployment: DeployProd1Job
+    displayName: 'Deploy Function Apps to PROD1'
+    # Binds the CEO approval and branch control. A plain 'job' would carry
+    # neither, and these apps answer to every agent in the field.
+    environment: 'PROD1'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy ExeApi (PROD1)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(prod1ExeApiFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/exeapi.zip'
+              deploymentMethod: 'runFromPackage'
+
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy LogTrigger (PROD1)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(prod1LogTriggerFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/logtrigger.zip'
+              deploymentMethod: 'runFromPackage'
+
+- stage: DeployProd2
+  displayName: 'Deploy to PROD2'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2'))
+  pool:
+    vmImage: 'windows-latest'
+  jobs:
+  - deployment: DeployProd2Job
+    displayName: 'Deploy Function Apps to PROD2'
+    environment: 'PROD2'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy ExeApi (PROD2)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(prod2ExeApiFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/exeapi.zip'
+              deploymentMethod: 'runFromPackage'
+
+          - task: AzureFunctionApp@2
+            displayName: 'Deploy LogTrigger (PROD2)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'functionApp'
+              appName: '$(prod2LogTriggerFunctionApp)'
+              package: '$(Pipeline.Workspace)/functions-drop/logtrigger.zip'
+              deploymentMethod: 'runFromPackage'

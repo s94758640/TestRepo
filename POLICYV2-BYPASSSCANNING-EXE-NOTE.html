@@ -1,0 +1,83 @@
+<title>Policy V2 — bypassScanning (exe / agent contract)</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#fff; --ink:#1a1f27; --muted:#59616e; --faint:#8a929e;
+    --line:#e6e9ef; --line2:#eef1f5; --accent:#3a5bd9; --accent-soft:#e8edfb;
+    --ok:#2f8f63; --ok-bg:#e6f3ec; --warn:#9a6a1a; --warn-bg:#faf0dd;
+    --code-bg:#1b2130; --code-ink:#e9edf5; --code-key:#9fc4ff; --code-str:#b6e3a8; --code-com:#7d8799;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;
+    --line:#282d36;--line2:#22262e;--accent:#7f9cff;--accent-soft:#1a2340;
+    --ok:#5fc48c;--ok-bg:#15271e;--warn:#d7a24a;--warn-bg:#2a2112;
+    --code-bg:#0f131a;--code-ink:#e4e9f2;}}
+  :root[data-theme="dark"]{--bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;--line:#282d36;--line2:#22262e;--accent:#7f9cff;--accent-soft:#1a2340;--ok:#5fc48c;--ok-bg:#15271e;--warn:#d7a24a;--warn-bg:#2a2112;--code-bg:#0f131a;--code-ink:#e4e9f2;}
+  :root[data-theme="light"]{--bg:#f5f6f8;--panel:#fff;--ink:#1a1f27;--muted:#59616e;--faint:#8a929e;--line:#e6e9ef;--line2:#eef1f5;--accent:#3a5bd9;--accent-soft:#e8edfb;--ok:#2f8f63;--ok-bg:#e6f3ec;--warn:#9a6a1a;--warn-bg:#faf0dd;--code-bg:#1b2130;--code-ink:#e9edf5;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.58;font-size:15px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px}
+  .eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-family:var(--serif);font-weight:600;font-size:29px;line-height:1.14;margin:.35em 0 .2em;letter-spacing:-.01em;text-wrap:balance}
+  .sub{color:var(--muted);font-size:14px;max-width:64ch}
+  h2{font-family:var(--serif);font-weight:600;font-size:19px;margin:38px 0 10px;letter-spacing:-.01em}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:14px 0}
+  p{margin:.5em 0}
+  code{font-family:var(--mono);font-size:.86em;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:5px;word-break:break-word}
+  pre{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12.5px;line-height:1.6;border-radius:10px;padding:14px 16px;overflow-x:auto;margin:10px 0}
+  pre code{background:none;color:inherit;padding:0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;display:block;overflow-x:auto}
+  @media(min-width:680px){table{display:table}}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:999px}
+  .u{color:var(--accent);background:var(--accent-soft)} .d{color:var(--warn);background:var(--warn-bg)}
+  .lead{display:flex;gap:12px;align-items:flex-start;margin:10px 0}
+  .lead .k{flex:0 0 auto;width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px}
+  .note{color:var(--muted);font-size:13px}
+  .foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+  strong{font-weight:600}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Policy V2 · contract note for the exe / endpoint-agent team</div>
+  <h1>A new <code>bypassScanning</code> flag on transfer exception rules</h1>
+  <p class="sub">The server now accepts, stores and ships a per-exception-rule <code>bypassScanning</code> flag. The snapshot and the hash already carry it — the only new work is on the endpoint agent: honouring the flag at transfer time.</p>
+
+  <h2>Where it is</h2>
+  <p>Inside each exception rule object, in both transfer modules:
+  <code>modules.upload.exceptionGroups[].rules[]</code> and <code>modules.download.exceptionGroups[].rules[]</code>.</p>
+  <pre><code>{
+  "action": "Allow",
+  "bypassScanning": true,
+  ...
+}</code></pre>
+  <p class="note">Always present on every exception rule (default <code>false</code>); only ever <code>true</code> on an <code>Allow</code> rule — the server rejects <code>true</code> on Warn/Block/step rules with <code>400 PV2_MODULE_INVALID</code>. It rides the rule's raw JSON, so your parser passes it through unchanged.</p>
+
+  <h2>Served by</h2>
+  <div class="card">
+    <p><code>GET {BaseUrl}/V2/PolicySnapshot/{endpointUserId}</code> — the full policy; the flag sits in the rule objects above.</p>
+    <p style="margin-bottom:0"><code>GET {BaseUrl}/V2/PolicyCheck/{endpointUserId}?hash=…</code> — staleness check, unchanged.</p>
+  </div>
+
+  <h2>Agent behaviour to implement</h2>
+  <table>
+    <thead><tr><th>Module</th><th>Match</th><th>Do</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill u">Upload</span></td><td><code>Allow</code> exception, <code>bypassScanning:true</code></td><td>Let the upload through with <strong>no content scanning</strong> and <strong>do not log</strong> it.</td></tr>
+      <tr><td><span class="pill d">Download</span></td><td><code>Allow</code> exception, <code>bypassScanning:true</code></td><td><strong>Do not log</strong> it. (An <code>Allow</code> already skips scanning on download, so the flag only changes logging here.)</td></tr>
+      <tr><td colspan="2">Anything else (<code>false</code>, or Warn/Block/step rules)</td><td>Unchanged behaviour.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Sync — no forced refresh needed</h2>
+  <div class="lead"><div class="k">✓</div><div>Toggling the flag and publishing changes <code>PublishedSnapshotHash</code> (the hash is computed over the whole snapshot document, which now carries <code>bypassScanning</code>). So <code>PolicyCheck</code> returns <code>updated</code> on the agent's next poll and it refetches the snapshot the normal way — the tray <em>Sync</em> button is not required.</div></div>
+
+  <h2>Server side — nothing to change</h2>
+  <p>The exe API (<code>PolicySnapshot</code> / <code>PolicyCheck</code>) already passes the field and the moved hash through verbatim. Storage is the existing jsonb policy document — <strong>no migration, no schemaVersion bump</strong>. The only enforcement that lives outside the server is the agent behaviour in the table above.</p>
+
+  <div class="foot">Defensely · Policy V2 transfer modules · <code>bypassScanning</code> added to <code>TransferRuleDto</code>. Backend accepted/validated/stored/shipped; agent enforcement pending.</div>
+</div>

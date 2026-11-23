@@ -1,0 +1,37 @@
+# The vendored DLP.RegexFilter pattern set is hash-verified at startup.
+#
+# patterns.json.sha256 is a SHA-256 over patterns.json's EXACT BYTES, and
+# DlpPatternLoader throws SecurityException rather than load a pattern set whose
+# hash disagrees. That is the right behaviour - a tampered pattern file is how you
+# would turn a DLP scanner off quietly - but it means the bytes have to be
+# identical everywhere.
+#
+# Git's core.autocrlf does not keep them identical. It stores text as LF and hands
+# Windows a CRLF copy, so one commit has two byte sequences and only one hash. The
+# hash was generated on Windows from the CRLF copy; the worker image is built on a
+# Linux agent from the LF copy; the hashes differed, the scanner refused to
+# construct, and the container crash-looped at startup with a dependency-injection
+# stack that named none of this.
+#
+# -text means: no conversion, in or out. Same bytes on every platform, one hash.
+#
+# The canonical form is LF - that is what the blob has always held, and what a
+# Linux agent checks out. Do not "fix" a patterns.json that looks LF-only on
+# Windows by saving it back as CRLF; that changes its hash.
+#
+# These paths are anchored to the directory holding this file, i.e. the repo
+# root, so they MUST carry the ScannerEngine/ prefix. They were written when the
+# engine was the `shared` submodule and this file sat inside it, where
+# DLP.RegexFilter/ was the right relative path; vendoring moved the engine under
+# ScannerEngine/ and the un-prefixed patterns matched nothing, which is exactly
+# how the crash above came back on 21 Nov. Verify any change here with:
+#   git check-attr text -- ScannerEngine/DLP.RegexFilter/patterns.json
+# which must report `text: unset`, not `text: unspecified`.
+#
+# If patterns.json is ever replaced by hand, regenerate the hash from the file as
+# it sits on disk - the HashPatternsJson target in DLP.RegexFilter.csproj does it
+# on build, or by hand:
+#   (Get-FileHash patterns.json -Algorithm SHA256).Hash |
+#       Out-File patterns.json.sha256 -Encoding ASCII -NoNewline
+ScannerEngine/DLP.RegexFilter/patterns.json        -text
+ScannerEngine/DLP.RegexFilter/patterns.json.sha256 -text

@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIEM Integration - UI / UX Design Guide</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>SIEM Integration — UI / UX Design Guide</h1>
+<p><strong>Audience:</strong> UX / design team (sections 1–9) · UI integration team (sections 10–12) <strong>Screens:</strong> SIEM landing, Connect-a-SIEM wizard (5 steps), Create API access (3 steps), Delivery health, Field mapping reference, Audit log <strong>Status:</strong> <strong>design phase — nothing is built.</strong> Branch <code>feature/siem-integration</code> is empty. Routes below are the proposed contract, not yet live. <strong>Backend contacts:</strong> DLP API team · Design reference: the approved SIEM Integration plan (security, data contract, flows)</p>
+<hr>
+<h2>1. What this feature is, in one paragraph</h2>
+<p>A <strong>SIEM</strong> is the customer's central security log system — Splunk, Microsoft Sentinel, IBM QRadar, Elastic. Every security tool they own reports into it, and their security team works inside it all day. Today Defensely events live only in our own dashboard, so that team never sees them. This feature lets a customer admin connect their SIEM in under five minutes, after which DLP events appear in their tool within a minute.</p>
+<p><strong>Why it matters:</strong> every enterprise security RFP asks <em>"Does it integrate with our SIEM?"</em> Answering "No" loses the deal. This is a sales-blocking feature, not a nice-to-have.</p>
+<hr>
+<h2>2. The one decision the admin makes first</h2>
+<p>There are two directions, and the landing screen must make the choice obvious. This is the single most important UX decision in the feature.</p>
+<table><thead><tr>
+<th></th>
+<th><strong>Connect a SIEM</strong> (we push)</th>
+<th><strong>Create API access</strong> (they pull)</th>
+</tr></thead><tbody>
+<tr>
+<td>Who starts the connection</td>
+<td>We do — our server sends to them</td>
+<td>Their SIEM does — it calls us</td>
+</tr>
+<tr>
+<td>Speed</td>
+<td>~14 seconds</td>
+<td>~60 seconds (their poll interval)</td>
+</tr>
+<tr>
+<td>Works with on-prem SIEM behind a firewall</td>
+<td>❌ No</td>
+<td>✅ <strong>Yes</strong></td>
+</tr>
+<tr>
+<td>Setup effort for the admin</td>
+<td>Paste a URL + token</td>
+<td>Paste a client id + secret into their SIEM</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>Their token, stored encrypted by us</td>
+<td><strong>OAuth 2.0</strong> — they get a client id + secret</td>
+</tr>
+<tr>
+<td>Ships in</td>
+<td>v2</td>
+<td><strong>v1 — design this first</strong></td>
+</tr>
+</tbody></table>
+<p><strong>Design both, but Create API access (pull) ships first.</strong> It is the only option that works for customers running Splunk or QRadar inside their own data centre, and it is what we can deliver soonest.</p>
+<hr>
+<h2>3. Basics (for the integration team)</h2>
+<ul>
+<li><strong>Base URL:</strong> the DLP API gateway, e.g. <code>https://qa-email.azure-api.net/qadlp</code></li>
+<li><strong>Dashboard calls</strong> use the normal <code>Authorization: Bearer &lt;JWT&gt;</code> + <code>ClientGUID</code> header, same as every other screen, and the standard envelope:</li>
+</ul>
+<pre><code>
+  { "success": true, "message": null, "data": { ... }, "errors": null }
+</code></pre>
+<ul>
+<li><strong>Two endpoints deliberately break that envelope</strong> — <code>POST /oauth/token</code> and <code>GET /siem/events</code>. Those are consumed by the customer's SIEM, not by our UI, and must follow RFC 6749 exactly or stock connectors fail to parse them. The dashboard never calls them.</li>
+<li><strong>Admin-only:</strong> every write below requires the <code>siem.manage</code> permission. Non-admins get <strong>403</strong>. The UI should show the screen read-only rather than hiding it — admins and analysts both need to <em>see</em> whether a SIEM is connected.</li>
+</ul>
+<hr>
+<h2>4. Endpoint map (what each screen element calls)</h2>
+<table><thead><tr>
+<th>Screen element</th>
+<th>Method + route</th>
+</tr></thead><tbody>
+<tr>
+<td>Landing — destinations list</td>
+<td><code>POST siem/connectors/list</code></td>
+</tr>
+<tr>
+<td>Landing — API clients list</td>
+<td><code>POST siem/clients/list</code></td>
+</tr>
+<tr>
+<td>Wizard step 1 — vendor cards</td>
+<td><code>GET siem/providers</code></td>
+</tr>
+<tr>
+<td>Wizard step 3 — filter field list</td>
+<td><code>GET Notification/TriggerFields/List</code> <em>(existing)</em></td>
+</tr>
+<tr>
+<td>Wizard step 4 — sample event preview</td>
+<td><code>POST siem/preview</code></td>
+</tr>
+<tr>
+<td>Wizard step 5 — Test connection</td>
+<td><code>POST siem/connectors/test</code></td>
+</tr>
+<tr>
+<td>Wizard step 5 — Save</td>
+<td><code>POST siem/connectors</code></td>
+</tr>
+<tr>
+<td>Start / pause a destination</td>
+<td><code>POST siem/connectors/toggle/{id}</code></td>
+</tr>
+<tr>
+<td>Delete a destination</td>
+<td><code>POST siem/connectors/delete/{id}</code></td>
+</tr>
+<tr>
+<td>Delivery health screen</td>
+<td><code>POST siem/connectors/{id}/health</code></td>
+</tr>
+<tr>
+<td>Retry now</td>
+<td><code>POST siem/connectors/{id}/retry</code></td>
+</tr>
+<tr>
+<td>Backfill</td>
+<td><code>POST siem/connectors/{id}/backfill</code></td>
+</tr>
+<tr>
+<td>Create API client</td>
+<td><code>POST siem/clients</code></td>
+</tr>
+<tr>
+<td>Rotate secret</td>
+<td><code>POST siem/clients/{id}/rotate</code></td>
+</tr>
+<tr>
+<td>End rotation overlap early</td>
+<td><code>POST siem/clients/{id}/rotate/complete</code></td>
+</tr>
+<tr>
+<td>Revoke client</td>
+<td><code>POST siem/clients/{id}/revoke</code></td>
+</tr>
+<tr>
+<td>Verify setup</td>
+<td><code>POST siem/clients/{id}/verify</code></td>
+</tr>
+<tr>
+<td>Field mapping reference</td>
+<td>`GET siem/field-map?format=json\</td>
+<td>ecs\</td>
+<td>cef`</td>
+</tr>
+<tr>
+<td>Audit log</td>
+<td><code>POST siem/audit/list</code></td>
+</tr>
+</tbody></table>
+<p>Everything lives under <strong>Settings → Integrations → SIEM</strong>, alongside the existing Cloud Discovery integrations. <strong>Reuse that visual language — this is a sibling feature, not a new design system.</strong></p>
+<hr>
+<h2>5. Screen 1 — SIEM landing</h2>
+<h3>5a. Empty state</h3>
+<ul>
+<li><strong>Headline:</strong> <em>Send your DLP events to your SIEM</em></li>
+<li><strong>Sub:</strong> <em>Stream Defensely events into Splunk, Microsoft Sentinel, QRadar or Elastic so your security team sees them alongside everything else they monitor.</em></li>
+<li><strong>Two primary cards, side by side</strong> — the §2 choice:</li>
+</ul>
+<table><thead><tr>
+<th>Card</th>
+<th>Title</th>
+<th>Sub</th>
+<th>Badges</th>
+</tr></thead><tbody>
+<tr>
+<td>Left</td>
+<td><strong>Connect a SIEM</strong></td>
+<td>We send events to your SIEM as they happen.</td>
+<td><code>Real-time</code> · <code>Cloud SIEM</code></td>
+</tr>
+<tr>
+<td>Right</td>
+<td><strong>Create API access</strong></td>
+<td>Your SIEM pulls events from us on a schedule.</td>
+<td><code>Works on-prem</code> · <code>OAuth 2.0</code></td>
+</tr>
+</tbody></table>
+<ul>
+<li>Helper link below: <em>"Which one should I choose?"</em> → opens a short panel with the §2 table.</li>
+</ul>
+<h3>5b. Populated state — two sections on one page</h3>
+<p><strong>Destinations</strong> (push) — one row per connector: vendor logo · display name · endpoint host · status pill · last delivery · 7-day sparkline · <code>⋯</code> menu (Test · Edit · Pause · Delete)</p>
+<p><strong>API clients</strong> (pull) — one row per client: display name · <code>client_id</code> (with copy button) · scopes · last used · status pill · <code>⋯</code> menu (Rotate secret · Revoke · View audit)</p>
+<h3>Status pills — design all five</h3>
+<table><thead><tr>
+<th>Pill</th>
+<th>Colour</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><code>● Connected</code></td>
+<td>green</td>
+<td>Delivering normally</td>
+</tr>
+<tr>
+<td><code>● Pending</code></td>
+<td>grey</td>
+<td>Saved but never successfully tested</td>
+</tr>
+<tr>
+<td><code>● Failing</code></td>
+<td>red</td>
+<td>3+ consecutive delivery failures — events are queuing</td>
+</tr>
+<tr>
+<td><code>● Paused</code></td>
+<td>amber</td>
+<td>Admin stopped it; nothing is being sent</td>
+</tr>
+<tr>
+<td><code>● Revoked</code></td>
+<td>dark grey</td>
+<td>Credential killed; cannot be restored</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>6. Screen 2 — Connect a SIEM (push wizard, 5 steps)</h2>
+<h3>Step 1 — Choose a destination</h3>
+<p>Card grid. <strong>Available:</strong> Splunk HEC · Microsoft Sentinel · Elastic · Generic Webhook. <strong>Greyed with a <code>Coming soon</code> ribbon:</strong> IBM QRadar · Syslog.</p>
+<blockquote>The vendor list comes from <code>GET siem/providers</code>, including the field definitions for step 2.</blockquote>
+<blockquote><strong>Design the card so a new vendor can be added with no UI release</strong> — the same approach the Cloud</blockquote>
+<blockquote>Discovery wizard already uses.</blockquote>
+<h3>Step 2 — Credentials</h3>
+<p>Fields change per vendor. All four variants need designing:</p>
+<table><thead><tr>
+<th>Splunk HEC</th>
+<th>Microsoft Sentinel</th>
+<th>Elastic</th>
+<th>Generic Webhook</th>
+</tr></thead><tbody>
+<tr>
+<td>Display name</td>
+<td>Display name</td>
+<td>Display name</td>
+<td>Display name</td>
+</tr>
+<tr>
+<td>Collector URL</td>
+<td>DCE endpoint URL</td>
+<td>Elasticsearch URL</td>
+<td>Webhook URL</td>
+</tr>
+<tr>
+<td>HEC Token 🔒</td>
+<td>Entra Tenant ID</td>
+<td>API Key 🔒</td>
+<td>Auth type: Bearer / Basic / Header</td>
+</tr>
+<tr>
+<td>Index <em>(optional)</em></td>
+<td>Client ID</td>
+<td>Index or data stream</td>
+<td>Token 🔒</td>
+</tr>
+<tr>
+<td>Sourcetype <em>(optional)</em></td>
+<td>Client Secret 🔒</td>
+<td></td>
+<td>Custom header name <em>(optional)</em></td>
+</tr>
+<tr>
+<td></td>
+<td>DCR Immutable ID</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>Stream name</td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Placeholder examples to show in the fields:</p>
+<ul>
+<li>Collector URL — <code>https://acme.splunkcloud.com:8088/services/collector/event</code></li>
+<li>Sourcetype — default <code>defensely:dlp</code></li>
+<li>DCR Immutable ID — <code>dcr-7f2e8d4a6b104c9e8a1b3d5c7e9f0a2b</code></li>
+</ul>
+<p><strong>🔒 = secret field.</strong> Masked input. <strong>Never echo a stored secret back on edit</strong> — show <code>Token ending ••••a3f9</code> with a <strong>Replace</strong> button instead of the value.</p>
+<p>Every field needs a <code>?</code> tooltip saying <strong>where in their SIEM to find that value</strong>, e.g. <em>"Splunk → Settings → Data Inputs → HTTP Event Collector → your token."</em> <strong>This copy is the single biggest driver of support tickets — please draft it with the backend team.</strong></p>
+<p>Collapsed by default at the bottom: <strong>Custom CA certificate (PEM)</strong> textarea, for on-prem SIEMs using a private certificate authority.</p>
+<h3>Step 3 — What to send</h3>
+<p>Radio group:</p>
+<ul>
+<li><code>All DLP events</code> <em>(default)</em></li>
+<li><code>Only Critical and High severity</code></li>
+<li><code>Custom filter</code> → opens the <strong>existing alert-rule condition builder</strong>, reusing the same 20 fields (PolicyAction, Severity, ContentType, Username, FileName, Url, MachineName, PolicyName, TransferTypeName, FileType, IsLargeFile, ReceivedTime …). Do not design a second filter UI.</li>
+</ul>
+<p>Below it, a separate bordered block — <strong>security-critical, give it visual weight</strong>:</p>
+<blockquote><strong>Matched sensitive content</strong></blockquote>
+<blockquote>◉ <strong>Do not include</strong> — only metadata leaves Defensely <em>(default, pre-selected)</em></blockquote>
+<blockquote>○ Include a summary of what matched — e.g. <code>PII: 2, PHI: 1</code></blockquote>
+<blockquote></blockquote>
+<blockquote>⚠ <em>Only the category and the number of matches. The matched values themselves never leave Defensely.</em></blockquote>
+<p>There is deliberately <strong>no third option</strong>, and the second one is a <em>summary</em>, not masked content — no matched value is ever copied, in any form. The database column physically cannot store any other setting.</p>
+<p>For the designer: option 2 is safer than it may read, so it does not need a heavy warning treatment. The emphasis belongs on option 1 being the default.</p>
+<h3>Step 4 — Format</h3>
+<p>Radio: <code>JSON (recommended)</code> · <code>ECS</code> · <code>CEF</code>. Beside it, a <strong>live preview pane</strong> showing a real sample event in the chosen format (<code>POST siem/preview</code>). Monospace, scrollable, with a copy button.</p>
+<h3>Step 5 — Test &amp; save</h3>
+<p><strong>Four states of the Test button — all need designing:</strong></p>
+<table><thead><tr>
+<th>State</th>
+<th>Appearance</th>
+</tr></thead><tbody>
+<tr>
+<td>Idle</td>
+<td><code>Test connection</code></td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Spinner · <em>"Sending a test event to splunk.acme.com…"</em></td>
+</tr>
+<tr>
+<td>Success</td>
+<td>Green · <em>"Test event delivered. Check index <code>main</code> in Splunk."</em> + collapsible <strong>View the event we sent</strong></td>
+</tr>
+<tr>
+<td>Failure</td>
+<td>Red · the real reason <strong>and the fix</strong> (see §9)</td>
+</tr>
+</tbody></table>
+<p><strong>Save is disabled until a test succeeds.</strong></p>
+<p>A saved connector starts as <strong><code>Paused</code></strong>. An explicit <strong>Start sending</strong> toggle turns it on — nobody should accidentally begin streaming their DLP data to an external system.</p>
+<hr>
+<h2>7. Screen 3 — Create API access (pull / OAuth)</h2>
+<h3>Step 1 — Name it</h3>
+<ul>
+<li><em>"What will use this?"</em> → e.g. <code>Splunk — Production</code></li>
+<li>Scopes: <code>siem:events.read</code> — pre-checked and disabled in v1</li>
+<li>Optional: IP allowlist (CIDR list), collapsed, with help text that most customers should leave it empty because SIEM egress ranges change</li>
+</ul>
+<h3>Step 2 — Credentials created ⚠ the most important screen in the feature</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Behaviour</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Client ID</code></td>
+<td>Shown, copy button, always retrievable later</td>
+</tr>
+<tr>
+<td><code>Client Secret</code></td>
+<td><strong>Shown once. Never again.</strong> Copy button.</td>
+</tr>
+<tr>
+<td><code>Token URL</code></td>
+<td>Shown, copy button</td>
+</tr>
+<tr>
+<td><code>Events URL</code></td>
+<td>Shown, copy button</td>
+</tr>
+</tbody></table>
+<p>The secret sits under an unmissable banner:</p>
+<blockquote>🔐 <strong>Copy this secret now. We will never show it again.</strong></blockquote>
+<blockquote>If you lose it, you will have to rotate the credential.</blockquote>
+<p>Also on this screen: <strong>Download setup guide</strong> — a ready-made config the admin pastes into their SIEM (a Splunk REST-input stanza, a Sentinel CCP block, an Elastic <code>httpjson</code> config). This is what turns a 30-minute setup into a 3-minute one.</p>
+<p><strong>Leaving the page requires ticking "I have saved the secret."</strong></p>
+<h3>Step 3 — Verify</h3>
+<p>A <strong>Verify setup</strong> button that performs a real token request plus one event read, and reports back in the same four states as §6 step 5.</p>
+<h3>Rotate flow (from the <code>⋯</code> menu)</h3>
+<p>Modal copy:</p>
+<blockquote><em>Your old secret keeps working for 24 hours, so you can update your SIEM without downtime.</em></blockquote>
+<p>→ new secret shown once → a persistent banner on the row: <code>Old secret expires in 23h 41m</code> with an <strong>End overlap now</strong> action.</p>
+<h3>Revoke flow</h3>
+<p>Confirm dialog naming the client:</p>
+<blockquote><em>Your SIEM will stop receiving events within 60 seconds. This cannot be undone.</em></blockquote>
+<hr>
+<h2>8. Screens 4–6</h2>
+<h3>Screen 4 — Delivery health (per destination)</h3>
+<ul>
+<li>Four stat tiles: <code>Events sent (24h)</code> · <code>Failed</code> · <code>Backlog</code> · <code>Last success</code></li>
+<li>Time-series chart: sent vs failed, 7 days</li>
+<li><strong>Failure banner</strong> when <code>Status = Failing</code> — the real last error, when it started, how many events are waiting, and a <strong>Retry now</strong> button:</li>
+</ul>
+<blockquote><em>Delivery failing since 14:00. 1,284 events waiting.</em></blockquote>
+<blockquote><em>Last error: connection timed out to splunk.acme.com:8088</em></blockquote>
+<ul>
+<li>Recent deliveries table: time · batch size · status · duration · error</li>
+<li><strong>Backfill</strong> action → date range picker (max 90 days) → progress bar: <em>"Backfilling… 12,400 / 184,210 events (7%) · ~24 min remaining"</em></li>
+</ul>
+<blockquote>Important for design: when a customer's SIEM is down, <strong>we keep queuing — nothing is dropped.</strong></blockquote>
+<blockquote>The UI must communicate "waiting, not lost." The backlog number is reassurance, not an error.</blockquote>
+<h3>Screen 5 — Field mapping reference (read-only)</h3>
+<p>A static table the customer's SOC engineer reads so they know what to expect. Format switcher (JSON / ECS / CEF) and a copy-as-CSV button. Low design effort, high support value.</p>
+<table><thead><tr>
+<th>Defensely</th>
+<th>Canonical</th>
+<th>ECS</th>
+<th>CEF</th>
+</tr></thead><tbody>
+<tr>
+<td>EnrichedId</td>
+<td><code>event_id</code></td>
+<td><code>event.id</code></td>
+<td><code>externalId</code></td>
+</tr>
+<tr>
+<td>ReceivedTime</td>
+<td><code>@timestamp</code></td>
+<td><code>@timestamp</code></td>
+<td><code>rt</code> <em>(epoch ms)</em></td>
+</tr>
+<tr>
+<td>Username</td>
+<td><code>user.name</code></td>
+<td><code>user.name</code></td>
+<td><code>suser</code></td>
+</tr>
+<tr>
+<td>EmployeeCode</td>
+<td><code>user.id</code></td>
+<td><code>user.id</code></td>
+<td><code>suid</code></td>
+</tr>
+<tr>
+<td>MachineName</td>
+<td><code>host.name</code></td>
+<td><code>host.hostname</code></td>
+<td><code>shost</code></td>
+</tr>
+<tr>
+<td>SerialNumber</td>
+<td><code>host.id</code></td>
+<td><code>host.id</code></td>
+<td><code>deviceExternalId</code></td>
+</tr>
+<tr>
+<td>FileName <em>(name only)</em></td>
+<td><code>file.name</code></td>
+<td><code>file.name</code></td>
+<td><code>fname</code></td>
+</tr>
+<tr>
+<td>FileType</td>
+<td><code>file.extension</code></td>
+<td><code>file.extension</code></td>
+<td><code>fileType</code></td>
+</tr>
+<tr>
+<td>FileSize</td>
+<td><code>file.size</code></td>
+<td><code>file.size</code></td>
+<td><code>fsize</code></td>
+</tr>
+<tr>
+<td>AppDeviceName</td>
+<td><code>destination.app</code></td>
+<td><code>dlp.destination_app</code></td>
+<td><code>destinationServiceName</code></td>
+</tr>
+<tr>
+<td>Url <em>(host only)</em></td>
+<td><code>destination.domain</code></td>
+<td><code>destination.domain</code></td>
+<td><code>destinationDnsDomain</code></td>
+</tr>
+<tr>
+<td>TransferTypeName</td>
+<td><code>dlp.transfer_type</code></td>
+<td><code>dlp.transfer_type</code></td>
+<td><code>cs3</code></td>
+</tr>
+<tr>
+<td>ContentType</td>
+<td><code>dlp.content_type</code></td>
+<td><code>rule.category</code></td>
+<td><code>cs2</code></td>
+</tr>
+<tr>
+<td>PolicyName</td>
+<td><code>dlp.policy</code></td>
+<td><code>rule.name</code></td>
+<td><code>cs1</code></td>
+</tr>
+<tr>
+<td>PolicyAction</td>
+<td><code>dlp.action</code></td>
+<td><code>event.action</code></td>
+<td><code>act</code></td>
+</tr>
+<tr>
+<td>RiskScore</td>
+<td><code>dlp.risk_score</code></td>
+<td><code>event.risk_score</code></td>
+<td><code>cn1</code></td>
+</tr>
+<tr>
+<td>Severity <em>(word)</em></td>
+<td><code>event.severity</code></td>
+<td><code>dlp.severity</code></td>
+<td><code>cs4</code></td>
+</tr>
+<tr>
+<td>Severity <em>(number)</em></td>
+<td><code>event.severity_num</code></td>
+<td><code>event.severity</code></td>
+<td>header slot 7</td>
+</tr>
+</tbody></table>
+<p>Two details the customer's SOC engineer will ask about:</p>
+<ul>
+<li><strong>Severity is carried twice.</strong> ECS types <code>event.severity</code> as a number, so the numeric form goes there and the word lives at <code>dlp.severity</code>. Putting <code>"Critical"</code> in <code>event.severity</code> makes Elastic reject the document outright. Numbers are <code>Critical → 9</code> · <code>High → 7</code> · <code>Medium → 5</code> · <code>Low → 3</code> · <code>Unknown → 0</code>, spread so a rule can filter <code>&gt;= 7</code> and still work if a level is added later.</li>
+<li><strong>Not <code>dst</code>.</strong> In CEF, <code>dst</code> is an IP address field — a collector will either reject a hostname there or index it as an address. The correct keys for a named destination are <code>destinationServiceName</code> and <code>destinationDnsDomain</code>.</li>
+</ul>
+<p>LEEF (for IBM QRadar) is v2 and not listed here yet.</p>
+<h3>Screen 6 — Audit log</h3>
+<p>Table: time · action · who · from where · outcome. Filter by action and date. Export. <strong>Read-only — no edit, no delete</strong>, and the UI should make that visually obvious. This is the evidence trail for "who sent our DLP data where."</p>
+<hr>
+<h2>9. Error copy — please draft all of these</h2>
+<p>The design rule throughout: <strong>the message names the setup step to revisit, not just the HTTP code.</strong></p>
+<table><thead><tr>
+<th>Situation</th>
+<th>Message</th>
+</tr></thead><tbody>
+<tr>
+<td>Not HTTPS</td>
+<td><em>Only https:// addresses are accepted. Check the collector URL.</em></td>
+</tr>
+<tr>
+<td>Private/internal address</td>
+<td><em>That address is on an internal network and cannot be reached from Defensely. Use your SIEM's public hostname.</em></td>
+</tr>
+<tr>
+<td>Bad URL</td>
+<td><em>This doesn't look like a valid address. Example: <code>https://acme.splunkcloud.com:8088/services/collector/event</code></em></td>
+</tr>
+<tr>
+<td>401</td>
+<td><em>The token was rejected. Check it in Splunk → Settings → Data Inputs → HTTP Event Collector.</em></td>
+</tr>
+<tr>
+<td>403</td>
+<td><em>Your SIEM accepted the token but refused the request. Check the token's index permissions.</em></td>
+</tr>
+<tr>
+<td>404</td>
+<td><em>No collector found at that path. Splunk URLs usually end in <code>/services/collector/event</code>.</em></td>
+</tr>
+<tr>
+<td>Timeout</td>
+<td><em>No response from splunk.acme.com within 15 seconds. Check the host is reachable and the port is open.</em></td>
+</tr>
+<tr>
+<td>TLS failure</td>
+<td><em>The certificate could not be verified. If your SIEM uses a private certificate authority, add its CA certificate in step 2.</em></td>
+</tr>
+<tr>
+<td>Rate limited</td>
+<td><em>Your SIEM is asking us to slow down. We'll retry automatically.</em></td>
+</tr>
+<tr>
+<td>Permission denied</td>
+<td><em>You need the SIEM administrator permission to change this. Contact your Defensely admin.</em></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>10. Cross-cutting design requirements</h2>
+<ol>
+<li><strong>Every secret field</strong> uses the same masked-input + <strong>Replace</strong> pattern. A stored secret is never rendered, on any screen, to any role.</li>
+<li><strong>Every list and detail screen</strong> needs four states: empty · loading skeleton · error · <strong>permission denied</strong> (visible but read-only for non-admins).</li>
+<li><strong>Desktop-first.</strong> These are admin screens. Tablet-responsive is enough; phone is not a target.</li>
+<li><strong>Reuse the existing Integrations / Cloud Discovery patterns</strong> — grid, wizard chrome, status pills, <code>⋯</code> menus.</li>
+</ol>
+<hr>
+<h2>11. Reference — what one event looks like</h2>
+<p>This is what lands in the customer's SIEM. Useful for the preview pane and the setup guide.</p>
+<pre><code>
+{
+  "schema_version": "1.0",
+  "event_id": "558213",
+  "event_class": "file.transfer.blocked",
+  "@timestamp": "2026-10-15T11:47:02Z",
+  "tenant_id": "a311119f-4c2e-4e2a-9f11-7b3d5c8e1a02",
+  "vendor": "Defensely",
+  "product": "DLP",
+  "user":        { "name": "selva.m@acme.com", "id": "EMP-4471" },
+  "host":        { "name": "LAP-4471", "id": "PF2X9KQ3", "os": "Windows 11" },
+  "file":        { "name": "customers.xlsx", "extension": "xlsx", "size": 2516582 },
+  "destination": { "app": "Dropbox", "domain": "dropbox.com" },
+  "dlp": {
+    "transfer_type": "Upload",
+    "content_type": "PII",
+    "policy": "PII Block",
+    "action": "Block",
+    "override_applied": false,
+    "risk_score": 87
+  },
+  "event": { "severity": "Critical", "severity_num": 9 },
+  "incident_url": "https://qadlp.defensely.ai/incidents/558213"
+}
+</code></pre>
+<p>Note what is <strong>not</strong> in it: no matched card numbers, no full file path, no URL query string, no AI verdict text. That exclusion is deliberate and permanent.</p>
+<p>The same event in CEF:</p>
+<pre><code>
+CEF:0|Defensely|DLP|1.0|file.transfer.blocked|Sensitive file upload blocked|9|rt=1760528822000
+suser=selva.m@acme.com shost=LAP-4471 fname=customers.xlsx fsize=2516582 act=Block dst=Dropbox
+cs1Label=PolicyName cs1=PII Block cs2Label=ContentType cs2=PII cn1Label=RiskScore cn1=87
+externalId=558213
+</code></pre>
+<hr>
+<h2>12. Reference — the end-to-end story (for the storyboard)</h2>
+<pre><code>
+11:47:02  An employee drags customers.xlsx into Dropbox
+11:47:02  Defensely agent scans it → 500 card numbers → PII
+11:47:03  Policy "PII Block" → BLOCKED, popup shown to the employee
+11:47:09  Event enriched and stored
+11:48:00  The customer's Splunk polls us and collects it
+11:48:01  Event indexed in Splunk
+11:48:05  Splunk correlates: same user, VPN login from a new country at 11:20
+          → SOC analyst gets a P1 alert
+</code></pre>
+<p><strong>63 seconds</strong> from the drag to the alert. That correlation on the last line is the entire value of the feature — Defensely supplies one puzzle piece, and the SIEM already holds the others.</p>
+
+<div class="doc-foot">Defensely DLP &middot; SIEM Integration - UI / UX Design Guide &middot; generated 2026-10-30</div>
+</body></html>

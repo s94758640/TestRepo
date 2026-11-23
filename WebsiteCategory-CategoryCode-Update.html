@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Category Code Update</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  :root:not([data-theme="light"]) th { background:#22262d; }
+  :root:not([data-theme="light"]) tbody tr:nth-child(even) { background:#191c21; }
+  :root:not([data-theme="light"]) blockquote { background:#1a1e24; }
+}
+:root[data-theme="dark"] { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+:root[data-theme="dark"] th { background:#22262d; }
+:root[data-theme="dark"] tbody tr:nth-child(even) { background:#191c21; }
+:root[data-theme="dark"] blockquote { background:#1a1e24; }</style></head><body>
+<h1>CheckWebSiteCategory &amp; PolicySnapshot — Category Code Update</h1>
+<p><strong>Audience:</strong> agent (exe) team, web console team, QA &nbsp;<strong>What:</strong> new Category AI host with bearer auth, <code>topCategoryCode</code>/<code>topSubCategoryCode</code> on the verdict, and matching <code>categoryCode</code> on the policy snapshot &nbsp;<strong>Status:</strong> backend complete on <code>Deployment/QA_V1</code>; live after the rollout in §6</p>
+<p>This updates the original <em>CheckWebSiteCategory — API Integration Guide</em> (<code>WebsiteCategory-API-Integration.html</code>); its §5 (AI service) and §7 (rollout, ApiKey) are superseded by §2 and §6 here. Everything else in that guide — request shape, caching rules, errors, storage — is unchanged.</p>
+<hr>
+
+<h2>1. What changed, in one table</h2>
+<table><thead><tr><th>Area</th><th>Before</th><th>Now</th></tr></thead><tbody>
+<tr><td>Category AI host</td><td><code>qa-ai.bravemoss…/api/categorize-website</code></td><td><code>qa-agent-chatbot.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io/categorize-website</code></td></tr>
+<tr><td>AI auth</td><td>static <code>X-API-Key</code> header</td><td>username/password login → <strong>bearer token</strong> (AiApiOptions-style); X-API-Key kept only as a legacy fallback</td></tr>
+<tr><td>AI response fields</td><td><code>top_category</code>, <code>top_subcategory</code></td><td><code>category</code>, <code>subcategory</code>, plus <code>vulnerability</code> (old names still parsed as fallback)</td></tr>
+<tr><td>CheckWebSiteCategory response</td><td>—</td><td><strong>unchanged</strong>, plus two new fields: <code>topCategoryCode</code>, <code>topSubCategoryCode</code></td></tr>
+<tr><td>PolicySnapshot (<code>V2/PolicySnapshot</code>)</td><td><code>catalogRefs.webCategories: [{ code }]</code></td><td><code>[{ code, name, categoryCode }]</code> — <code>categoryCode</code> is what the exe matches against</td></tr>
+<tr><td>Database</td><td colspan="2">no change — codes are derived at read time, so already-cached domains return them too</td></tr>
+</tbody></table>
+
+<hr>
+<h2>2. The AI service behind it (backend reference)</h2>
+<p>Callers never talk to this directly — <code>WebsiteCategoryService</code> does — but this is the new contract:</p>
+<pre><code>
+# 1. Login (token cached in-process, refreshed 300 s before expiry, one retry on 401)
+POST https://qa-agent-chatbot.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io/login
+Body: { "username": "…", "password": "…", "name": "…" }
+→ bearer token (token.access | access_token | token accepted)
+
+# 2. Categorise
+POST https://qa-agent-chatbot.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io/categorize-website
+Header: Authorization: Bearer &lt;token&gt;
+Body:   form-encoded   url=https://www.wikipedia.org
+
+Response:
+{
+  "url": "https://www.wikipedia.org",
+  "domain": "www.wikipedia.org",
+  "category": "Reference",
+  "subcategory": "Encyclopedias",
+  "category_percentage": 100.0,
+  "subcategory_percentage": 100.0,
+  "vulnerability": "Safe"
+}
+</code></pre>
+<p><code>category</code>/<code>subcategory</code> map to <code>topCategory</code>/<code>topSubCategory</code> and are stored verbatim, exactly as the old field names were. <code>vulnerability</code> is parsed but not stored or returned yet. If a deployment still sends the old <code>top_category</code>/<code>top_subcategory</code> names, they are accepted as fallbacks.</p>
+
+<hr>
+<h2>3. CheckWebSiteCategory — the two new fields</h2>
+<p>Both routes (<code>POST /CheckWebSiteCategory</code> on the DLP API, <code>POST V1/CheckWebSiteCategory</code> on the ExeApi) return the same response as before, with two additions:</p>
+<pre><code>
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "url": "https://www.wikipedia.org/",
+    "domain": "www.wikipedia.org",
+    "topCategory": "Reference",
+    "categoryPercentage": 100.0,
+    "topSubCategory": "Encyclopedias",
+    "subCategoryPercentage": 100.0,
+    "topCategoryCode": "REFERENCE",        ← NEW
+    "topSubCategoryCode": "ENCYCLOPEDIAS", ← NEW
+    "fromCache": false,
+    "categorizedAt": "2026-10-12T09:14:02Z"
+  },
+  "errors": null
+}
+</code></pre>
+<p>The codes are a stable, deterministic form of the AI's labels: <strong>uppercase, every run of non-alphanumeric characters becomes one underscore, no leading/trailing underscore</strong>. They exist so the exe compares codes, never display names:</p>
+<table><thead><tr><th>Label</th><th>Code</th></tr></thead><tbody>
+<tr><td>Reference</td><td><code>REFERENCE</code></td></tr>
+<tr><td>Social Media</td><td><code>SOCIAL_MEDIA</code></td></tr>
+<tr><td>Malware &amp; Phishing</td><td><code>MALWARE_PHISHING</code></td></tr>
+<tr><td>Photo and Video Sharing</td><td><code>PHOTO_AND_VIDEO_SHARING</code></td></tr>
+<tr><td>E-commerce</td><td><code>E_COMMERCE</code></td></tr>
+</tbody></table>
+<p>Null label → null code. Cached rows categorised before this change return codes too — the derivation runs at read time, not at store time.</p>
+
+<hr>
+<h2>4. PolicySnapshot — what the exe matches against</h2>
+<p>Each web category the policy references now appears in <code>catalogRefs.webCategories</code> with three fields:</p>
+<pre><code>
+"catalogRefs": {
+  "webCategories": [
+    { "code": "ADULT",    "name": "Adult Content", "categoryCode": "ADULT_CONTENT" },
+    { "code": "GAMBLING", "name": "Gambling",      "categoryCode": "GAMBLING" }
+  ]
+}
+</code></pre>
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>code</code></td><td>The hand-written catalog code. This is the key used <em>inside the policy document</em> — <code>modules.webFiltering.customRules.restrictedCategories</code> and <code>siteOrCategory.value</code> refer to it. Unchanged.</td></tr>
+<tr><td><code>name</code></td><td>The category's display name, for logs and debugging.</td></tr>
+<tr><td><code>categoryCode</code></td><td><strong>The match key.</strong> Derived from <code>name</code> with the <em>same</em> rule as §3, so it is directly comparable with the verdict's <code>topCategoryCode</code> / <code>topSubCategoryCode</code>.</td></tr>
+</tbody></table>
+<blockquote><strong>Why not match on <code>code</code>?</strong> Catalog codes are hand-written and don't always equal the derived form — "Adult Content" is <code>ADULT</code> in the catalog but derives to <code>ADULT_CONTENT</code>. <code>categoryCode</code> removes that drift: both sides of the comparison come from one shared derivation.</blockquote>
+
+<h3>4.1 Exe matching recipe</h3>
+<pre><code>
+verdict = CheckWebSiteCategory(url)        // topCategoryCode, topSubCategoryCode
+
+for ref in snapshot.catalogRefs.webCategories:
+    if ref.categoryCode == verdict.topCategoryCode
+    or ref.categoryCode == verdict.topSubCategoryCode:
+        matchedCatalogCode = ref.code      // e.g. "ADULT"
+        break
+
+// Then apply the policy using matchedCatalogCode against
+// modules.webFiltering (restrictedCategories / siteOrCategory.value).
+</code></pre>
+<p>Compare against <em>both</em> verdict codes: a catalog entry like "Social Media" may arrive from the AI as the top category of one site and the subcategory of another. Case-sensitive compare is fine — both sides are already uppercase.</p>
+
+<hr>
+<h2>5. Behaviour that did <em>not</em> change</h2>
+<ul>
+<li>Request shape, URL normalisation, per-domain tenant cache, <code>fromCache</code>, error statuses (400 / 502 / 500) — all exactly as in the original guide.</li>
+<li><code>master."WebsiteCategory"</code> — no new columns, no migration, no backfill.</li>
+<li>The policy document itself (<code>modules.webFiltering</code>) — still keyed by catalog <code>code</code>.</li>
+<li>Snapshot <code>hash</code> semantics — the hash still covers the compiled payload; it simply changes on the next publish because the payload gained fields.</li>
+</ul>
+
+<hr>
+<h2>6. Rollout checklist</h2>
+<ol>
+<li><strong>Configure both hosts</strong> (DLP API app settings and ExeApi function app):
+<table><thead><tr><th>Setting</th><th>QA value</th></tr></thead><tbody>
+<tr><td><code>WebsiteCategoryOptions__Url</code></td><td><code>https://qa-agent-chatbot.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io/categorize-website</code></td></tr>
+<tr><td><code>WebsiteCategoryOptions__LoginUrl</code></td><td><code>https://qa-agent-chatbot.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io/login</code></td></tr>
+<tr><td><code>WebsiteCategoryOptions__Username</code> / <code>__Password</code> / <code>__Name</code></td><td>the Category AI credentials — <strong>verify with the AI team</strong>; the repo currently carries the AiApiOptions QA credentials</td></tr>
+<tr><td><code>WebsiteCategoryOptions__TokenRefreshSkewSeconds</code></td><td><code>300</code></td></tr>
+<tr><td><code>WebsiteCategoryOptions__ApiKey</code></td><td>leave blank — only used (as X-API-Key) when Username is blank, for an old-style deployment</td></tr>
+</tbody></table></li>
+<li><strong>Deploy</strong> SFM.DLP.API and SFM.DLP.ExeApi. No SQL to run.</li>
+<li><strong>Republish policies</strong> that use web filtering. <code>categoryCode</code>/<code>name</code> are added when a snapshot is <em>compiled</em>, so an already-published snapshot doesn't have them until its policy is republished (agents then pick up the new snapshot on their next PolicyCheck — the hash changes).</li>
+<li><strong>Verify:</strong> POST a URL to <code>CheckWebSiteCategory</code> and see the two code fields; fetch <code>V2/PolicySnapshot</code> for a republished policy and see <code>categoryCode</code> under <code>catalogRefs.webCategories</code>.</li>
+</ol>
+<blockquote><strong>One rule to protect:</strong> the code derivation is shared by both APIs (<code>WebsiteCategoryCodes.ToCode</code>, locked by unit tests). Changing it — or renaming a WebCategory display name — breaks matching until every affected policy is republished.</blockquote>
+
+<div class="doc-foot">Category code update — SFM.DLP.API <code>POST /CheckWebSiteCategory</code> · SFM.DLP.ExeApi <code>POST V1/CheckWebSiteCategory</code> · <code>V2/PolicySnapshot</code> (both hosts) · shared derivation <code>WebsiteCategoryCodes</code> · branch <code>Deployment/QA_V1</code> · 2026-10-12</div>
+</body></html>

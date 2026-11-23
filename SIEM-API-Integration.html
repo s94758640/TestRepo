@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect your SIEM to Defensely</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Connect your SIEM to Defensely</h1>
+<p><strong>Audience:</strong> the customer's SOC or platform engineer · <strong>You will need:</strong> an admin account in Defensely and permission to add a data input to your SIEM <strong>Status:</strong> pull access (your SIEM collects from us) is implemented. Push (we send to you) is not built yet. <strong>Time:</strong> about 5 minutes.</p>
+<hr>
+<h2>1. How it works</h2>
+<p>Your SIEM calls us. You give it a client id and secret; it exchanges those for a token and then polls for new events.</p>
+<pre><code>
+Your SIEM  ──POST /oauth/token──────────►  Defensely     (once an hour)
+Your SIEM  ──GET  /siem/events──────────►  Defensely     (every minute)
+</code></pre>
+<p>Nothing needs to be reachable from the internet on your side. This works for a Splunk or QRadar installed inside your own network, which is why it is the option we built first.</p>
+<p><strong>Base URL:</strong> <code>https://qa-email.azure-api.net/qadlp</code> Your Defensely admin sees the exact URLs for your environment on the screen where the credential is created.</p>
+<hr>
+<h2>2. Get a credential</h2>
+<p>In Defensely: <strong>Settings → Integrations → SIEM → Create API access.</strong></p>
+<p>Name it after whatever will use it — <code>Splunk — Production</code> — and save. You will be shown:</p>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Client ID</strong></td>
+<td><code>siem_7Kp2mQx9vB4nL1wR8tZ3cF</code> — not secret, safe to log</td>
+</tr>
+<tr>
+<td><strong>Client Secret</strong></td>
+<td>shown <strong>once</strong></td>
+</tr>
+<tr>
+<td><strong>Token URL</strong></td>
+<td><code>…/oauth/token</code></td>
+</tr>
+<tr>
+<td><strong>Events URL</strong></td>
+<td><code>…/siem/events</code></td>
+</tr>
+</tbody></table>
+<blockquote>⚠ <strong>Copy the secret before leaving that page.</strong> There is no endpoint that can</blockquote>
+<blockquote>return it afterwards — not for you, not for Defensely support. If it is lost,</blockquote>
+<blockquote>rotate the credential and update your SIEM with the new one.</blockquote>
+<hr>
+<h2>3. Authenticate</h2>
+<p>Standard OAuth 2.0 client credentials (RFC 6749 §4.4). Credentials go in the form body or in an HTTP Basic header — both work, use whichever your connector produces.</p>
+<pre><code>
+POST /oauth/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&amp;client_id=siem_7Kp2…&amp;client_secret=…
+</code></pre>
+<pre><code>
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs…",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "siem:events.read"
+}
+</code></pre>
+<p>Cache the token for its full <code>expires_in</code> and refresh on expiry or on a <code>401</code>. Requesting a new token for every poll will hit the rate limit.</p>
+<p><strong>Errors</strong> are RFC 6749 shaped — <code>{"error":"invalid_client"}</code> with <code>401</code>, or <code>400</code> for everything else.</p>
+<table><thead><tr>
+<th>Error</th>
+<th>What to check</th>
+</tr></thead><tbody>
+<tr>
+<td><code>invalid_client</code> (401)</td>
+<td>The client id or secret is wrong, or the credential was revoked.</td>
+</tr>
+<tr>
+<td><code>invalid_request</code> (400)</td>
+<td>A required form field is missing.</td>
+</tr>
+<tr>
+<td><code>unsupported_grant_type</code> (400)</td>
+<td><code>grant_type</code> must be exactly <code>client_credentials</code>.</td>
+</tr>
+<tr>
+<td><code>invalid_scope</code> (400)</td>
+<td>You asked for a scope this credential does not hold. Omit <code>scope</code> to get what it has.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>4. Collect events</h2>
+<pre><code>
+GET /siem/events?limit=100&amp;format=json HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs…
+</code></pre>
+<pre><code>
+{
+  "events": [ { "event_id": "558213", "…": "…" } ],
+  "next_cursor": "558213",
+  "has_more": false,
+  "schema_version": "1.0"
+}
+</code></pre>
+<p><strong>Save <code>next_cursor</code> and send it back on the next call.</strong> That is the whole paging contract — there are no page numbers.</p>
+<pre><code>
+GET /siem/events?cursor=558213&amp;limit=100
+</code></pre>
+<table><thead><tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>cursor</code></td>
+<td>—</td>
+<td><code>next_cursor</code> from your previous response. Omit on the first call.</td>
+</tr>
+<tr>
+<td><code>from</code></td>
+<td>—</td>
+<td>ISO-8601 UTC. Required only on a first call if you want history. Max 7 days per request.</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>100</td>
+<td>Clamped to 1–1000. <code>0</code> is <strong>not</strong> "all".</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td><code>json</code></td>
+<td><code>json</code>, <code>ecs</code>, <code>cef</code>, or <code>leef</code>.</td>
+</tr>
+</tbody></table>
+<p>When <code>has_more</code> is <code>true</code>, call again immediately with the new cursor instead of waiting for your next poll.</p>
+<h3>Two things that will otherwise look like bugs</h3>
+<p><strong>The feed is 30 seconds behind real time, deliberately.</strong> Event ids are allocated in order but their database transactions commit out of order. Serving the newest rows immediately means a poller that reads up to id 500 can permanently miss id 497 — with nothing to indicate anything went wrong. The lag gives those transactions time to land. <strong>Do not</strong> work around it by also filtering on time.</p>
+<p><strong>Delivery is at-least-once.</strong> The same event can arrive twice — after a network timeout, or if your collector replays a cursor. Deduplicate on <code>event_id</code>, which is stable and unique within your tenant.</p>
+<hr>
+<h2>5. Rate limits</h2>
+<p>Per credential, not per IP — so several collectors behind one corporate NAT do not share a budget.</p>
+<table><thead><tr>
+<th></th>
+<th>Limit</th>
+</tr></thead><tbody>
+<tr>
+<td><code>POST /oauth/token</code></td>
+<td>10 / minute</td>
+</tr>
+<tr>
+<td><code>GET /siem/events</code></td>
+<td>60 / minute</td>
+</tr>
+<tr>
+<td><code>GET /siem/events</code></td>
+<td>2 concurrent requests</td>
+</tr>
+</tbody></table>
+<p>Exceeding one returns <code>429</code> with <code>Retry-After: 60</code>. The concurrency cap is the one worth designing around: run a single sequential poller, not a fan-out.</p>
+<hr>
+<h2>6. Paste-ready configuration</h2>
+<h3>Splunk — REST API Modular Input</h3>
+<pre><code>
+[rest://defensely_dlp]
+endpoint = https://qa-email.azure-api.net/qadlp/siem/events
+http_method = GET
+auth_type = oauth2
+oauth2_token_url = https://qa-email.azure-api.net/qadlp/oauth/token
+oauth2_client_id = siem_7Kp2mQx9vB4nL1wR8tZ3cF
+oauth2_client_secret = &lt;your secret&gt;
+oauth2_grant_type = client_credentials
+response_type = json
+json_response_handler = defensely_cursor
+index = main
+sourcetype = defensely:dlp
+polling_interval = 60
+</code></pre>
+<p>Splunk needs a small response handler to carry <code>next_cursor</code> forward and to split the <code>events</code> array into individual events.</p>
+<h3>Elastic — Filebeat <code>httpjson</code></h3>
+<pre><code>
+filebeat.inputs:
+  - type: httpjson
+    interval: 1m
+    auth.oauth2:
+      client.id: siem_7Kp2mQx9vB4nL1wR8tZ3cF
+      client.secret: "&lt;your secret&gt;"
+      token_url: https://qa-email.azure-api.net/qadlp/oauth/token
+    request.url: https://qa-email.azure-api.net/qadlp/siem/events
+    request.method: GET
+    request.transforms:
+      - set:
+          target: url.params.format
+          value: ecs
+      - set:
+          target: url.params.limit
+          value: "500"
+      - set:
+          target: url.params.cursor
+          value: '[[.cursor.next]]'
+          default: ""
+    response.split:
+      target: body.events
+    cursor:
+      next:
+        value: '[[.last_response.body.next_cursor]]'
+</code></pre>
+<p>Use <code>format=ecs</code> for Elastic — the field names then match the schema your existing dashboards and detection rules already use.</p>
+<h3>Microsoft Sentinel — Codeless Connector</h3>
+<pre><code>
+{
+  "auth": {
+    "type": "OAuth2",
+    "grantType": "client_credentials",
+    "tokenEndpoint": "https://qa-email.azure-api.net/qadlp/oauth/token",
+    "ClientId": "siem_7Kp2mQx9vB4nL1wR8tZ3cF",
+    "ClientSecret": "&lt;your secret&gt;"
+  },
+  "request": {
+    "apiEndpoint": "https://qa-email.azure-api.net/qadlp/siem/events",
+    "httpMethod": "GET",
+    "queryParameters": { "limit": 500 },
+    "rateLimitQPS": 1,
+    "queryWindowInMin": 1
+  },
+  "paging": {
+    "pagingType": "NextPageToken",
+    "nextPageParaName": "cursor",
+    "nextPageTokenJsonPath": "$.next_cursor"
+  },
+  "response": { "eventsJsonPaths": [ "$.events" ] }
+}
+</code></pre>
+<h3>Anything else — curl</h3>
+<pre><code>
+TOKEN=$(curl -s -X POST https://qa-email.azure-api.net/qadlp/oauth/token \
+  -d grant_type=client_credentials \
+  -d client_id=siem_7Kp2mQx9vB4nL1wR8tZ3cF \
+  -d client_secret="$SECRET" | jq -r .access_token)
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://qa-email.azure-api.net/qadlp/siem/events?limit=100" | jq .
+</code></pre>
+<hr>
+<h2>7. What an event contains</h2>
+<pre><code>
+{
+  "schema_version": "1.0",
+  "event_id": "558213",
+  "event_class": "file.transfer.blocked",
+  "@timestamp": "2026-10-15T11:47:02.000Z",
+  "tenant_id": "a311119f-4c2e-4e2a-9f11-7b3d5c8e1a02",
+  "vendor": "Defensely",
+  "product": "DLP",
+  "user":        { "name": "selva.m@acme.com", "id": "EMP-4471" },
+  "host":        { "name": "LAP-4471", "id": "PF2X9KQ3", "os": "Windows 11" },
+  "file":        { "name": "customers.xlsx", "extension": "xlsx", "size": 2516582 },
+  "destination": { "app": "Dropbox", "domain": "dropbox.com" },
+  "dlp": {
+    "transfer_type": "Upload",
+    "content_type": "PII",
+    "policy": "PII Block",
+    "action": "Block",
+    "override_applied": false,
+    "risk_score": 87
+  },
+  "event": { "severity": "Critical", "severity_num": 9 },
+  "incident_url": "https://qadlp.defensely.ai/incidents/558213"
+}
+</code></pre>
+<h3>Event classes</h3>
+<p><code>file.transfer.blocked</code> · <code>file.transfer.warned</code> · <code>file.transfer.allowed</code> · <code>file.transfer.uncovered</code> (no policy covered it — a coverage gap worth alerting on) · <code>file.transfer</code> (outcome not classified).</p>
+<p>Match a whole family with the <code>file.transfer.*</code> prefix. These strings are published and will not be renamed; new ones may be added.</p>
+<h3>Severity</h3>
+<table><thead><tr>
+<th>Word</th>
+<th>Number</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Critical</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td><code>High</code></td>
+<td>7</td>
+</tr>
+<tr>
+<td><code>Medium</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>Low</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>Unknown</code></td>
+<td>0</td>
+</tr>
+</tbody></table>
+<p>Spread rather than consecutive so <code>&gt;= 7</code> keeps meaning "High and above" if a level is added later. <code>Unknown</code> means the value was missing or unrecognised — it is deliberately not folded into <code>Low</code>, because reporting an unknown severity as low asserts a judgement we did not make.</p>
+<h3>What is deliberately <strong>not</strong> in the payload</h3>
+<table><thead><tr>
+<th>Omitted</th>
+<th>Why</th>
+</tr></thead><tbody>
+<tr>
+<td>The matched sensitive text</td>
+<td>The actual card numbers or identifiers. This is the data the product exists to protect; copying it into a third system over the internet defeats that.</td>
+</tr>
+<tr>
+<td>Full file path</td>
+<td>A directory tree leaks project names, client names, and usually the person's name a second time. You get the file name.</td>
+</tr>
+<tr>
+<td>Full URL</td>
+<td>Query strings routinely carry session tokens and personal data. You get the host.</td>
+</tr>
+<tr>
+<td>Classification payload, AI verdict text</td>
+<td>Both quote the document contents.</td>
+</tr>
+<tr>
+<td>Evidence video link</td>
+<td>A link to a screen recording does not belong in a log line.</td>
+</tr>
+</tbody></table>
+<p>This is an explicit allow-list in our code with a test asserting those fields stay out, not a filter someone has to remember to apply.</p>
+<hr>
+<h2>8. Field mapping</h2>
+<table><thead><tr>
+<th>Defensely</th>
+<th>Canonical JSON</th>
+<th>ECS</th>
+<th>CEF</th>
+</tr></thead><tbody>
+<tr>
+<td>EnrichedId</td>
+<td><code>event_id</code></td>
+<td><code>event.id</code></td>
+<td><code>externalId</code></td>
+</tr>
+<tr>
+<td>ReceivedTime</td>
+<td><code>@timestamp</code></td>
+<td><code>@timestamp</code></td>
+<td><code>rt</code> <em>(epoch ms)</em></td>
+</tr>
+<tr>
+<td>Username</td>
+<td><code>user.name</code></td>
+<td><code>user.name</code></td>
+<td><code>suser</code></td>
+</tr>
+<tr>
+<td>EmployeeCode</td>
+<td><code>user.id</code></td>
+<td><code>user.id</code></td>
+<td><code>suid</code></td>
+</tr>
+<tr>
+<td>MachineName</td>
+<td><code>host.name</code></td>
+<td><code>host.hostname</code></td>
+<td><code>shost</code></td>
+</tr>
+<tr>
+<td>SerialNumber</td>
+<td><code>host.id</code></td>
+<td><code>host.id</code></td>
+<td><code>deviceExternalId</code></td>
+</tr>
+<tr>
+<td>File name</td>
+<td><code>file.name</code></td>
+<td><code>file.name</code></td>
+<td><code>fname</code></td>
+</tr>
+<tr>
+<td>FileType</td>
+<td><code>file.extension</code></td>
+<td><code>file.extension</code></td>
+<td><code>fileType</code></td>
+</tr>
+<tr>
+<td>FileSize</td>
+<td><code>file.size</code></td>
+<td><code>file.size</code></td>
+<td><code>fsize</code></td>
+</tr>
+<tr>
+<td>AppDeviceName</td>
+<td><code>destination.app</code></td>
+<td><code>dlp.destination_app</code></td>
+<td><code>destinationServiceName</code></td>
+</tr>
+<tr>
+<td>URL host</td>
+<td><code>destination.domain</code></td>
+<td><code>destination.domain</code></td>
+<td><code>destinationDnsDomain</code></td>
+</tr>
+<tr>
+<td>TransferTypeName</td>
+<td><code>dlp.transfer_type</code></td>
+<td><code>dlp.transfer_type</code></td>
+<td><code>cs3</code></td>
+</tr>
+<tr>
+<td>ContentType</td>
+<td><code>dlp.content_type</code></td>
+<td><code>rule.category</code></td>
+<td><code>cs2</code></td>
+</tr>
+<tr>
+<td>PolicyName</td>
+<td><code>dlp.policy</code></td>
+<td><code>rule.name</code></td>
+<td><code>cs1</code></td>
+</tr>
+<tr>
+<td>PolicyAction</td>
+<td><code>dlp.action</code></td>
+<td><code>event.action</code></td>
+<td><code>act</code></td>
+</tr>
+<tr>
+<td>RiskScore</td>
+<td><code>dlp.risk_score</code></td>
+<td><code>event.risk_score</code></td>
+<td><code>cn1</code></td>
+</tr>
+<tr>
+<td>Severity word</td>
+<td><code>event.severity</code></td>
+<td><code>dlp.severity</code></td>
+<td><code>cs4</code></td>
+</tr>
+<tr>
+<td>Severity number</td>
+<td><code>event.severity_num</code></td>
+<td><code>event.severity</code></td>
+<td>header field 7</td>
+</tr>
+</tbody></table>
+<p>Two notes for whoever writes the parser:</p>
+<ul>
+<li><strong>Severity appears twice.</strong> ECS types <code>event.severity</code> as a number, so the numeric form goes there and the word lives at <code>dlp.severity</code>.</li>
+<li><strong>CEF uses <code>destinationDnsDomain</code>, not <code>dst</code>.</strong> In CEF <code>dst</code> is an IP address field; a hostname there is either rejected or indexed as an address.</li>
+</ul>
+<h3>CEF output</h3>
+<p><code>format=cef</code> returns <code>text/plain</code>, one event per line, with paging in headers (<code>X-Next-Cursor</code>, <code>X-Has-More</code>) rather than a JSON envelope.</p>
+<pre><code>
+CEF:0|Defensely|DLP|1.0|file.transfer.blocked|Sensitive data transfer blocked|9|rt=1760528822000
+externalId=558213 suser=selva.m@acme.com shost=LAP-4471 fname=customers.xlsx fileType=xlsx
+fsize=2516582 destinationServiceName=Dropbox destinationDnsDomain=dropbox.com act=Block cat=PII
+cs1Label=PolicyName cs1=PII Block cs2Label=ContentType cs2=PII cs3Label=TransferType cs3=Upload
+cs4Label=Severity cs4=Critical cs5Label=TenantId cs5=a311119f-… cs6Label=OverrideApplied cs6=false
+cn1Label=RiskScore cn1=87
+</code></pre>
+<hr>
+<h2>9. Rotating and revoking</h2>
+<p><strong>Rotate</strong> when a secret may have been exposed, or on your own schedule. The old secret keeps working for <strong>24 hours</strong>, so you can update your SIEM without an outage. End the overlap early from the Defensely UI once you have switched.</p>
+<p><strong>Revoke</strong> is immediate and permanent. Both the current and any rotating-out secret stop working, and tokens already issued stop being accepted within <strong>60 seconds</strong>. Create a new credential to reconnect — a revoked one cannot be rotated back to life.</p>
+<hr>
+<h2>10. Troubleshooting</h2>
+<table><thead><tr>
+<th>Symptom</th>
+<th>Cause</th>
+</tr></thead><tbody>
+<tr>
+<td><code>401 invalid_client</code> on every request</td>
+<td>Wrong secret, or the credential was revoked. Check the status in Defensely; rotate if the secret was lost.</td>
+</tr>
+<tr>
+<td><code>401</code> after working for an hour</td>
+<td>The token expired and is not being refreshed. Refresh on <code>expires_in</code> or on a <code>401</code>.</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Polling faster than once a minute, requesting a token per poll, or running concurrent pollers.</td>
+</tr>
+<tr>
+<td>Events stop but no error</td>
+<td>Your cursor is past the newest event. Normal during quiet periods — <code>events</code> is empty and <code>next_cursor</code> is <code>null</code>. Keep the cursor you have; do not reset it to zero or you will replay the window.</td>
+</tr>
+<tr>
+<td>Newest events missing for ~30s</td>
+<td>Expected. See §4.</td>
+</tr>
+<tr>
+<td>Duplicate events</td>
+<td>Expected at least once. Deduplicate on <code>event_id</code>.</td>
+</tr>
+<tr>
+<td><code>400 unsupported_format</code></td>
+<td><code>format</code> must be <code>json</code>, <code>ecs</code> or <code>cef</code>. LEEF is not implemented.</td>
+</tr>
+<tr>
+<td>Nothing arrives at all, no errors</td>
+<td>Confirm the credential's tenant is the one generating activity, and that <code>from</code> is not set to a window with no events.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>11. Push delivery</h2>
+<p>Everything above describes <strong>pull</strong> — your SIEM collects from us. We can also <strong>push</strong>, where we send to your collector directly:</p>
+<table><thead><tr>
+<th>Your SIEM</th>
+<th>How</th>
+</tr></thead><tbody>
+<tr>
+<td>Splunk</td>
+<td>HTTP Event Collector</td>
+</tr>
+<tr>
+<td>Microsoft Sentinel</td>
+<td>Logs Ingestion API (DCE + DCR)</td>
+</tr>
+<tr>
+<td>IBM QRadar</td>
+<td>Syslog over TLS, LEEF format, port 6514</td>
+</tr>
+<tr>
+<td>Anything else</td>
+<td>HTTPS webhook, JSON body</td>
+</tr>
+</tbody></table>
+<p>Push is faster (~14s vs ~60s) but requires your collector to be reachable from the internet. If it sits inside your network, use pull — that is what it is for.</p>
+<p>Your Defensely admin configures it under <strong>Settings → Integrations → SIEM → Connect a SIEM</strong>.</p>
+<h2>12. Not yet available</h2>
+<ul>
+<li><strong>Backfill</strong> — "send me the last 30 days" on a newly connected push destination. Use pull with a <code>from</code> date in the meantime.</li>
+<li><strong>Scopes beyond <code>siem:events.read</code></strong> — read-only is the whole surface today.</li>
+</ul>
+
+<div class="doc-foot">Defensely DLP &middot; Connect your SIEM to Defensely &middot; generated 2026-10-30</div>
+</body></html>

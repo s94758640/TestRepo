@@ -1,0 +1,530 @@
+<title>Scanner — UI ↔ API Integration Guide (payloads)</title>
+<style>
+  :root{--bg:#fff;--fg:#1a1f2b;--muted:#5b6472;--line:#e5e8ee;--card:#f7f8fa;--accent:#0ea5a5;--accent-fg:#06514f;
+    --ready:#15803d;--ready-bg:#dcfce7;--new:#1d4ed8;--new-bg:#dbeafe;--p2:#b45309;--p2-bg:#fef3c7;--chip:#eef1f6;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9aa4b2;--line:#222a35;--card:#151b24;--ready:#4ade80;--ready-bg:#0f2e1c;--new:#93c5fd;--new-bg:#102038;--p2:#fbbf24;--p2-bg:#3a2d08;--chip:#1b222d;--code-bg:#0a0e16;--code-fg:#d7e0ea;}}
+  :root[data-theme="dark"]{--bg:#0d1117;--fg:#e6edf3;--muted:#9aa4b2;--line:#222a35;--card:#151b24;--ready:#4ade80;--ready-bg:#0f2e1c;--new:#93c5fd;--new-bg:#102038;--p2:#fbbf24;--p2-bg:#3a2d08;--chip:#1b222d;--code-bg:#0a0e16;--code-fg:#d7e0ea;}
+  :root[data-theme="light"]{--bg:#fff;--fg:#1a1f2b;--muted:#5b6472;--line:#e5e8ee;--card:#f7f8fa;--chip:#eef1f6;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box} body{background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;padding:0 20px 90px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header.top{padding:38px 0 14px;border-bottom:2px solid var(--line);margin-bottom:22px}
+  h1{font-size:29px;margin:0 0 6px} h2{font-size:22px;margin:40px 0 4px;padding-top:12px;border-top:2px solid var(--line)}
+  h3{font-size:16px;margin:0} .sub{color:var(--muted);font-size:14px}
+  code{background:var(--chip);padding:1px 6px;border-radius:5px;font:13px ui-monospace,Menlo,Consolas,monospace}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:12px 15px;border-radius:9px;overflow-x:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;margin:8px 0}
+  pre code{background:none;padding:0;color:inherit}
+  table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top} th{background:var(--card);font-weight:600;white-space:nowrap}
+  .el{border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin:16px 0;background:var(--card)}
+  .el .hd{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;justify-content:space-between}
+  .el .route{font:12.5px ui-monospace,Menlo,Consolas,monospace;color:var(--accent-fg)}
+  .desc{color:var(--muted);font-size:13.5px;font-style:italic;margin:4px 0 8px;border-left:3px solid var(--accent);padding-left:10px}
+  .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .ready{color:var(--ready);background:var(--ready-bg)} .new{color:var(--new);background:var(--new-bg)} .p2{color:var(--p2);background:var(--p2-bg)}
+  .post{color:#60a5fa;font-weight:700}.get{color:#4ade80;font-weight:700}
+  .lbl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:8px 0 2px;font-weight:600}
+  .note{border-left:3px solid var(--accent);padding:4px 0 4px 12px;color:var(--muted);margin:10px 0;font-size:13.5px}
+  a{color:var(--accent)} ul{margin:6px 0 6px 2px;padding-left:20px} li{margin:2px 0}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <h1>Scanner — UI ↔ API Integration Guide</h1>
+  <div class="sub">Every screen element → its on-screen description → the API call → the request &amp; response payload. Built for the UI team to bind fields directly. Modules: Endpoint · Cloud · Network · Database Connector · Code Repository.</div>
+  <p style="margin-top:10px"><span class="tag ready">✅ READY</span> <span class="tag new">🔵 NEW this round</span> <span class="tag p2">⏳ PHASE 2</span></p>
+</header>
+
+<h2>Conventions</h2>
+<ul>
+<li><b>Base URL (QA):</b> <code>https://qa-email.azure-api.net/qadlp</code> · <b>Auth:</b> <code>Authorization: Bearer &lt;console JWT&gt;</code> (tenant read from token, never in body).</li>
+<li><b>Envelope:</b> every response is <code>{ "succeeded":true, "message":"", "data":&lt;payload&gt;, "errors":[] }</code>. Below, the <b>RESPONSE</b> blocks show the <code>data</code> payload only.</li>
+<li><b>Grids:</b> request is <code>QueryParameters</code> <code>{ pageNumber, pageSize, searchTerm?, sortBy?, sortDescending?, exactFilters?, likeFilters? }</code>; response <code>data</code> is <code>{ "TotalCount":N, "Data":[ …rows… ] }</code>.</li>
+<li><b>Evidence masked:</b> <code>sensitiveContent</code> / <code>maskedValue</code> carry the match SHAPE only (<code>AKIA••••7Q4D</code>).</li>
+</ul>
+
+<div class="note"><b>Two custody models (read the marker before showing actions):</b>
+<b>Platform-hosted</b> → <code>authMethod</code> ∈ {AppKey, AdminConsent, ServiceAccount} → platform scans, "Scan now" allowed.
+<b>Centralized / agent-hosted</b> → <code>authMethod="AgentHosted"</code> (DB grid: <code>source="Agent"</code>, <code>signInStatus="ViaAgent"</code>) → the on-site EXE scans; no "Scan now". <code>cloud/scans</code> rejects agent-hosted, so it fails safe.</div>
+
+<h2>UI-review resolution — all 21 items <span class="tag new">🔵</span></h2>
+<p class="sub">Every point from the UI team's review, with what changed. Full solution builds 0 errors; migrations V0046–V0051 (Dlp) + V0013 (Common).</p>
+<table>
+<tr><th>#</th><th>Item</th><th>Resolution</th></tr>
+<tr><td>1</td><td>Server rows need drives, osFamily, agentStatus, broadly/unencrypted counts</td><td>🔵 <code>server-scanner/servers</code> rows now embed <code>drives[]</code>, <code>osFamily</code>, <code>agentStatus</code>, <code>broadlySharedCount</code>, <code>unencryptedSensitiveCount</code></td></tr>
+<tr><td>2</td><td>No-agent servers as grid rows + Install action</td><td>🔵 discovered rows returned with <code>hasAgent:false</code>, <code>agentStatus:"NoAgent"</code></td></tr>
+<tr><td>3</td><td>servers request body / osFamily filter</td><td>🔵 <code>exactFilters.osFamily</code> = Windows/Linux; sort: hostname/lastScanAt/firstSeenAt/agentVersion/lastSeenAt</td></tr>
+<tr><td>4</td><td>overview: sensitive files on unencrypted drives + server count</td><td>🔵 <code>unencryptedSensitiveFiles</code>, <code>serversWithUnencrypted</code></td></tr>
+<tr><td>5</td><td>topFolders need server/host/class/%shared</td><td>🔵 <code>topFolders[]</code> → serverAgentId, hostName, mainClassification, percentSharedBroadly</td></tr>
+<tr><td>6</td><td>files: filter keys + sensitiveContent as object</td><td>🔵 <code>sensitiveContent</code> now an object; filters serverAgentId/classifications/sharedBroadly</td></tr>
+<tr><td>7</td><td>"Scan now" per server</td><td>🔵 <code>POST server-scanner/scan</code> (pull model — records request, agent honours on next contact)</td></tr>
+<tr><td>8</td><td>set drives + schedule</td><td>🔵 <code>POST server-scanner/settings { serverAgentId, schedule, drives }</code></td></tr>
+<tr><td>9</td><td>find the new server after install</td><td>🔵 <code>exactFilters.registeredAfter</code> (tenant-wide token can't key one server)</td></tr>
+<tr><td>10</td><td>overview jsonb as objects + attention connectionId/severity</td><td>🔵 byClass/byEngine/byContainer/coverage/topObjects now objects; attention already had connectionId+severity</td></tr>
+<tr><td>11</td><td>connection detail: outcome, excluded reason/who/when, scanStatus, errors</td><td>✅ on <code>database/connections/detail</code> (Status, ExclusionNote/By/At, retryAttempt). Errors are split: <code>signInError</code>/<code>scanError</code> (friendly) + <code>signInErrorDetail</code>/<code>scanErrorDetail</code> (raw) — see the detail sample below</td></tr>
+<tr><td>12</td><td>object detail (columns + sample)</td><td>🔵 <code>GET database/objects/{objectId}</code> — masked columns+sample, gated by Discovery:ShowSensitiveContent</td></tr>
+<tr><td>13</td><td>exclude reason + who/when + include</td><td>🔵 reason now required; records ExcludedBy; include = exclude with <code>isExcluded:false</code></td></tr>
+<tr><td>14</td><td>database/providers fields + DB-list field</td><td>✅ descriptor carries labels; DB list = <code>credentials.databases</code> (documented)</td></tr>
+<tr><td>15</td><td>unify confidence scale</td><td>🔵 <code>database/objects</code> now 0-100 (matches code/findings)</td></tr>
+<tr><td>16</td><td>code/findings: repo filter, absent-only, severity counts, baseSeverity</td><td>🔵 <code>absentOnly</code> + <code>baseSeverity</code> added; codeRepositoryId filter + severity counts already existed</td></tr>
+<tr><td>17</td><td>resolution type + reopen</td><td>🔵 resolve takes <code>resolution</code> (KeyRotated/FalsePositive/RiskAccepted)+note; new <code>POST code/findings/reopen</code></td></tr>
+<tr><td>18</td><td>code connectors: lastScanJobId + repos-scanned</td><td>🔵 <code>lastScanJobId</code>, <code>reposScanned</code> added; full lastScanStatus list documented</td></tr>
+<tr><td>19</td><td>code/repositories body / result-tab filters</td><td>✅ QueryParameters contract documented</td></tr>
+<tr><td>20</td><td>code/rules fields</td><td>✅ already returns id/name/severity/confidence</td></tr>
+<tr><td>21</td><td>permission modules</td><td>🔵 Common migration V0013 — Network/Database/Code modules, VIEW+CREATE/EDIT/DELETE, granted to Admin</td></tr>
+</table>
+<p class="note">Honest caveat on <b>#7/#8</b>: the server scanner is pull, not push — these record intent the agent acts on when it next registers; full live control needs the agent run as a polling service (a follow-up on the agent side). The AD/IP feed for no-agent servers is the only not-fully-closed item (#11 error-split is done — see row 11 and the database/connections/detail sample).</p>
+
+<h2>Updated sample payloads (review follow-up) <span class="tag new">🔵</span></h2>
+<p class="sub">The exact request/response shapes after the review changes — these supersede any older sample shown in the element cards below.</p>
+
+<div class="el"><div class="hd"><h3>server-scanner/servers — row</h3><span class="route"><span class="post">POST</span> server-scanner/servers</span></div>
+<div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":25, "sortBy":"lastScanAt", "sortDescending":true,
+  "exactFilters": { "osFamily": ["Windows"] } }   // osFamily: Windows | Linux (omit = All)
+// sortBy: hostname | lastScanAt | firstSeenAt | agentVersion | lastSeenAt
+// also: exactFilters.registeredAfter:["2026-11-20T10:00:00Z"] to find a just-installed server</code></pre>
+<div class="lbl">Response row (agent)</div>
+<pre><code>{ "serverAgentId":3, "hostName":"FS-FIN-01", "osVersion":"Windows Server 2022",
+  "osFamily":"Windows", "agentVersion":"4.2.1", "agentStatus":"Online",   // Online|Offline|Outdated
+  "hasAgent":true, "lastScanStatus":"Completed", "lastScanId":42, "lastScanAt":"…", "isScanning":false,
+  "pathCount":3, "fileCount":19990, "sensitiveCount":19990,
+  "broadlySharedCount":820, "unencryptedSensitiveCount":4000,
+  "drives":[ { "serverPathId":8, "rootPath":"D:\\Finance", "sensitiveCount":15000, "encryptionStatus":"Unencrypted" } ],
+  "isActive":true, "firstSeenAt":"…", "lastSeenAt":"…" }</code></pre>
+<div class="lbl">Response row (no agent — discovered)</div>
+<pre><code>{ "serverAgentId":0, "discoveredServerId":58, "hostName":"FS-OPS-03", "osVersion":"Windows Server 2022",
+  "osFamily":"Windows", "agentStatus":"NoAgent", "hasAgent":false, "drives":[], "ipAddress":"10.60.3.21" }
+// serverAgentId is 0 for a no-agent row; use discoveredServerId as the grid key. Real agent rows have discoveredServerId:null.</code></pre></div>
+
+<div class="el"><div class="hd"><h3>server-scanner/files — sensitiveContent is an object</h3><span class="route"><span class="post">POST</span> server-scanner/files</span></div>
+<div class="lbl">Request</div><pre><code>{ "serverAgentId":3, "pageNumber":1, "pageSize":50,
+  "classifications":["PHI","PCI"], "sharedBroadly":true }   // filters: serverAgentId, serverPathId, serverScanId, isSensitive, classifications[], sharedBroadly, includeDeleted</code></pre>
+<div class="lbl">Response row</div>
+<pre><code>{ "serverFileId":5001, "hostName":"FS-FIN-01", "rootPath":"D:\\Finance",
+  "directory":"D:\\Finance\\Payroll", "fileName":"Payroll_FY26.xlsx", "owner":"CORP\\jsmith",
+  "shareScope":"Everyone", "classifications":["PFI","PII"], "risk":"CRITICAL", "severity":"CRITICAL",
+  "sensitiveContent": { "DlpType": { "PFI": "IBAN=••••" } } }   // object, not a string</code></pre></div>
+
+<div class="el"><div class="hd"><h3>server-scanner/overview — topFolders + unencrypted counts</h3><span class="route"><span class="post">POST</span> server-scanner/overview</span></div>
+<pre><code>{ "serverCount":10, "onlineServerCount":7, "offlineServerCount":3, "noAgentServerCount":2,
+  "sensitiveFiles":68752, "unencryptedSensitiveFiles":25300, "serversWithUnencrypted":5,
+  "unprotectedPathCount":7,
+  "byClassification":[ { "label":"PII", "count":31220 } ],
+  "topFolders":[ { "serverAgentId":3, "hostName":"FS-FIN-01", "directory":"D:\\Finance\\Payroll",
+                   "count":6420, "mainClassification":"PFI", "percentSharedBroadly":38 } ] }</code></pre></div>
+
+<div class="el"><div class="hd"><h3>server-scanner/scan + server-scanner/settings</h3><span class="route"><span class="post">POST</span> server-scanner/scan · /settings</span></div>
+<pre><code><span class="post">POST</span> server-scanner/scan       req: { "serverAgentId":3 }
+                                 res: { "succeeded":true, "message":"Scan requested. It starts when the agent next checks in…" }
+
+<span class="post">POST</span> server-scanner/settings   req: { "serverAgentId":3,
+                                        "schedule":"daily",                 // manual | daily | weekly (null = leave)
+                                        "drives":[ "D:\\Finance", "\\\\nas01\\archive" ] }  // path list (null = leave)
+                                 res: { "succeeded":true, "message":"Server scan settings saved." }
+// Pull model: both record intent the agent honours on its next register.</code></pre></div>
+
+<div class="el"><div class="hd"><h3>server-scanner/enrollment — downloadPath + registeredAfter</h3><span class="route"><span class="post">POST</span> server-scanner/enrollment</span></div>
+<pre><code>res: { "enrollKey":"K7Q2-9XHM-44TD", "osFamily":"Windows",
+       "installer":{ "name":"DLPDefenseAgent.msi", "downloadPath":"/downloads/DLPDefenseAgent.msi" },
+       "command":"msiexec /i DLPDefenseAgent.msi /qn ENROLL_KEY=K7Q2-9XHM-44TD" }
+// downloadPath is relative — served by the DLP API gateway host (same origin as the API,
+//   e.g. https://qa-email.azure-api.net/qadlp/downloads/...). Resolve it against the API origin.
+// After install, find the new server: POST server-scanner/servers with
+//   exactFilters.registeredAfter = ["&lt;UTC ISO-8601&gt;"]  e.g. "2026-11-20T10:00:00Z", sort firstSeenAt desc.</code></pre></div>
+
+<div class="el"><div class="hd"><h3>database/overview — objects, not strings</h3><span class="route"><span class="get">GET</span> database/overview</span></div>
+<pre><code>{ "sensitiveTables":214, "tablesRead":1486,
+  "byClass": { "PII":92, "PHI":61, "PFI":34, "PCI":18, "Creds":9 },        // object
+  "byEngine": { "SqlServer":120, "PostgreSql":60 },
+  "byContainer": [ { "container":"patients_prod", "instance":"Patients — production",
+                     "classes":{ "PII":14, "PHI":22 }, "total":38 } ],
+  "coverage": { "databases": { "read":19, "accessDenied":1, "failed":2, "pending":0, "excluded":1, "total":23 } },
+  "topObjects": [ … ],
+  "attention":[ { "severity":"Error", "title":"Connection failed", "detail":"Payments — staging · …",
+                  "connectionId":5, "source":"Cloud", "action":"Fix" } ] }</code></pre></div>
+
+<div class="el"><div class="hd"><h3>database/objects/{objectId} — table detail</h3><span class="route"><span class="get">GET</span> database/objects/{objectId}</span></div>
+<pre><code>{ "object": { "objectId":77, "instanceName":"Patients — production", "engine":"SqlServer",
+              "container":"patients_prod", "schemaName":"dbo", "objectName":"Patients",
+              "classifications":["PHI","PII"], "recognised":"National ID, date of birth, diagnosis",
+              "confidence":97, "risk":"CRITICAL", "severity":"HIGH", "encryptionStatus":"TDE" },
+  "estimatedRows":120000, "sampledRows":1000,
+  "sensitiveContent": { "columns":[ { "name":"NationalId", "class":"PII", "confidence":97 } ],
+                        "sample":[ { "NationalId":"••••1234" } ] } }   // masked; shape as the scan stored it
+// When Discovery:ShowSensitiveContent is OFF → "sensitiveContent": null (row + recognised still returned).</code></pre></div>
+
+<div class="el"><div class="hd"><h3>database/providers — per-engine labels</h3><span class="route"><span class="get">GET</span> database/providers</span></div>
+<pre><code>[ { "key":"Oracle", "displayName":"Oracle", "tenantLabel":"Host", "clientIdLabel":"User ID",
+    "clientSecretLabel":"Password",
+    "extraFields":[ { "key":"serviceName", "label":"Service name", "help":"Your DBA will know it." },
+                    { "key":"databases", "label":"Databases / schemas", "isOptional":true } ],
+    "setupSummary":"A read-only login…" } ]
+// Create a connection: POST cloud/connectors with provider="Oracle", and the DB list goes in
+//   credentials.databases (comma-separated), e.g. "credentials": { "serviceName":"ORCLPDB1", "databases":"HR,PAYROLL" }</code></pre></div>
+
+<div class="el"><div class="hd"><h3>database/connections/detail — split errors</h3><span class="route"><span class="get">GET</span> database/connections/detail?connectionId=&amp;source=</span></div>
+<pre><code>// header (DatabaseConnectionListItemDto):
+{ "signInStatus":"ConnectionFailed",
+  "signInError":"Sign-in was rejected.",                 // plain message for the user
+  "signInErrorDetail":"28P01: password authentication failed for user \"dlp_scan\"",  // raw technical
+  "scanStatus":"Failed", "scanError":"The scan failed.", "scanErrorDetail":"timeout after 30s …",
+  "retryAttempt":2, "retryLimit":3 }
+// containers[] carry per-database: status (Pending|Scanned|AccessDenied|Failed), isExcluded,
+//   exclusionNote, excludedBy, excludedAt, lastError.</code></pre></div>
+
+<div class="el"><div class="hd"><h3>code/findings/resolve + reopen; severity counts</h3><span class="route"><span class="post">POST</span> code/findings/resolve · /reopen · <span class="get">GET</span> code/findings/summary</span></div>
+<pre><code><span class="post">POST</span> code/findings/resolve
+  req: { "repoFindingId":901, "resolution":"KeyRotated", "reason":"Rotated & purged from history." }
+  // resolution: KeyRotated | FalsePositive | RiskAccepted (required); reason = the note (required)
+
+<span class="post">POST</span> code/findings/reopen   req: { "repoFindingId":901, "reason":"Reopened — key still live." }
+
+// Severity-tab counts come from the SUMMARY, not the findings grid:
+<span class="get">GET</span> code/findings/summary  → { "totalFindings":184, "critical":12, "high":41, "medium":88, "low":43,
+                                 "inPublicRepositories":7, "removedButNotRotated":23,
+                                 "repositoriesScanned":40, "repositoriesWithFindings":19 }
+
+// code/findings row now also carries baseSeverity + resolutionType:
+//   { …, "severity":"Critical", "baseSeverity":"High",   // raised because the repo is public
+//        "resolutionType":"KeyRotated", "resolutionReason":"…" }</code></pre></div>
+
+<div class="el"><div class="hd"><h3>code/connectors — jobId + progress; code/repositories result tabs; code/rules</h3><span class="route"><span class="post">POST</span> code/connectors · code/repositories · <span class="get">GET</span> code/rules</span></div>
+<pre><code>// code/connectors row:
+{ "cloudConnectorId":5, "provider":"AzureRepos", "displayName":"Defensely repos",
+  "signInStatus":"Connected", "lastScanStatus":"Running", "lastScanJobId":88,   // → cloud/scans/cancel
+  "isScanning":true, "reposScanned":12, "reposTotal":18, "reposWithSecrets":6, "reposUnreadable":2 }
+// lastScanStatus: Queued | Running | Cancelling | Cancelled | NotResponding | FinishedWithProblems | Completed | Failed | null
+
+// code/repositories result tabs → exactFilters.result:
+<span class="post">POST</span> code/repositories  { "pageNumber":1, "pageSize":25, "exactFilters": { "result": ["secrets"] } }
+  // result values: secrets | clean | unreadable | unscanned
+
+// code/rules:
+<span class="get">GET</span> code/rules  → [ { "ruleId":"aws-access-key", "name":"AWS access key", "severity":"Critical", "confidence":95 } ]</code></pre></div>
+
+<!-- ══════════════ CLOUD ══════════════ -->
+<h2>Cloud <span class="tag ready">✅</span></h2>
+
+<div class="el">
+  <div class="hd"><h3>Overview — Blast Radius + headline tiles</h3><span class="route"><span class="post">POST</span> cloud/overview</span></div>
+  <div class="desc">"Every sensitive object by what it holds and how far it reaches. The wider the reach, the hotter the cell."</div>
+  <div class="lbl">Request</div><pre><code>{ }   // optional date window fields; empty = default period</code></pre>
+  <div class="lbl">Response (data)</div>
+<pre><code>{
+  "totalFiles": 148206, "sensitiveFiles": 148206, "publicLinkFiles": 3412, "totalBytes": 0,
+  "byClass":      [ { "label":"PII", "count":45850 }, { "label":"PHI", "count":38350 } ],
+  "blastRadius":  [ { "className":"PII", "restricted":27900, "orgWide":13400, "external":3720, "publicLink":830, "total":45850 } ],
+  "byExtension":  [ { "name":".zip", "count":1240 } ],
+  "hotspots":     [ { "location":"Shared drives/Clinical/Intake", "provider":"GoogleDrive", "sensitive":12480, "sharedBeyondOwnerPct":38 } ],
+  "hotspotLocationCount": 1840,
+  "byExtractionOutcome": [ { "name":"Cleared", "count":4130 } ]
+}</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Overview — Service Board (per-provider tiles)</h3><span class="route"><span class="post">POST</span> cloud/connectors/list</span></div>
+  <div class="desc">"Select a service to open its data." One card per connected provider with its sensitive + public-link counts.</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":50 }</code></pre>
+  <div class="lbl">Response rows (CloudConnectorDTO)</div>
+<pre><code>{ "cloudConnectorId":12, "provider":"GoogleDrive", "displayName":"Google Drive",
+  "externalTenantId":"acme.com", "tenantDomain":"acme.com", "clientId":"…",
+  "authMethod":"ServiceAccount", "status":"Connected", "lastError":null, "lastValidatedAt":"…",
+  "isActive":true, "containerCount":84, "fileCount":62180, "sensitiveFiles":62180,
+  "publicLinkFiles":1684, "externalShareFiles":0, "authorizedAt":"…", "dateAdded":"…" }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Overview — Just Scanned + 7-day chart</h3><span class="route"><span class="post">POST</span> cloud/activity</span></div>
+  <div class="desc">"Every new upload classified within seconds of landing." LIVE banner counters + the UPLOADS SCANNED bar chart.</div>
+  <div class="lbl">Response (data)</div>
+<pre><code>{ "scannedToday":4130, "sensitiveToday":312, "granularity":"hour",
+  "buckets":[ { "label":"Wed", "scanned":3600, "sensitive":210 } ],
+  "fromUtc":"…", "toUtc":"…", "scannedInPeriod":22940, "sensitiveInPeriod":1960,
+  "isLastCollected":true, "lastCollectedAt":"…" }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Files · Where Sensitive Data Sits</h3><span class="route"><span class="post">POST</span> cloud/files</span></div>
+  <div class="desc">Grid of discovered objects; "Bar is the share shared beyond the owner."</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":50, "exactFilters":{ "provider":"GoogleDrive", "isSensitive":"true" } }</code></pre>
+  <div class="lbl">Response rows (CloudFileRowDto)</div>
+<pre><code>{ "cloudFileId":901, "cloudContainerId":5, "containerName":"Shared drives/Finance", "provider":"GoogleDrive",
+  "fileName":"Q3_Commission_Plan.xlsx", "directory":"Shared drives/Finance", "extension":".xlsx",
+  "sizeBytes":82400, "size":"80 KB", "lastModified":"…", "ownerUpn":"zara.p@acme.com", "webUrl":"https://…",
+  "classifications":["PFI"], "isSensitive":true, "confidence":98, "exposureLevel":"External",   // confidence 0-100 (all grids now)
+  "sensitiveContent":{ "DlpType":{ "PFI":"BankAccount=••••" } }, "extractionOutcome":"Extracted",
+  "outcome":"Flagged", "isNew":false, "firstSeenAt":"…", "lastSeenAt":"…" }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Public Links in Circulation (+ who can open it)</h3><span class="route"><span class="post">POST</span> cloud/links · /links/recipients · /links/resolve-url</span></div>
+  <div class="desc">"Widest-spread links first. Click a file to see who can open it and how the link spread."</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":50, "sortBy":"externalIdentityCount", "sortDescending":true }</code></pre>
+  <div class="lbl">Response rows (CloudLinkRowDto)</div>
+<pre><code>{ "cloudFileLinkId":77, "cloudFileId":901, "fileName":"Oncology_Patient_Roster_Q3.xlsx",
+  "provider":"GoogleDrive", "containerName":"Oncology Research/General", "ownerUpn":"…",
+  "classifications":["PHI","PII"], "isSensitive":true, "criticality":"High",
+  "scope":"Anyone with the link", "linkUrl":"https://…", "createdByName":"…", "createdAt":"…",
+  "ageDays":41, "internalIdentityCount":12, "externalIdentityCount":3, "externalDomains":["trialpartner.org"],
+  "hasPassword":false, "expiresAt":null, "recipientCount":15, "externalRecipients":["x@trialpartner.org"] }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Users Holding Sensitive Files</h3><span class="route"><span class="post">POST</span> cloud/users · /users/detail</span></div>
+  <div class="desc">"Across all connected services, highest risk first."</div>
+  <div class="lbl">Response rows (CloudUserRowDto)</div>
+<pre><code>{ "ownerUpn":"craig.d@acme.com", "userName":"Craig D", "department":"Platform Eng", "emailId":"…",
+  "services":[ { "provider":"OneDrive", "sensitiveFiles":120 } ], "sensitiveFiles":340,
+  "classifications":["Credentials","PII"], "publicLinks":6, "externalShares":9, "risk":"High" }</code></pre>
+</div>
+
+<p class="note"><b>Integrations tab</b> uses the shared connector contracts (see "Shared connector APIs" below): <code>GET cloud/providers</code>, <code>POST cloud/connectors</code> / <code>/update</code> / <code>/test</code> / <code>/delete</code>, <code>POST cloud/scans</code> / <code>/cancel</code>, <code>POST cloud/containers</code> / <code>/exclude</code>.</p>
+
+<!-- ══════════════ NETWORK ══════════════ -->
+<h2>Network / Server Scanner <span class="tag ready">✅</span> <span class="tag new">🔵</span></h2>
+
+<div class="el">
+  <div class="hd"><h3>Overview — all tiles</h3><span class="route"><span class="post">POST</span> server-scanner/overview</span></div>
+  <div class="desc">"A small agent runs on each server … Sensitive files and unencrypted drives show up here."</div>
+  <div class="lbl">Request</div><pre><code>{ "serverAgentId": null }   // null = all servers; or a specific id to scope</code></pre>
+  <div class="lbl">Response (data) — 🔵 new fields marked</div>
+<pre><code>{
+  "serverCount":10, "scanningNow":1, "staleServerCount":2,
+  "onlineServerCount":7,      // 🔵  within 24h
+  "offlineServerCount":3,     // 🔵  active but quiet
+  "noAgentServerCount":2,     // 🔵  discovered (AD/IP) servers with no agent; needs the feed below
+  "totalFiles":10200000, "sensitiveFiles":68752, "unclassifiedFiles":120, "sensitiveBytes":0,
+  "pathCount":21, "unprotectedPathCount":7, "lastScanAt":"…",
+  "byClassification":[ { "label":"PII", "count":31220 }, { "label":"PHI", "count":10440 } ],
+  "bySeverity":[ { "label":"CRITICAL", "count":4100 } ],
+  "topServers":[ { "id":3, "label":"FS-FIN-01", "count":19990 } ],
+  "topOwners":[ { "label":"CORP\\jsmith", "count":3200 } ],
+  "topFolders":[ { "label":"D:\\Finance\\Payroll", "count":6420 } ]   // 🔵 Folders Holding the Most
+}</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Servers grid</h3><span class="route"><span class="post">POST</span> server-scanner/servers</span></div>
+  <div class="desc">Columns: Server, Operating system, Drives, Encryption, Agent, Sensitive, Last scan. All / Windows / Linux filter.</div>
+  <div class="lbl">Response rows (ServerAgentRowDto)</div>
+<pre><code>{ "serverAgentId":3, "machineKey":"…", "hostName":"FS-FIN-01", "fqdn":"…", "ipAddress":"…",
+  "osVersion":"Windows Server 2022", "agentVersion":"4.2.1", "description":"File server · Finance",
+  "lastSeenAt":"…", "lastScanAt":"…", "lastScanStatus":"Completed", "lastScanId":42,
+  "pathCount":3, "fileCount":19990, "sensitiveCount":19990, "isScanning":false, "isActive":true }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Every Server, Drive by Drive · server detail drives</h3><span class="route"><span class="post">POST</span> server-scanner/paths</span></div>
+  <div class="desc">"Each block is a drive, sized by its sensitive files." Encrypted / Not encrypted colouring.</div>
+  <div class="lbl">Request</div><pre><code>{ "serverAgentId": 3 }</code></pre>
+  <div class="lbl">Response rows (ServerPathRowDto)</div>
+<pre><code>{ "serverPathId":8, "serverAgentId":3, "rootPath":"D:\\Finance", "kind":"Local",
+  "fileSystem":"NTFS", "sizeGb":500.0, "freeGb":120.5,
+  "encryptionStatus":"Unencrypted", "encryptionMethod":null,
+  "filesScanned":15000, "sensitiveCount":15000, "unclassifiedCount":40, "lastScanAt":"…",
+  "isActive":true, "hasCursor":true }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Sensitive files grid</h3><span class="route"><span class="post">POST</span> server-scanner/files</span></div>
+  <div class="desc">The findings on a server — file, owner, classes, severity, masked evidence.</div>
+  <div class="lbl">Request</div><pre><code>{ "serverAgentId":3, "pageNumber":1, "pageSize":50 }</code></pre>
+  <div class="lbl">Response rows (ServerFileRowDto)</div>
+<pre><code>{ "serverFileId":5001, "serverAgentId":3, "hostName":"FS-FIN-01", "serverPathId":8,
+  "rootPath":"D:\\Finance", "directory":"D:\\Finance\\Payroll", "fileName":"Payroll_FY26.xlsx",
+  "fullPath":"D:\\Finance\\Payroll\\Payroll_FY26.xlsx", "extension":".xlsx", "sizeBytes":82400, "lastModified":"…",
+  "owner":"CORP\\jsmith", "classifications":["PFI","PII"], "isSensitive":true,
+  "sensitiveContent":"{\"DlpType\":{\"PFI\":\"IBAN=••••\"}}", "confidence":97,   // 0-100, same scale as database/objects
+  "risk":"CRITICAL", "severity":"CRITICAL", "severityReason":"…", "dpdpFlag":"…",
+  "lastScanId":42, "firstSeenAt":"…", "lastSeenAt":"…", "isDeleted":false }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Add a server — wizard <span class="tag new">🔵</span></h3><span class="route"><span class="post">POST</span> server-scanner/enrollment · /enrollment/rotate</span></div>
+  <div class="desc">"Install the agent, then choose what it scans." OS → download installer → run command with ENROLL_KEY → wait for the server to appear.</div>
+  <div class="lbl">Request</div><pre><code>{ "osFamily": "Windows" }   // or "Linux"</code></pre>
+  <div class="lbl">Response (ServerEnrollmentDto)</div>
+<pre><code>{ "enrollKey":"K7Q2-9XHM-44TD", "osFamily":"Windows",
+  "installer":{ "name":"DLPDefenseAgent.msi", "downloadPath":"/downloads/DLPDefenseAgent.msi" },
+  "command":"msiexec /i DLPDefenseAgent.msi /qn ENROLL_KEY=K7Q2-9XHM-44TD", "setupGuideUrl":null }</code></pre>
+  <div class="note">Step 3 "wait for the server to appear": poll <code>POST server-scanner/servers</code>; the new row shows once the agent registers. <code>/enrollment/rotate</code> mints a new key (same body/response).</div>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Open to Many People <span class="tag new">🔵</span></h3><span class="route"><span class="post">POST</span> server-scanner/files</span></div>
+  <div class="desc">"Shared with Everyone or all employees on the server." The agent now reads each file's share ACL and reports <code>shareScope</code>; filter the files grid to the broadly-shared ones.</div>
+  <div class="lbl">Request</div><pre><code>{ "serverAgentId": null, "sharedBroadly": true, "pageNumber":1, "pageSize":6 }</code></pre>
+  <div class="lbl">Response rows (ServerFileRowDto, + new shareScope)</div>
+<pre><code>{ …all ServerFileRowDto fields…,
+  "shareScope":"Everyone"   // "Everyone" | "AllEmployees" | null (restricted)
+}</code></pre>
+  <div class="note">Agent capture: Windows reads the DACL for Everyone / Authenticated Users / local Users; Linux uses the POSIX other-read bit. Column added by migration <code>V0047</code>; nullable, so older agents simply report null.</div>
+</div>
+
+<!-- ══════════════ DATABASE ══════════════ -->
+<h2>Database Connector <span class="tag ready">✅</span></h2>
+
+<div class="el">
+  <div class="hd"><h3>Overview — all tiles</h3><span class="route"><span class="get">GET</span> database/overview</span></div>
+  <div class="desc">"Reads a sample of every table … shows which tables hold it. It only reads." Tables tile · "Did we read everything?" · Where Regulated Data Lives heatmap · Needs Your Attention.</div>
+  <div class="lbl">Response (data, DatabaseOverviewDto) — jsonb fields arrive as JSON strings</div>
+<pre><code>{ "sensitiveTables":214, "tablesRead":1486, "connectionCount":7, "scanningCount":1,
+  "byClass":"{\"PII\":92,\"PHI\":61,\"PFI\":34,\"PCI\":18,\"Creds\":9}",
+  "byEngine":"{\"SqlServer\":120,\"PostgreSql\":60}",
+  "byContainer":"[{\"container\":\"patients_prod\",\"instance\":\"Patients — production\",\"classes\":{\"PII\":14,\"PHI\":22},\"total\":38}]",
+  "coverage":"{\"databases\":{\"read\":19,\"accessDenied\":1,\"failed\":2,\"pending\":0,\"excluded\":1,\"total\":23}}",
+  "topObjects":"[…]", "computedAt":"…",
+  "attention":[ { "title":"1 database not read", "detail":"Patients — production · reporting_tmp: access denied", "action":"View" } ] }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Connections grid</h3><span class="route"><span class="get">GET</span> database/connections · /connections/detail</span></div>
+  <div class="desc">Columns: Connection, Sign-in, Last scan, Sensitive tables, In scope, Action.</div>
+  <div class="lbl">Response rows (DatabaseConnectionListItemDto) — note custody via source</div>
+<pre><code>{ "connectionId":5, "source":"Cloud",            // "Cloud"=platform-hosted · "Agent"=centralized
+  "engine":"SqlServer", "engineDisplayName":"SQL Server", "name":"Patients — production",
+  "hostDescriptor":"sql-prd-01,1433",
+  "signInStatus":"Connected",                     // "ViaAgent" when source=Agent
+  "lastTestedAt":"…", "signInError":null,
+  "scanStatus":"CompletedWithGaps", "tablesRead":412, "scanStartedAt":"…", "scanCompletedAt":"…",
+  "databasesNotRead":1, "sensitiveTables":96, "totalTablesRead":412,
+  "scopeSummary":"4 databases", "excludedCount":0, "primaryAction":"Scan" }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Sensitive tables grid + detail</h3><span class="route"><span class="post">POST</span> database/objects</span></div>
+  <div class="desc">Columns: Table, Database, Contains, What we recognised, Confidence. Row → "Columns with sensitive data / Sample rows (hidden)".</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":50, "exactFilters":{ "classification":"PHI" }, "searchTerm":"patients" }</code></pre>
+  <div class="lbl">Response rows (DatabaseObjectListItemDto)</div>
+<pre><code>{ "objectId":77, "instanceId":3, "instanceName":"Patients — production", "engine":"SqlServer",
+  "container":"patients_prod", "schemaName":"dbo", "objectName":"Patients", "objectType":"Table",
+  "classifications":["PHI","PII"], "recognised":"National ID, date of birth, diagnosis",
+  "isSensitive":true, "confidence":97, "risk":"CRITICAL", "severity":"HIGH", "dpdpFlag":"…",   // confidence 0-100
+  "encryptionStatus":"TDE", "sampledRows":1000, "lastScanAt":"…", "firstSeenAt":"…" }</code></pre>
+</div>
+
+<p class="note"><b>Connect-a-database wizard + Change/Replace/How-often</b> use the shared connector contracts with a database provider (SqlServer, PostgreSql, MySql, Oracle, MongoDb): <code>GET database/providers</code> → <code>POST cloud/connectors</code> → <code>/test</code> → <code>/update</code> → <code>/schedule</code>.</p>
+
+<!-- ══════════════ CODE ══════════════ -->
+<h2>Code Repository <span class="tag ready">✅</span> <span class="tag new">🔵</span></h2>
+
+<div class="el">
+  <div class="hd"><h3>Overview — all tiles <span class="tag new">🔵</span></h3><span class="route"><span class="get">GET</span> code/overview?cloudConnectorId=&lt;optional&gt;</span></div>
+  <div class="desc">"Finds passwords, keys and tokens committed by mistake. We only keep a masked preview — never the secret itself."</div>
+  <div class="lbl">Response (CodeOverviewDto)</div>
+<pre><code>{ "needAction":{ "criticalSecrets":12, "inPublicRepos":7, "removedNotRotated":23 },
+  "reposRead":{ "total":42, "withSecrets":19, "clean":21, "couldNotRead":2 },
+  "liveSecretsOldestFirst":[ { "repoFindingId":901, "secretType":"Password in a connection string",
+      "repository":"data-pipelines", "visibility":"Internal", "filePath":"etl/settings.py",
+      "lineNumber":88, "severity":"High", "exposedDays":305 } ],
+  "exposureAgeBuckets":[ {"bucket":"<1wk","count":14}, {"bucket":"1-4wks","count":31},
+      {"bucket":"1-3mo","count":42}, {"bucket":"3-6mo","count":53}, {"bucket":"6mo+","count":44} ],
+  "reposWithMostSecrets":[ { "codeRepositoryId":5, "repository":"billing-service", "visibility":"Private", "liveFindings":21 } ],
+  "lastScanAt":"…" }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Connected Git hosts grid <span class="tag new">🔵</span></h3><span class="route"><span class="post">POST</span> code/connectors</span></div>
+  <div class="desc">"4 connections · 3 need attention, shown first." Connection, Sign-in, Last scan, actions.</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":50 }</code></pre>
+  <div class="lbl">Response rows (CodeConnectorRowDto)</div>
+<pre><code>{ "cloudConnectorId":5, "provider":"AzureRepos", "displayName":"Defensely repos",
+  "scope":"your-org", "signInStatus":"Connected", "signInDetail":null, "lastValidatedAt":"…",
+  "authMethod":"AppKey", "isAgentHosted":false,          // custody marker
+  "lastScanStatus":"Running", "lastScanAt":"…", "isScanning":true,
+  "reposTotal":18, "reposWithSecrets":6, "reposUnreadable":2, "filesRead":9412 }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Repositories grid</h3><span class="route"><span class="post">POST</span> code/repositories</span></div>
+  <div class="desc">Columns: Repository, Who can see it, Result, Critical, Files read, Last scan. All / Secrets / Clean / Couldn't read / Not scanned.</div>
+  <div class="lbl">Response rows (CodeRepositoryRowDto)</div>
+<pre><code>{ "codeRepositoryId":5, "cloudConnectorId":5, "provider":"GitHub", "name":"billing-service",
+  "namespace":"acme-health", "webUrl":"https://…", "visibility":"Private", "defaultBranch":"main",
+  "findingCount":21, "criticalCount":4, "filesScanned":3204, "lastScanAt":"…",
+  "isScanned":true, "scanFailed":false, "lastError":null, "lastAttemptAt":"…",
+  "isExcluded":false, "isDeleted":false }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Findings grid + "Mark as handled"</h3><span class="route"><span class="post">POST</span> code/findings · /findings/resolve · <span class="get">GET</span> code/rules</span></div>
+  <div class="desc">Columns: Secret, Where, Severity, Status, Exposed. Filters: public-only, removed-not-rotated, show-handled, low-confidence.</div>
+  <div class="lbl">Request</div><pre><code>{ "pageNumber":1, "pageSize":25, "severities":["Critical","High"], "visibilities":["Public"],
+  "includeResolved":false, "includeAbsent":true, "minConfidence":50, "search":"" }</code></pre>
+  <div class="lbl">Response rows (RepoFindingRowDto)</div>
+<pre><code>{ "repoFindingId":901, "codeRepositoryId":5, "repositoryName":"patient-portal", "namespace":"acme-health",
+  "provider":"GitHub", "visibility":"Public", "filePath":"deploy/keys/id_rsa", "lineNumber":1,
+  "ruleId":"private-key", "ruleName":"Private key block", "findingType":"Secret",
+  "maskedValue":"-----BEGIN RSA PRIVATE KEY----- ••••", "confidence":99, "severity":"Critical",
+  "isPresent":true, "isResolved":false, "resolutionReason":null, "resolvedBy":null, "resolvedAt":null,
+  "firstSeenAt":"…", "lastSeenAt":"…", "ageDays":41, "sourceUrl":"https://github.com/…#L1" }</code></pre>
+  <div class="lbl">Resolve request</div><pre><code>{ "repoFindingId":901, "reason":"Rotated the key and purged from history." }   // reason REQUIRED</code></pre>
+</div>
+
+<p class="note"><b>Connect-a-Git-host wizard + Update sign-in / Scan / Remove</b> use the shared connector contracts with a code provider (AzureRepos, GitHub, GitLab, Bitbucket): <code>GET cloud/providers</code> → <code>POST cloud/connectors</code> → <code>/test</code> → <code>/schedule</code>; manage via <code>/update</code>, <code>POST cloud/scans</code>(+<code>/cancel</code>), <code>/delete</code>.</p>
+
+<!-- ══════════════ SHARED ══════════════ -->
+<h2>Shared connector APIs (all kinds) <span class="tag ready">✅</span> <span class="tag new">🔵 update/schedule</span></h2>
+
+<div class="el">
+  <div class="hd"><h3>List providers (wizard step 1)</h3><span class="route"><span class="get">GET</span> cloud/providers</span></div>
+  <div class="desc">"Where is your code hosted? / Which database do you use?" — drives the wizard's fields per provider.</div>
+<pre><code>// data: CloudProviderDTO[]
+{ "key":"AzureRepos", "displayName":"Azure DevOps Repos", "tenantLabel":"Organisation",
+  "clientIdLabel":"Application (client) ID — or blank when using a token",
+  "clientSecretLabel":"Client secret, or personal access token",
+  "extraFields":[ { "key":"entraTenantId", "label":"Directory (tenant) ID", "isSecret":false, "help":"…" },
+                  { "key":"project", "label":"Project", "isSecret":false, "help":"Blank = whole organisation" } ],
+  "setupSummary":"…", "isAvailable":true, "supportsContentScan":true }</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Create · Test · Delete · Scan</h3><span class="route"><span class="post">POST</span> cloud/connectors · /test · /delete · cloud/scans · /scans/cancel</span></div>
+  <div class="lbl">Create request (CloudConnectorCreateDTO)</div>
+<pre><code>{ "provider":"AzureRepos", "displayName":"Defensely repos",
+  "externalTenantId":"your-org",                 // the org/tenant/host
+  "clientId":"<app-id>", "clientSecret":"<secret-or-PAT>",
+  "credentials":{ "entraTenantId":"<directory-guid>", "project":"" } }   // project blank = all projects
+// response: CloudConnectorDTO</code></pre>
+  <div class="lbl">Test request / response</div>
+<pre><code>{ "cloudConnectorId":5 }  →  { "success":true, "error":null, "containers":[ { "name":"billing-service" } ] }</code></pre>
+  <div class="lbl">Scan / cancel</div>
+<pre><code>POST cloud/scans         { "cloudConnectorId":5, "scanType":"Incremental" }   // "Full" | "Incremental"
+POST cloud/scans/cancel  { "cloudScanJobId":88 }
+// cloud/scans refuses an AgentHosted connector (centralized) — fails safe.</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Update credentials <span class="tag new">🔵</span></h3><span class="route"><span class="post">POST</span> cloud/connectors/update</span></div>
+  <div class="desc">Code "Update sign-in" · Database "Change server, login or password / Replace connection".</div>
+<pre><code>{ "cloudConnectorId":5, "displayName":"…", "externalTenantId":"…",
+  "clientId":"…", "clientSecret":"",                 // blank = keep existing secret
+  "credentials":{ "project":"", "baseUrl":"…" } }    // omit = leave extras untouched
+// response: CloudConnectorDTO  (status drops to "Pending" → run /test next)</code></pre>
+</div>
+
+<div class="el">
+  <div class="hd"><h3>Set schedule <span class="tag new">🔵</span></h3><span class="route"><span class="post">POST</span> cloud/connectors/schedule</span></div>
+  <div class="desc">Wizard step 3 "How often to scan" · "Keep checking for new secrets" · "Re-scan schedule".</div>
+<pre><code>{ "cloudConnectorId":5, "mode":"daily", "firstScanNow":true }   // mode: manual | daily | weekly
+// response: CloudConnectorDTO</code></pre>
+</div>
+
+<h2>Phase 2 — now implemented <span class="tag new">🔵</span></h2>
+<ul>
+<li><b>Network "Open to Many People"</b> ✅ — the agent reads file-share ACLs → <code>ServerFile.ShareScope</code> (migration V0047); filter the files grid with <code>sharedBroadly:true</code>. Cross-repo, both build.</li>
+<li><b>Scheduler trigger</b> ✅ — a <code>ScheduledScanWorker</code> in the worker turns <code>CloudConnector.ScanSchedule</code> (daily/weekly) into queued scans (<code>requestedBy:0</code> → Trigger "Scheduled"). The schedule set via <code>cloud/connectors/schedule</code> is now acted on.</li>
+<li><b>Network "No agent" servers</b> ✅ model &amp; count — <code>DiscoveredServer</code> table (migration V0048) + a feed endpoint; <code>noAgentServerCount</code> is computed from it (discovered hosts with no registered agent). <b>One honest caveat:</b> it stays 0 until a feed populates the table — the platform has no built-in AD/IP discovery, so a sync job or script must POST servers in. The data path is complete and ready for that feed.</li>
+</ul>
+<div class="el">
+  <div class="hd"><h3>No-agent feed (AD / IP sync / manual)</h3><span class="route"><span class="post">POST</span> server-scanner/discovered</span></div>
+  <div class="desc">A discovery job registers servers that may not run the agent; upserted by host, idempotent, safe on a schedule.</div>
+  <div class="lbl">Request</div><pre><code>{ "servers":[ { "hostName":"FS-OPS-03", "source":"ActiveDirectory", "fqdn":"fs-ops-03.corp.local",
+               "ipAddress":"10.60.3.21", "osVersion":"Windows Server 2022" } ] }</code></pre>
+  <div class="lbl">Response</div><pre><code>{ "upserted": 1 }</code></pre>
+</div>
+
+<p class="note"><b>Remaining non-blocking follow-up:</b> merging the discovered (no-agent) rows into the <i>Servers grid</i> as "Install the agent" rows — the overview count is live; the grid merge is cosmetic and can follow.</p>
+
+<p class="sub" style="margin-top:28px;border-top:1px solid var(--line);padding-top:12px">
+Field names are the exact DTO properties from <code>SFM.DLP.Application/DTOs</code> (camelCase on the wire). Descriptions are the on-screen text from the <code>Scanner.html</code> design render. New endpoints implemented; full solution builds with 0 errors.</p>
+</div>

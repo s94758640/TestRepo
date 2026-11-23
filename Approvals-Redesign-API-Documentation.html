@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Approvals Redesign API — Documentation</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#ffffff; --muted:#64748b; --line:#e2e8f0;
+    --get:#16a34a; --post:#2563eb; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.5}
+  header.top{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:#cbd5e1;font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:280px;flex:0 0 280px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:#fff}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:#334155;text-decoration:none;font-size:13px}
+  nav.side a:hover{background:#f1f5f9}
+  main{flex:1;padding:24px 32px;min-width:0}
+  .intro{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .intro h2{margin-top:0}
+  .kv{font-size:14px}
+  .kv code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:13px}
+  .endpoint{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+  .endpoint > .head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:#fafbfc;flex-wrap:wrap}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:4px 10px;border-radius:6px;letter-spacing:.04em}
+  .method.post{background:var(--post)} .method.get{background:var(--get)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600}
+  .body{padding:18px 22px}
+  .desc{color:#334155;margin:0 0 14px}
+  h5.section{margin:18px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  td code{background:#f1f5f9;padding:1px 5px;border-radius:4px}
+  .type{color:#9333ea;font-family:ui-monospace,monospace;font-size:12px}
+  .req{color:#dc2626;font-size:11px;font-weight:700}
+  .opt{color:var(--muted);font-size:11px;font-weight:600}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .newpill{display:inline-block;background:var(--newbg);color:var(--new);border:1px solid #a7f3d0;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
+  .note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .ok{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:1000px){nav.side{display:none}.grid2{grid-template-columns:1fr}}
+  .tag{font-size:11px;color:var(--muted)}
+  h3.group{margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent);font-size:16px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Approvals Redesign API — Documentation</h1>
+  <p>New approval screens &amp; policy-driven approver hierarchy · for the UI / tray team · changed endpoints, new fields, sample payloads</p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Getting started</h4>
+  <a href="#overview">What changed</a>
+  <a href="#conventions">Conventions &amp; headers</a>
+  <a href="#hierarchy">Approver hierarchy &amp; CanApprove</a>
+  <h4>Approvals (admin)</h4>
+  <a href="#approvallist">GetApprovalList</a>
+  <a href="#approvalrequest">GetApprovalRequest</a>
+  <a href="#reviewrequest">Approve with Access Time</a>
+  <h4>Self override history</h4>
+  <a href="#sohistory">GetSelfOverrideHistory</a>
+  <a href="#sohistorygrouped">GetSelfOverrideHistoryGrouped</a>
+  <a href="#revokeso">RevokeSelfOverride</a>
+  <h4>Override (end user)</h4>
+  <a href="#oversettings">GetUserOverrideSettings</a>
+  <a href="#submitoverride">SubmitOverrideRequest</a>
+  <h4>Reference</h4>
+  <a href="#exeapi">ExeApi V1 equivalents</a>
+  <a href="#deploy">Deployment note (SQL)</a>
+</nav>
+
+<main>
+
+<section class="intro" id="overview">
+  <h2>What changed</h2>
+  <p class="kv">The approvals screens were redesigned around the <strong>PolicyV2 override matrix</strong>: each policy now says, per severity, whether the user may <em>self-override</em> or must request <em>admin approval</em>, for how long access unlocks, and <strong>which role approves</strong> ("Medium → Admin approval for 24 hours by DLP Admin; Critical → by QA"). To support this:</p>
+  <table>
+    <tr><th>Area</th><th>Change</th></tr>
+    <tr><td><code>GetApprovalList</code> / <code>GetApprovalRequest</code></td><td>Rows now carry <span class="newpill">NEW</span> <code>metaId</code>, <code>severity</code>, <code>approverRoles</code> and <code>canApprove</code> (plus the existing <code>policyName</code>). Pass the caller's <code>?userId=</code> (or portal JWT) to get <code>canApprove</code> per row.</td></tr>
+    <tr><td><code>SubmitOverrideRequest</code></td><td>No request-contract change. The server now <strong>stores</strong> on every request: the activity's <code>severity</code>, and (admin-approval only) the <code>approverRoles</code> allowed to decide it — resolved from the policy matrix <em>at submit time</em>, hierarchy applied.</td></tr>
+    <tr><td><code>GetUserOverrideSettings</code></td><td>Response now includes the full matrix (<code>overrideRules</code>), <code>policySource</code>/<code>policyName</code>, per-route severity lists, and <code>allowCancelWhilePending</code>.</td></tr>
+    <tr><td>Self Override History tab <span class="newpill">NEW</span></td><td>Three new endpoints: <code>GetSelfOverrideHistory</code> (flat list), <code>GetSelfOverrideHistoryGrouped</code> (View by User / File), and <code>RevokeSelfOverride</code> (admin closes an active window early).</td></tr>
+    <tr><td>Database</td><td><code>dlp."OverrideRequest"</code> gained <code>Severity</code> and <code>ApproverRoles</code> columns (see <a href="#deploy">deployment note</a>).</td></tr>
+  </table>
+  <p class="tag">All additions are backward compatible — existing fields and shapes are unchanged; old callers simply see the new fields (or <code>null</code>).</p>
+</section>
+
+<section class="intro" id="conventions">
+  <h2>Conventions &amp; headers</h2>
+  <table>
+    <tr><th>Header</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>ClientGUID</code></td><td><span class="req">required</span></td><td>Tenant identifier — routes to the correct tenant DLP database.</td></tr>
+    <tr><td><code>Content-Type</code></td><td><span class="req">required</span></td><td><code>application/json</code> for all <code>POST</code> bodies.</td></tr>
+    <tr><td><code>Authorization</code></td><td>optional</td><td>Tray endpoints are <code>AllowAnonymous</code>. On the <strong>portal</strong>, a Bearer JWT with a <code>UserId</code> claim lets the server fill <code>canApprove</code> without a <code>?userId=</code> query param.</td></tr>
+  </table>
+  <div class="note"><strong>Dates</strong> are ISO-8601 UTC. <strong>Property names are camelCase</strong> in JSON. Every endpoint returns the standard envelope <code>{ success, message, data, errors }</code> — samples below show the <code>data</code> shape only.</div>
+</section>
+
+<section class="intro" id="hierarchy">
+  <h2>Approver hierarchy &amp; CanApprove</h2>
+  <p class="kv">A policy's override matrix names approver roles per severity. The <strong>hierarchy rule</strong>: a role trusted to approve a severity is also trusted with every severity <em>below</em> it (ladder: <code>Critical &gt; High &gt; Medium &gt; Low</code>).</p>
+  <div class="ok">
+    <strong>Example</strong> — policy says <em>Medium → by DLP Admin</em> and <em>Critical → by QA</em>:<br/>
+    • A <strong>Medium</strong> request stores approvers <code>DLP Admin, QA</code> (QA covers Critical ≥ Medium).<br/>
+    • A <strong>Critical</strong> request stores approvers <code>QA</code> only — DLP Admin's rule (Medium) sits below Critical.
+  </div>
+  <p class="kv">The expansion happens <strong>once, at submit</strong>, and is stored on the request — a later policy edit never silently changes who may decide an already-queued request.</p>
+  <h5 class="section">How canApprove is computed per row</h5>
+  <table>
+    <tr><th>Row state</th><th>canApprove for the caller</th></tr>
+    <tr><td>Row has stored <code>approverRoles</code></td><td><code>true</code> when the caller's role matches a stored token: a digit token is compared to the caller's <strong>RoleId</strong>; any other token to the caller's <strong>role name</strong>, ignoring case and spaces (<code>SecurityAdmin</code> matches "Security Admin").</td></tr>
+    <tr><td>Row has no stored roles (legacy / AppSettings)</td><td>Falls back to the existing rule: caller is <strong>DLP Admin</strong> or mapped in <code>PolicyApprovalRoleMap</code>.</td></tr>
+    <tr><td>Caller not identified (no <code>?userId=</code>, no JWT)</td><td><code>canApprove</code> is <code>null</code> on every row — the flag is omitted rather than guessed.</td></tr>
+  </table>
+  <div class="note"><code>canApprove</code> is a <strong>display flag</strong> for enabling/disabling the Approve / Reject actions. Server-side enforcement on the review endpoints is not yet wired — do not treat the flag's absence as a security boundary.</div>
+</section>
+
+<h3 class="group">Approvals (admin)</h3>
+
+<section class="endpoint" id="approvallist">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetApprovalList?userId={callerUserId}</span><span class="newpill">UPDATED</span></div>
+  <div class="body">
+    <p class="desc">Paged, filtered, sorted approval grid. <code>?userId=</code> names the <strong>caller</strong> (the admin looking at the screen) so each row can carry <code>canApprove</code>. On the portal the JWT <code>UserId</code> claim is used when the query param is absent.</p>
+
+    <h5 class="section">Request body (unchanged — QueryParameters)</h5>
+<pre>{
+  "page": 1,
+  "pageSize": 15,
+  "sortBy": "dateRequested",
+  "sortDescending": true,
+  "fromDate": "2025-09-12T00:00:00Z",
+  "toDate": "2025-09-23T23:59:59Z",
+  "exactFilters": { "status": "PENDING", "severity": "Medium" },
+  "likeFilters":  { "userName": "maya", "fileName": "vendor" }
+}</pre>
+    <p class="tag"><code>severity</code> is now part of the row projection, so it works in <code>exactFilters</code>/<code>likeFilters</code>/<code>sortBy</code> like any other column.</p>
+
+    <h5 class="section">New / notable fields per row</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>metaId</code> <span class="newpill">NEW</span></td><td class="type">string?</td><td>The agent's MetaID for the transfer — deep-links into activity / meta flows.</td></tr>
+      <tr><td><code>severity</code> <span class="newpill">NEW</span></td><td class="type">string?</td><td><code>Critical | High | Medium | Low</code>. Stored at submit; stitched from the activity for older rows; <code>null</code> for AI-prompt overrides.</td></tr>
+      <tr><td><code>policyName</code></td><td class="type">string?</td><td>Policy that handled the blocked activity (existing field).</td></tr>
+      <tr><td><code>approverRoles</code> <span class="newpill">NEW</span></td><td class="type">string[]</td><td>Who may decide this request, fixed at submit, hierarchy applied. Tokens are tenant role ids (digits) or catalog codes. Empty = legacy row → DLP Admin fallback.</td></tr>
+      <tr><td><code>canApprove</code> <span class="newpill">NEW</span></td><td class="type">bool?</td><td>Whether the <em>calling</em> user may decide this row. <code>null</code> when no caller was identified.</td></tr>
+      <tr><td><code>policyTimeLimitMinutes</code> / <code>policyTimeLimitSetBy</code> <span class="newpill">NEW</span></td><td class="type">int? / string?</td><td>The detail panel's "Policy Time Limit — 3 Days · set in Finance Restrict All" and the grant picker's cap ("Up to 3 Days"). <code>setBy</code> names the policy; <code>null</code> = server-config ceiling. Minutes are <code>null</code> only for a OneUpload rule.</td></tr>
+      <tr><td><code>timeline</code> <span class="newpill">NEW</span></td><td class="type">event[]</td><td>The Request Timeline, oldest first: <code>{event, label, at}</code> — <code>Blocked</code> ("Upload blocked on Drive", at the activity time) → <code>Requested</code> ("Approval requested by Lara Niles") → <code>WaitingReview</code> (<code>at: null</code>) or <code>Approved</code>/<code>Rejected</code>/<code>Cancelled</code> with the decision time.</td></tr>
+      <tr><td><code>incidentInfo</code> / <code>incidentInfoJson</code></td><td class="type">string? / object?</td><td>The "Captured Sensitive Content" panel (type → matched values, masked per tenant policy). Already present; render <code>incidentInfoJson</code>.</td></tr>
+    </table>
+
+    <h5 class="section">Sample response (data)</h5>
+<pre>{
+  "totalCount": 17,
+  "data": [
+    {
+      "overrideRequestId": "6f6f3f9a-93f1-4f20-9f3b-2e1f9b7d1c22",
+      "activityId": 48122,
+      "requestedByUserId": 31,
+      "requestedByEmail": "maya.collins@acme.com",
+      "userName": "Maya Collins",
+      "employeeCode": "IPL0031",
+      "overridesThisPeriod": 4,
+      "requestedDuration": 24,
+      "durationUnit": "Hours",
+      "grantedDuration": null,
+      "accessExpiresAt": null,
+      "fileName": "Q3_vendor_payments.xlsx",
+      "fileSize": 4294967,
+      "fileSizeFormatted": "4.1 MB",
+      "justification": "Sharing reconciled sheet with the auditor",
+      "application": "Drive",
+      "sensitiveDataTypes": ["PFI"],
+      "dateRequested": "2026-10-26T09:12:00Z",
+      "status": "PENDING",
+      "overrideType": 2,
+      "destination": "drive.google.com",
+      "policyName": "DPDP Act — India Policy",
+      "metaId": "MT-20261026-48122",
+      "severity": "Medium",
+      "approverRoles": ["7", "12"],
+      "canApprove": true,
+      "activity": "Upload",
+      "isLargeFile": false,
+      "reviewedAt": null,
+      "reviewedByUserId": null,
+      "reviewedByEmail": null,
+      "reviewedByUserName": null,
+      "reviewComments": null,
+      "incidentInfo": "PFI: 12 matches",
+      "incidentInfoJson": { "PFI": ["****1234", "****8841"] },
+      "policyTimeLimitMinutes": 4320,
+      "policyTimeLimitSetBy": "Finance Restrict All",
+      "timeline": [
+        { "event": "Blocked",       "label": "Upload blocked on Drive",            "at": "2026-10-26T09:10:00Z" },
+        { "event": "Requested",     "label": "Approval requested by Maya Collins", "at": "2026-10-26T09:12:00Z" },
+        { "event": "WaitingReview", "label": "Waiting for admin review",           "at": null }
+      ]
+    }
+  ],
+  "statusCounts": { "pending": 13, "approved": 3, "rejected": 1, "all": 17 },
+  "activityCounts": { "Upload": 9, "Download": 3, "Copy / Paste": 1, "AI Prompt": 2, "Web Access": 2 }
+}</pre>
+  </div>
+</section>
+
+<section class="endpoint" id="approvalrequest">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetApprovalRequest/{overrideRequestId}?userId={callerUserId}</span><span class="newpill">UPDATED</span></div>
+  <div class="body">
+    <p class="desc">One approval request, in exactly the same shape as a <code>GetApprovalList</code> row — for the detail screen reached from a notification or deep link. Carries the same new fields (<code>metaId</code>, <code>severity</code>, <code>approverRoles</code>, <code>canApprove</code>), computed by the same rule, so the detail view can never disagree with the grid.</p>
+    <h5 class="section">Parameters</h5>
+    <table>
+      <tr><th>Name</th><th>In</th><th>Required</th><th>Notes</th></tr>
+      <tr><td><code>overrideRequestId</code></td><td>path</td><td><span class="req">required</span></td><td>GUID of the request.</td></tr>
+      <tr><td><code>userId</code></td><td>query</td><td><span class="opt">optional</span></td><td>The caller, for <code>canApprove</code>. Portal JWT claim used as fallback.</td></tr>
+    </table>
+    <p class="tag">404 when the request does not exist. No request body.</p>
+  </div>
+</section>
+
+<section class="endpoint" id="reviewrequest">
+  <div class="head"><span class="method post">POST</span><span class="path">/ReviewOverrideRequest · /BulkApproveReject</span><span class="newpill">UPDATED</span></div>
+  <div class="body">
+    <p class="desc">The Access Time dialog on Approve: both review endpoints now take <code>grantedDuration</code> + <code>grantedDurationUnit</code> ("Hours" / "Days"). The server validates it against the request's <strong>policy time limit</strong> — the same number the row's <code>policyTimeLimitMinutes</code> shows — so an approver can shorten a window, never extend it past the policy.</p>
+
+    <h5 class="section">Request body additions</h5>
+<pre>{
+  "overrideRequestId": "6f6f3f9a-93f1-4f20-9f3b-2e1f9b7d1c22",
+  "reviewedByUserId": 7,
+  "reviewedByEmail": "admin@acme.com",
+  "status": "APPROVED",
+  "reviewComments": "OK for the audit",
+  "grantedDuration": 3,            // NEW — the dialog's value…
+  "grantedDurationUnit": "Days"    // NEW — …and unit ("Hours" | "Days")
+}</pre>
+    <p class="tag"><code>BulkApproveReject</code> takes the same two fields once for the batch; each request is validated against its own limit, and one whose policy allows less fails into <code>errors[]</code> instead of silently getting more.</p>
+
+    <h5 class="section">Behaviour</h5>
+    <table>
+      <tr><th>Case</th><th>Result</th></tr>
+      <tr><td>Within the limit</td><td><code>200</code> — access runs <code>grantedDuration</code> from approval (<code>validUntil = validFrom + granted</code>).</td></tr>
+      <tr><td>Longer than the limit</td><td><code>400</code>, <code>errorCode: "LIMIT_EXCEEDED"</code>, message: <em>"Policy allows at most 3 days (set in Finance Restrict All). You can shorten it, not extend it."</em></td></tr>
+      <tr><td>Fields omitted</td><td>Pre-dialog behaviour, unchanged: the employee's requested duration, then the server default. Old clients keep working.</td></tr>
+    </table>
+    <p class="tag">The limit: the policy matrix rule's unlock duration for the request's severity; the server's <code>AdminApprovalValidityDays</code> ceiling when no rule answers (and for OneUpload rules, which are not time-based).</p>
+  </div>
+</section>
+
+<h3 class="group">Self Override History</h3>
+
+<section class="endpoint" id="sohistory">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetSelfOverrideHistory</span><span class="newpill">NEW</span></div>
+  <div class="body">
+    <p class="desc">The history tab's flat "All" view. A self-override is auto-approved at submit, so a row's status describes its <strong>unlock window</strong>, derived at read time: <code>Active</code> while the window is open (with minutes left), <code>Expired</code> once it closes, <code>Revoked</code> when an admin shut it early.</p>
+
+    <h5 class="section">Request body (QueryParameters)</h5>
+<pre>{
+  "page": 1,
+  "pageSize": 15,
+  "status": "Active",                // Active | Expired | Revoked | All (default)
+  "fromDate": "2025-09-12T00:00:00Z",
+  "toDate": "2025-09-23T23:59:59Z",
+  "sortBy": "timesUsed",             // usedOn (default, desc) | userName | fileName | application | timesUsed | validUntil | status | severity
+  "sortDescending": true,
+  "likeFilters": { "search": "vendor" }   // one box, matches user / code / file / justification / application
+}</pre>
+    <p class="tag"><code>likeFilters</code> also accepts the specific keys <code>userName</code>, <code>employeeCode</code>, <code>fileName</code>.</p>
+
+    <h5 class="section">Sample response (data)</h5>
+<pre>{
+  "totalCount": 16,
+  "data": [
+    {
+      "overrideRequestId": "9a1c2e51-70aa-4e0f-8f6e-3d2b1c9e4a07",
+      "activityId": 48120,
+      "userId": 31,
+      "userName": "Maya Collins",
+      "employeeCode": "IPL0031",
+      "email": "maya.collins@acme.com",
+      "fileName": "Q3_vendor_payments.xlsx",
+      "fileSize": 4294967,
+      "fileSizeFormatted": "4.1 MB",
+      "justification": "Sharing reconciled sheet with the auditor",
+      "application": "Drive",
+      "destination": "drive.google.com",
+      "policyName": "DPDP Act — India Policy",
+      "metaId": "MT-20261026-48120",
+      "severity": "High",
+      "dataTypes": ["PFI"],
+      "activity": "Upload",
+      "usedOn": "2026-10-26T09:12:00Z",
+      "accessWindowMinutes": 480,
+      "durationUnit": "Hours",
+      "validFrom": "2026-10-26T09:12:00Z",
+      "validUntil": "2026-10-26T17:12:00Z",
+      "timesUsed": 3,
+      "lastUsedAt": "2026-10-26T10:32:00Z",
+      "usageEvents": [
+        { "sequence": 1, "activity": "Upload", "application": "Drive", "fileName": "Q3_vendor_payments.xlsx", "occurredAt": "2026-10-26T09:12:00Z" },
+        { "sequence": 2, "activity": "Upload", "application": "Drive", "fileName": "Q3_vendor_payments.xlsx", "occurredAt": "2026-10-26T09:52:00Z" },
+        { "sequence": 3, "activity": "Upload", "application": "Drive", "fileName": "Q3_vendor_payments.xlsx", "occurredAt": "2026-10-26T10:32:00Z" }
+      ],
+      "status": "Active",
+      "remainingMinutes": 340,
+      "revokedByUserName": null,
+      "statusChangedAt": null
+    }
+  ],
+  "statusCounts": { "active": 2, "expired": 13, "revoked": 1, "all": 16 }
+}</pre>
+
+    <h5 class="section">Field notes</h5>
+    <table>
+      <tr><th>Field</th><th>Notes</th></tr>
+      <tr><td><code>accessWindowMinutes</code> / <code>durationUnit</code></td><td>The unlock window length ("8 Hours · Set by policy"). <code>durationUnit</code> can be <code>OneUpload</code>, where <code>accessWindowMinutes</code> is null.</td></tr>
+      <tr><td><code>timesUsed</code> / <code>lastUsedAt</code></td><td>The blocked activity it was raised on, plus every override-applied activity of the same user (and file, for file overrides) inside the window. Always ≥ 1; <code>lastUsedAt</code> falls back to the submit time.</td></tr>
+      <tr><td><code>usageEvents</code> <span class="newpill">NEW</span></td><td>The "Usage During Override" list behind those numbers, oldest first: <code>{sequence, activity, application, fileName, occurredAt}</code>. #1 is the originating blocked activity; <code>timesUsed</code> equals its length.</td></tr>
+      <tr><td><code>remainingMinutes</code></td><td>Only on <code>Active</code> rows — render "5h 40m left" from it.</td></tr>
+      <tr><td><code>revokedByUserName</code> / <code>statusChangedAt</code></td><td>Revoked rows name the admin; Expired/Revoked rows carry when the window ended.</td></tr>
+      <tr><td><code>statusCounts</code></td><td>Counted over the searched date range <em>before</em> the status filter, so the Active/Expired/All pills keep all their numbers whichever pill is selected.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="endpoint" id="sohistorygrouped">
+  <div class="head"><span class="method post">POST</span><span class="path">/GetSelfOverrideHistoryGrouped</span><span class="newpill">NEW</span></div>
+  <div class="body">
+    <p class="desc">The "View by User" / "View by File" toggles. Same request body as the flat endpoint plus <code>"groupBy": "User"</code> (default) or <code>"File"</code>. Each group carries its summary line <em>and</em> its member rows (same shape as the flat rows), so expanding a group needs no second call. Paging applies to <strong>groups</strong>.</p>
+
+    <h5 class="section">Sample response (data, groupBy = "File")</h5>
+<pre>{
+  "totalCount": 10,
+  "groupBy": "File",
+  "data": [
+    {
+      "groupKey": "q3_vendor_payments.xlsx",
+      "fileName": "Q3_vendor_payments.xlsx",
+      "fileSize": 4294967,
+      "fileSizeFormatted": "4.1 MB",
+      "userId": null, "userName": null, "employeeCode": null,
+      "totalOverrides": 4,
+      "activeCount": 1,
+      "users": ["Maya Collins", "Sophia Turner", "Daniel Brooks"],
+      "applications": ["Drive", "Chrome", "Whatsapp"],
+      "dataTypes": ["PFI"],
+      "activities": ["Upload"],
+      "lastOverrideAt": "2026-10-26T09:12:00Z",
+      "items": [ /* SelfOverrideHistoryItem rows, newest first */ ]
+    }
+  ],
+  "statusCounts": { "active": 2, "expired": 13, "revoked": 1, "all": 16 }
+}</pre>
+    <p class="tag">In the User view the group carries <code>userId</code>/<code>userName</code>/<code>employeeCode</code> and <code>applications</code>; in the File view it carries <code>fileName</code>/<code>fileSize</code> and <code>users</code>. A prompt or typed-content override has no file name, so in the File view each stands as its own group (<code>groupKey</code> = <code>content:{overrideRequestId}</code>).</p>
+  </div>
+</section>
+
+<section class="endpoint" id="revokeso">
+  <div class="head"><span class="method post">POST</span><span class="path">/RevokeSelfOverride</span><span class="newpill">NEW</span></div>
+  <div class="body">
+    <p class="desc">Admin revoke of an <strong>Active</strong> self-override: sets the row to <code>CANCELLED</code> (shown as <em>Revoked by admin</em>), closes the unlock window now (<code>ValidUntil = now</code>, which is what the agent enforces), clears the override flag on the activity, and notifies the admins and the employee through the usual Recent Alerts path.</p>
+
+    <h5 class="section">Request body</h5>
+<pre>{
+  "overrideRequestId": "9a1c2e51-70aa-4e0f-8f6e-3d2b1c9e4a07",
+  "revokedByUserId": 7,
+  "revokedByEmail": "admin@acme.com",
+  "comments": "Shared outside the audit scope"     // optional; defaults to "Revoked by admin"
+}</pre>
+
+    <h5 class="section">Responses</h5>
+    <table>
+      <tr><th>Code</th><th>When</th></tr>
+      <tr><td><code>200</code></td><td>Revoked — <code>data.message</code>: "Self override revoked. The unlock window is closed."</td></tr>
+      <tr><td><code>400</code></td><td>Not a self-override, or its window is already closed (expired / already revoked / pending admin request).</td></tr>
+      <tr><td><code>404</code></td><td>No such override request.</td></tr>
+    </table>
+  </div>
+</section>
+
+<h3 class="group">Override (end user)</h3>
+
+<section class="endpoint" id="oversettings">
+  <div class="head"><span class="method get">GET</span><span class="path">/GetUserOverrideSettings/{userId}</span><span class="newpill">UPDATED</span></div>
+  <div class="body">
+    <p class="desc">The user's override rules. Existing fields are unchanged; the response now also carries the policy's <strong>override matrix</strong> exactly as the new wizard configured it, so a blocked-activity dialog can offer the right route ("Self override" vs "Request approval"), quote the fixed unlock window, and name who the request will wait on.</p>
+
+    <h5 class="section">New fields</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>policySource</code> <span class="newpill">NEW</span></td><td class="type">string</td><td><code>"PolicyV2"</code> when a published policy answered; <code>"AppSettings"</code> on the server-config fallback.</td></tr>
+      <tr><td><code>policyName</code> <span class="newpill">NEW</span></td><td class="type">string?</td><td>The policy that answered (PolicyV2 only).</td></tr>
+      <tr><td><code>overrideRules</code> <span class="newpill">NEW</span></td><td class="type">rule[]</td><td>One entry per wizard row — see shape below. <strong>Empty</strong> = no rev-18 matrix in force (legacy policy or AppSettings); the coarse <code>canSelfOverride</code>/<code>canAdminOverride</code> flags then say everything.</td></tr>
+      <tr><td><code>selfOverrideSeverities</code> <span class="newpill">NEW</span></td><td class="type">string[]</td><td>Severities self-override applies to. <strong>Empty = every severity.</strong></td></tr>
+      <tr><td><code>adminApprovalSeverities</code> <span class="newpill">NEW</span></td><td class="type">string[]</td><td>Severities admin approval applies to. Empty = every severity.</td></tr>
+      <tr><td><code>allowCancelWhilePending</code> <span class="newpill">NEW</span></td><td class="type">bool</td><td>The wizard's "Allow users to cancel while approval is pending" toggle.</td></tr>
+    </table>
+
+    <h5 class="section">overrideRules[] — rule shape</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>severities</code></td><td class="type">string[]</td><td>Subset of <code>Critical/High/Medium/Low</code>; empty = every severity.</td></tr>
+      <tr><td><code>type</code></td><td class="type">string</td><td><code>SelfOverride</code> | <code>AdminApproval</code>.</td></tr>
+      <tr><td><code>unlockPreset</code></td><td class="type">string?</td><td><code>"1h" | "4h" | "24h" | "7d" | "OneUpload"</code>; <code>null</code> when a custom pair was typed.</td></tr>
+      <tr><td><code>unlockValue</code> / <code>unlockUnit</code></td><td class="type">int? / string?</td><td>The custom pair (<code>unit</code>: <code>h</code> | <code>d</code>) — set when <code>unlockPreset</code> is null.</td></tr>
+      <tr><td><code>unlockMinutes</code></td><td class="type">int?</td><td>Resolved minutes, whichever form was saved. <code>null</code> for <code>OneUpload</code> (single transfer, not time-based).</td></tr>
+      <tr><td><code>approverRoles</code></td><td class="type">string[]</td><td>AdminApproval rules only — role ids / catalog codes, as saved. Same tokens the submitted request stores.</td></tr>
+      <tr><td><code>approverRoleNames</code></td><td class="type">string[]</td><td>Display names ("DLP Admin", "QA", "Security admin"), index-aligned with <code>approverRoles</code>, for the "by …" chip. Unresolvable tokens fall back to the raw token.</td></tr>
+    </table>
+
+    <h5 class="section">Sample response (data) — matches the wizard: High+Low → self 24h; Medium → admin 24h by DLP Admin; Critical → admin 24h by QA</h5>
+<pre>{
+  "userId": 31,
+  "selfOverridesUsed": 3,
+  "selfOverridesTotal": 2147483647,
+  "selfOverridesRemaining": 2147483647,
+  "isUnlimitedSelfOverrides": true,
+  "canSelfOverride": true,
+  "canAdminOverride": true,
+  "typicalResponseTime": "2 to 4 Hours",
+  "overrideResetPeriod": "Never",
+
+  "policySource": "PolicyV2",
+  "policyName": "DPDP Act — India Policy",
+  "allowCancelWhilePending": true,
+  "selfOverrideSeverities": ["High", "Low"],
+  "adminApprovalSeverities": ["Medium", "Critical"],
+  "overrideRules": [
+    {
+      "severities": ["High", "Low"],
+      "type": "SelfOverride",
+      "unlockPreset": "24h",
+      "unlockValue": null,
+      "unlockUnit": null,
+      "unlockMinutes": 1440,
+      "approverRoles": [],
+      "approverRoleNames": []
+    },
+    {
+      "severities": ["Medium"],
+      "type": "AdminApproval",
+      "unlockPreset": "24h",
+      "unlockValue": null,
+      "unlockUnit": null,
+      "unlockMinutes": 1440,
+      "approverRoles": ["7"],
+      "approverRoleNames": ["DLP Admin"]
+    },
+    {
+      "severities": ["Critical"],
+      "type": "AdminApproval",
+      "unlockPreset": "24h",
+      "unlockValue": null,
+      "unlockUnit": null,
+      "unlockMinutes": 1440,
+      "approverRoles": ["12"],
+      "approverRoleNames": ["QA"]
+    }
+  ],
+
+  "maxSelfOverrideHours": 8,
+  "maxAdminApprovalDays": 30,
+  "isApprover": false,
+  "canDecide": false,
+  "roleIds": [4],
+  "pendingApprovalCount": 0,
+  "actionSettings": { "...": "unchanged legacy block" },
+  "alertMessages": []
+}</pre>
+    <div class="note">On a matrix policy (<code>overrideRules</code> non-empty) the allowance is <strong>unlimited by design</strong> — render "unlimited" when <code>isUnlimitedSelfOverrides</code> is true instead of the int.MaxValue totals. The per-rule <code>unlockMinutes</code> is prescribed by policy and <strong>overrides whatever duration the user picks</strong> on submit.</div>
+  </div>
+</section>
+
+<section class="endpoint" id="submitoverride">
+  <div class="head"><span class="method post">POST</span><span class="path">/SubmitOverrideRequest</span><span class="newpill">BEHAVIOUR</span></div>
+  <div class="body">
+    <p class="desc">Request and response contracts are <strong>unchanged</strong>. What's new is what the server records on the created <code>OverrideRequest</code> row:</p>
+    <table>
+      <tr><th>Stored field</th><th>When</th><th>Value</th></tr>
+      <tr><td><code>Severity</code></td><td>every override (self + admin)</td><td>The blocked activity's severity at submit time.</td></tr>
+      <tr><td><code>ApproverRoles</code></td><td>admin-approval only</td><td>The matrix's approvers for that severity, <strong>hierarchy applied</strong> (see <a href="#hierarchy">above</a>), comma-joined. <code>NULL</code> when no matrix answered — the DLP Admin fallback decides, exactly as before.</td></tr>
+    </table>
+    <p class="tag">AI-prompt overrides (<code>SubmitPromptOverrideRequest</code>) store neither — prompts carry no severity, and their approval stays on the DLP Admin fallback.</p>
+  </div>
+</section>
+
+<h3 class="group">Reference</h3>
+
+<section class="intro" id="exeapi">
+  <h2>ExeApi V1 equivalents</h2>
+  <p class="kv">The agent-facing function app serves the same operations through the shared <code>ApprovalService</code>, so shapes and rules are identical:</p>
+  <table>
+    <tr><th>Portal route</th><th>ExeApi route</th><th>Caller id</th></tr>
+    <tr><td><code>POST /GetApprovalList</code></td><td><code>POST /V1/GetApprovalList?userId=…</code></td><td><code>?userId=</code> only (anonymous host, no JWT)</td></tr>
+    <tr><td><code>POST /GetApprovalRequest/{id}</code></td><td><code>POST /V1/GetApprovalRequest/{id}?userId=…</code></td><td><code>?userId=</code> only</td></tr>
+    <tr><td><code>POST /GetSelfOverrideHistory</code></td><td><code>POST /V1/GetSelfOverrideHistory</code></td><td>—</td></tr>
+    <tr><td><code>POST /GetSelfOverrideHistoryGrouped</code></td><td><code>POST /V1/GetSelfOverrideHistoryGrouped</code></td><td>—</td></tr>
+    <tr><td><code>POST /RevokeSelfOverride</code></td><td><code>POST /V1/RevokeSelfOverride</code></td><td>body (<code>revokedByUserId</code>)</td></tr>
+    <tr><td><code>GET /GetUserOverrideSettings/{userId}</code></td><td><code>GET /V1/GetUserOverrideSettings/{userId}</code></td><td>path</td></tr>
+    <tr><td><code>POST /SubmitOverrideRequest</code></td><td><code>POST /V1/SubmitOverrideRequest</code></td><td>body</td></tr>
+  </table>
+</section>
+
+<section class="intro" id="deploy">
+  <h2>Deployment note (SQL)</h2>
+  <p class="kv">Before these fields return data on an environment, run <code>SFM.DLP.Infrastructure/Data/Migrations/AddSeverityApproverRolesToOverrideRequest.sql</code> against <strong>each client's DLP database</strong>. It is guarded and re-runnable: adds <code>dlp."OverrideRequest"."Severity"</code> (varchar 20) and <code>"ApproverRoles"</code> (varchar 500), and backfills <code>Severity</code> from <code>crunch."LandingLogsCrunched"</code>. <code>ApproverRoles</code> is deliberately <em>not</em> backfilled — <code>NULL</code> already means "DLP Admin fallback", which is how legacy rows were always handled.</p>
+  <p class="tag">Until the SQL runs, the API will error on these endpoints (EF selects the new columns). Deploy SQL first, then the API.</p>
+</section>
+
+<p class="tag" style="margin:30px 0 40px">Generated 26 Oct 2026 · covers TrayAppController + SFM.DLP.ExeApi ApprovalFunction/InsertFunction · companion to TrayApp-API-Documentation.html</p>
+
+</main>
+</div>
+</body>
+</html>

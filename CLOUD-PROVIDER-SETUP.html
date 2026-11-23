@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLOUD-PROVIDER-SETUP</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Connecting a provider to Defensely</h1>
+<p>What has to be created on each provider's side before Defensely can scan it, and what it costs. Written for whoever will do the sign-ups, with the management decision stated first because two of them need one.</p>
+<p>Two kinds of provider, one wizard. Pick the provider and the fields change.</p>
+<table><thead><tr>
+<th></th>
+<th>Providers</th>
+<th>What a scan answers</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Part 1 · Cloud storage</strong></td>
+<td>Box · Dropbox · Google Drive · Adobe</td>
+<td>Which files hold sensitive data, and who can reach them</td>
+</tr>
+<tr>
+<td><strong>Part 2 · Source repositories</strong></td>
+<td>Azure DevOps Repos · GitHub · GitLab · Bitbucket</td>
+<td>Whether a live credential is committed in our source</td>
+</tr>
+</tbody></table>
+<p>SharePoint and OneDrive are set up through Entra and are documented separately.</p>
+<p><strong>Every credential in this document is read-only.</strong> None of them can change, share or delete anything — worth saying first, because it is the first thing any admin asks.</p>
+<hr>
+<h1>Part 1 · Cloud storage</h1>
+<p>Box, Dropbox, Google Drive and Adobe. A scan here answers <strong>which files hold sensitive data, and who can reach them</strong>.</p>
+<hr>
+<h2>The short answer on cost</h2>
+<p><strong>Only Box can be tested indefinitely for nothing.</strong> The other two give a trial with a clock, and then they are paid products.</p>
+<table><thead><tr>
+<th></th>
+<th>account needed</th>
+<th>free?</th>
+<th>clock</th>
+<th>what happens after</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Box</strong></td>
+<td>Box Developer Account</td>
+<td><strong>Yes, permanently</strong></td>
+<td>none</td>
+<td>nothing — it stays free</td>
+</tr>
+<tr>
+<td><strong>Dropbox</strong></td>
+<td>Dropbox <strong>Business</strong> (Standard or Advanced)</td>
+<td>trial only</td>
+<td><strong>30 days</strong></td>
+<td>paid per user, minimum seat count</td>
+</tr>
+<tr>
+<td><strong>Google Drive</strong></td>
+<td>Google <strong>Workspace</strong> (Business Starter or above)</td>
+<td>trial only</td>
+<td><strong>14 days</strong></td>
+<td>paid per user</td>
+</tr>
+<tr>
+<td><strong>Adobe Creative Cloud</strong></td>
+<td>existing Adobe org — but see below</td>
+<td><strong>not yet known</strong></td>
+<td>none</td>
+<td>nothing to buy; it is not established that this can be built at all</td>
+</tr>
+</tbody></table>
+<p>Consumer tiers do not work for any of this, and it is worth being precise about why: a personal Google account or a free Dropbox exposes only <strong>per-user OAuth</strong>, where each individual grants access to their own files. Defensely scans on behalf of an organisation — one admin credential covering everybody. That capability exists only in the business tiers. It is not a setting we can switch on; the API simply is not there.</p>
+<h3>Recommendation: build first, then start the trials</h3>
+<p>The trial clocks should cover <strong>testing</strong>, not development. If a Dropbox trial is started today, most of its 30 days will be spent while the connector is still being written, and the clock will run out around the time it becomes useful.</p>
+<p>So:</p>
+<ol>
+<li><strong>Box now</strong> — free and permanent, so there is no reason to wait. It also exercises the same code path the other two use.</li>
+<li><strong>Dropbox and Google when their connectors are ready to test.</strong> A day or two of notice is enough; both sign-ups are same-day.</li>
+</ol>
+<h3>What management is being asked to approve</h3>
+<ul>
+<li><strong>Box</strong> — nothing. No cost, no commitment.</li>
+<li><strong>Dropbox Business</strong> — a 30-day trial, which normally requires a payment card. Someone must own cancelling it or approving the spend before day 30.</li>
+<li><strong>Google Workspace</strong> — a 14-day trial <strong>and a domain we control</strong>. We already own <code>innovly.co</code> and <code>secureforme.io</code>, so no purchase is needed, but a DNS TXT record has to be added to prove ownership. That needs whoever holds DNS.</li>
+<li><strong>Adobe</strong> — the <strong>Developer role</strong> on the Adobe org we already have. Free, and granted by an Adobe System Administrator. Nothing to purchase; it only makes the API catalogue visible so the question can be answered at all.</li>
+</ul>
+<p>A question worth settling early: whether these stay as permanent internal test tenants, or are only stood up to verify each connector and then dropped. The second is cheaper and is enough to ship; the first is what lets us reproduce a customer problem six months later without asking them for access.</p>
+<hr>
+<h2>Box</h2>
+<p>Free, permanent, and the only one with no clock. Start here.</p>
+<h3>Create it</h3>
+<ol>
+<li>Go to <strong>developer.box.com</strong> and sign up for a <strong>Box Developer Account</strong>. This creates a self-contained test enterprise with its own Admin Console — which is the part that matters, because it is what makes admin-level API access possible at all.</li>
+<li><strong>Dev Console → Create Platform App → Custom App</strong>.</li>
+<li>Authentication method: <strong>Server Authentication (Client Credentials Grant)</strong>.</li>
+</ol>
+<p>Box also offers JWT with a keypair. Both work; CCG is chosen because the credential is just an ID and a secret, with no PEM private key or passphrase to paste wrong.</p>
+<ol>
+<li>On the app's <strong>Configuration</strong> tab:</li>
+</ol>
+<ul>
+<li><strong>App Access Level:</strong> <em>App + Enterprise Access</em></li>
+<li><strong>Application Scopes:</strong> tick</li>
+<li><em>Read all files and folders stored in Box</em></li>
+<li><em>Manage users</em> — this is what enumerates whose accounts exist</li>
+<li><strong>Advanced Features:</strong> tick <strong>Generate user access tokens</strong></li>
+</ul>
+<p>Without this the app can authenticate but cannot read any individual's content, and the scan finds nothing while reporting success.</p>
+<ol>
+<li><strong>Authorization</strong> tab → <strong>Review and Submit</strong>.</li>
+<li><strong>Admin Console → Platform → Platform Apps</strong> → authorise the app. On a developer account you are the admin, so you are approving your own request.</li>
+</ol>
+<p>Box's own documentation still says "Admin Console → Apps", and some tenants show it as <em>Integrations → Custom Apps Manager</em>. On a current developer enterprise it is <strong>Platform</strong>, and the page lists each app with its Authorization state, Enablement, and Client ID — which is also the quickest way to confirm the right app is the one authorised.</p>
+<p><strong>How to tell it worked without guessing:</strong> authorising an app makes Box create a service account for it, named <code>AutomationUser_&lt;id&gt;_&lt;suffix&gt;</code>, which then appears in <strong>Content → Content Manager</strong> alongside the real users. If it is there, the app is authorised.</p>
+<p>That account's own drive is always empty, and that is correct — the app never stores anything of its own. It reads each real user's content by acting as them, which is what <em>Generate user access tokens</em> enables. An empty service account is expected; a scan that finds nothing is the symptom of that setting being off.</p>
+<h3>What to send us</h3>
+<p>From <strong>Configuration → OAuth 2.0 Credentials</strong>, and <strong>Admin Console → Account &amp; Billing</strong> for the third:</p>
+<table><thead><tr>
+<th>field</th>
+<th>where</th>
+</tr></thead><tbody>
+<tr>
+<td>Client ID</td>
+<td>app's Configuration tab</td>
+</tr>
+<tr>
+<td>Client Secret</td>
+<td>same (shown once — copy it then)</td>
+</tr>
+<tr>
+<td>Enterprise ID</td>
+<td>Admin Console → Account &amp; Billing</td>
+</tr>
+</tbody></table>
+<p>Nothing else. Box needs no extra fields in the connect wizard.</p>
+<blockquote>**If a change is made to scopes later, the app must be re-authorised in the</blockquote>
+<blockquote>Admin Console.** Box does not apply scope changes to an already-approved app</blockquote>
+<blockquote>until it is re-submitted, and the symptom is a permission error on a call that</blockquote>
+<blockquote>worked yesterday.</blockquote>
+<hr>
+<h2>Dropbox Business</h2>
+<p>30-day trial. Do not start it until the connector is ready to test.</p>
+<h3>Create it</h3>
+<ol>
+<li><strong>dropbox.com/business</strong> → start a free trial of <strong>Standard</strong> or <strong>Advanced</strong>. A payment card is normally required. Note the date — the trial ends 30 days later whether or not anyone is watching.</li>
+<li><strong>dropbox.com/developers/apps → Create app</strong>:</li>
+</ol>
+<ul>
+<li><strong>Scoped access</strong></li>
+<li><strong>Full Dropbox</strong> — not App folder. App folder restricts the app to its own directory, which is the opposite of what a scanner needs.</li>
+</ul>
+<ol>
+<li><strong>Permissions</strong> tab, tick:</li>
+</ol>
+<table><thead><tr>
+<th>scope</th>
+<th>why</th>
+</tr></thead><tbody>
+<tr>
+<td><code>team_info.read</code></td>
+<td>the team's own identity</td>
+</tr>
+<tr>
+<td><code>members.read</code></td>
+<td>enumerate team members</td>
+</tr>
+<tr>
+<td><code>team_data.member</code></td>
+<td>act on a member's behalf</td>
+</tr>
+<tr>
+<td><code>files.metadata.read</code></td>
+<td>list files</td>
+</tr>
+<tr>
+<td><code>files.content.read</code></td>
+<td>read them for classification</td>
+</tr>
+<tr>
+<td><code>sharing.read</code></td>
+<td>shared links — the Public Links screen</td>
+</tr>
+</tbody></table>
+<p>Submit the permission change before generating any token. A token issued before a scope was added does not carry it.</p>
+<ol>
+<li><strong>Get a refresh token.</strong> Dropbox has no app-only flow for team data, so a team admin authorises once and the resulting refresh token becomes the connector's credential. In a browser, signed in as a team admin:</li>
+</ol>
+<pre><code>
+   https://www.dropbox.com/oauth2/authorize?client_id=APP_KEY&amp;response_type=code&amp;token_access_type=offline
+</code></pre>
+<p><code>token_access_type=offline</code> is what makes Dropbox return a refresh token rather than a short-lived one. Without it you get a token that expires in four hours and a connector that stops working the same day.</p>
+<p>Approve, copy the code, then exchange it (the code is single-use and expires in minutes):</p>
+<pre><code>
+   curl https://api.dropboxapi.com/oauth2/token \
+     -d code=PASTED_CODE \
+     -d grant_type=authorization_code \
+     -d client_id=APP_KEY \
+     -d client_secret=APP_SECRET
+</code></pre>
+<p>Pass the key and secret as <strong>form fields</strong>, not as <code>-u APP_KEY:APP_SECRET</code>. Basic auth works in principle, but a stray space copied from the console lands inside the base64 and Dropbox answers <code>invalid_client</code> — which reads as a wrong secret when the secret was fine.</p>
+<p>On Windows use <code>curl.exe</code>. In PowerShell, <code>curl</code> is an alias for <code>Invoke-WebRequest</code>, which does not understand <code>-d</code>.</p>
+<p>The response contains <code>refresh_token</code>. That is the value we need.</p>
+<p><strong>Done once, not per scan.</strong> A refresh token does not expire. It is stored encrypted on the connector and exchanged for a short-lived access token on every call automatically — which is exactly what <code>token_access_type=offline</code> buys. Without it Dropbox returns only a four-hour token and somebody repeats this by hand every afternoon.</p>
+<p>Redo it only if a team admin revokes the app, the App secret is regenerated, or the scopes change: Dropbox needs fresh consent for a new scope, and an existing token keeps working while silently lacking it. Submitting all six scopes before this step makes that impossible.</p>
+<ol>
+<li><strong>Approve the app for the team — if your console has it.</strong> Dropbox's documentation points at <em>Admin Console → Apps</em>; that page does not exist on every team, and searching the admin console for "app" may turn up only sharing settings. It applies when someone other than a team admin created the app, or where app-approval enforcement is on. If you are the team admin doing the grant, that grant IS the approval — and the token succeeding proves it.</li>
+</ol>
+<h3>What to send us</h3>
+<table><thead><tr>
+<th>field</th>
+<th>where</th>
+</tr></thead><tbody>
+<tr>
+<td>App key</td>
+<td>app's Settings tab</td>
+</tr>
+<tr>
+<td>App secret</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Refresh token</td>
+<td>from step 4</td>
+</tr>
+<tr>
+<td>Team ID</td>
+<td>optional — we can read it from the API</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Google Drive (Workspace)</h2>
+<p>14-day trial, and the only one that needs a domain.</p>
+<h3>Create it</h3>
+<ol>
+<li><strong>First, check what kind of Google account you have.</strong> This decides whether anything below is possible, and it is not obvious from the address.</li>
+</ol>
+<p>Sign in and open <strong>admin.google.com</strong>:</p>
+<table><thead><tr>
+<th>what happens</th>
+<th>what it means</th>
+</tr></thead><tbody>
+<tr>
+<td>An admin console opens</td>
+<td>Workspace, and you are an administrator. Skip to step 2</td>
+</tr>
+<tr>
+<td>"You're not an administrator"</td>
+<td>Workspace, but on somebody else's account. Get a super-admin, or have steps 5–6 done for you</td>
+</tr>
+<tr>
+<td>It bounces you out entirely</td>
+<td>A personal Google account. Nothing below will work</td>
+</tr>
+</tbody></table>
+<p>The last case is the one to catch now. A personal account has no admin console, so there is no domain-wide delegation to grant — and delegation is the entire mechanism by which a service account reads anybody's Drive. An ordinary Gmail can only grant access to <em>its own</em> files, one user at a time, which is not what a scanner does.</p>
+<p>If a Workspace tenant is needed: <strong>workspace.google.com</strong> → start a trial, supplying a domain you control and proving it with a <strong>DNS TXT record</strong>. We own <code>innovly.co</code> and <code>secureforme.io</code>; a spare subdomain keeps it clear of production mail.</p>
+<blockquote>Do not use a domain that carries live email. Workspace sign-up will want to</blockquote>
+<blockquote>take over MX records for it.</blockquote>
+<ol>
+<li><strong>console.cloud.google.com</strong> → create a project.</li>
+<li><strong>APIs &amp; Services → Library</strong> → enable:</li>
+</ol>
+<ul>
+<li><strong>Google Drive API</strong></li>
+<li><strong>Admin SDK API</strong></li>
+</ul>
+<ol>
+<li><strong>IAM &amp; Admin → Service Accounts → Create service account.</strong></li>
+</ol>
+<ul>
+<li>No roles needed. Project roles govern Google Cloud resources; access to Workspace data comes entirely from step 6.</li>
+</ul>
+<ol>
+<li>On the service account: <strong>Keys → Add key → Create new key → JSON</strong>. Download it. This file is a credential — treat it like a password, and it is only downloadable once.</li>
+<li><strong>Enable domain-wide delegation</strong> on the service account, and copy its numeric <strong>Client ID</strong> (the "Unique ID", not the email).</li>
+</ol>
+<p>Then in the <strong>Workspace Admin console</strong> → <strong>Security → Access and data control → API controls → Domain-wide delegation → Add new</strong>:</p>
+<ul>
+<li><strong>Client ID:</strong> the numeric ID from above</li>
+<li><strong>OAuth scopes</strong>, comma-separated, exactly:</li>
+</ul>
+<pre><code>
+     https://www.googleapis.com/auth/drive.readonly,
+     https://www.googleapis.com/auth/admin.directory.user.readonly
+</code></pre>
+<p>This step is the one that actually grants access, and it is done in the Workspace admin console, not in Google Cloud. The two consoles look similar and doing it in the wrong one is the most common way this fails.</p>
+<h3>What to send us</h3>
+<p>From the downloaded JSON key, plus two values you choose:</p>
+<table><thead><tr>
+<th>field</th>
+<th>where</th>
+</tr></thead><tbody>
+<tr>
+<td><code>client_email</code></td>
+<td>in the JSON</td>
+</tr>
+<tr>
+<td><code>client_id</code></td>
+<td>in the JSON (the numeric one)</td>
+</tr>
+<tr>
+<td><code>private_key</code></td>
+<td>in the JSON — the whole <code>-----BEGIN PRIVATE KEY-----</code> block</td>
+</tr>
+<tr>
+<td>Admin user to impersonate</td>
+<td>a Workspace super-admin address</td>
+</tr>
+<tr>
+<td>Customer ID or primary domain</td>
+<td>Admin console → Account settings</td>
+</tr>
+</tbody></table>
+<blockquote><strong>Why an admin to impersonate.</strong> A service account owns no Drive of its own.</blockquote>
+<blockquote>Every read happens <em>as somebody</em>, and listing the domain's users happens as an</blockquote>
+<blockquote>admin. If that address is not a super-admin, user enumeration returns nothing</blockquote>
+<blockquote>and the scan completes successfully having found no accounts at all.</blockquote>
+<h3>After connecting — what to check</h3>
+<p>Google fails more opaquely than the others: nearly every mistake comes back as <code>invalid_grant</code> with no detail, so the order matters.</p>
+<table><thead><tr>
+<th>symptom</th>
+<th>almost always</th>
+</tr></thead><tbody>
+<tr>
+<td>Test fails, <code>invalid_grant</code></td>
+<td>Delegation not authorised in the <strong>Workspace</strong> admin console (people do it in Google Cloud by mistake), the two scopes not granted there, or the impersonated user not a real super-admin</td>
+</tr>
+<tr>
+<td>Private key rejected</td>
+<td>The JSON key's <code>\n</code> escapes pasted literally instead of as real line breaks</td>
+</tr>
+<tr>
+<td>Test succeeds, <strong>zero users</strong></td>
+<td>The impersonated address is not a super-admin</td>
+</tr>
+<tr>
+<td>Files found, Google Docs empty</td>
+<td>Expected only for Drawings and Forms — Docs, Sheets and Slides are exported as text and should carry content</td>
+</tr>
+</tbody></table>
+<p>The third row is the dangerous one, because it looks like success. A scan that enumerated nobody reports the organisation as holding no sensitive data. If the user count is zero, treat it as a failure whatever the status says.</p>
+<hr>
+<h2>Adobe Creative Cloud</h2>
+<p>Not like the other three, and worth stating before anybody starts a sign-up.</p>
+<p>The providers above all share one thing: a documented, admin-level API where <strong>a single credential can enumerate every user's files and read their contents</strong>. That is the entire basis of a connector. Adobe is not known to publish that for Creative Cloud storage.</p>
+<p>What Adobe does expose at enterprise level:</p>
+<ul>
+<li><strong>User Management API</strong> — users, groups, entitlements. Real and well documented, but it lists <em>people</em>, not files.</li>
+<li><strong>Admin Console storage reports</strong> — per-user asset inventory exported from the console. A report rather than an API, and it carries file names without contents.</li>
+<li><strong>Asset transfer on offboarding</strong> — an admin can move a departing user's folder to someone else, through the console UI. One user at a time, no API.</li>
+<li><strong>Photoshop / Lightroom / InDesign APIs</strong> — these act on assets handed to them, authorised per user. They do not enumerate an organisation.</li>
+</ul>
+<p>None of that gives the four operations a scan needs. So what follows is a <strong>check</strong>, not a setup guide: this should be settled with evidence from our own Adobe org rather than anybody's assumption, and it costs nothing to run.</p>
+<h3>Settling it</h3>
+<ol>
+<li><strong>Get the Developer role.</strong> The Developer Console currently reports <em>"You do not have developer access and need admin approval"</em>, so the API catalogue is not visible at all. An Adobe <strong>System Administrator</strong> grants it in Admin Console → Users. <strong>Free</strong> — a role on an existing subscription, not a new product. This is the only thing to ask management for at this stage.</li>
+</ol>
+<ol>
+<li><strong>Open the API catalogue.</strong> developer.adobe.com/console → confirm the org → Create new project → <strong>Add API</strong>.</li>
+</ol>
+<p><strong>This list is the answer.</strong> Adobe does not allow a bare credential — one exists only attached to an API — so what appears here defines what any Adobe credential could ever do.</p>
+<ol>
+<li><strong>Create an OAuth Server-to-Server credential.</strong> Not JWT; Adobe retired those. The credential page then shows the Client ID, a <em>Retrieve client secret</em> button, the granted scopes, and the Organization ID in <code>XXXXXXXXXXXX@AdobeOrg</code> form.</li>
+</ol>
+<ol>
+<li><strong>Read what it can actually touch:</strong></li>
+</ol>
+<pre><code>
+   curl -s -X POST https://ims-na1.adobelogin.com/ims/token/v3 \
+     -d grant_type=client_credentials \
+     -d client_id=CLIENT_ID \
+     -d client_secret=CLIENT_SECRET \
+     -d scope=openid,AdobeID,read_organizations
+</code></pre>
+<p>The access token is a JWT; its middle segment decodes to JSON with a <code>scope</code> claim. That claim — not the console, not what anyone was told — is the definitive statement of what the credential may do.</p>
+<h3>Reading the result</h3>
+<table><thead><tr>
+<th>Scopes include</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td>assets / storage / files / content</td>
+<td>Worth pursuing — read the docs and plan a connector properly</td>
+</tr>
+<tr>
+<td>only user management, openid, organizations</td>
+<td>Manages people, not files. No connector is possible from it</td>
+</tr>
+<tr>
+<td>AEM scopes</td>
+<td>Adobe Experience Manager Assets, which <strong>is</strong> scannable — a different and real path</td>
+</tr>
+</tbody></table>
+<h3>Two things that could make this moot</h3>
+<ul>
+<li><strong>Is it actually AEM Assets?</strong> Adobe Experience Manager Assets is a different product with a proper HTTP API over its asset store, and is genuinely scannable. "Adobe assets" is used for both and they are routinely confused.</li>
+<li><strong>Where do the files really sit?</strong> Many organisations have Creative Cloud syncing into SharePoint, Google Drive or Box. Where that is true we already scan them, and no Adobe connector is needed.</li>
+</ul>
+<h3>Settled — checked on a real Adobe organisation, 2026-09-28</h3>
+<p>The Developer Console's "Add an API" catalogue for <code>designer-intechhub.com</code> contains, in full:</p>
+<blockquote>PDF Services · PDF Embed · Photoshop (Firefly) · Lightroom · Substance 3D ·</blockquote>
+<blockquote>Remove Background · Smart Content · Places · Privacy Service ·</blockquote>
+<blockquote>Primetime Ad Insertion · User Management</blockquote>
+<p><strong>No storage, assets or file API of any kind.</strong> A credential can only ever be attached to something in that list, so that list is the ceiling on what any Adobe credential could do.</p>
+<p><strong>User Management was itself disabled</strong> on that organisation — it needs an entitlement not in every plan. It does not matter: User Management lists <em>people</em>, not files. No Adobe subscription unlocks scanning, so this is not a licensing gap that can be bought around. The interface does not exist.</p>
+<p><strong>Conclusion: an Adobe connector cannot scan, and that is now established rather than assumed.</strong> The connector stays registered with <code>SupportsContentScan = false</code>, which is exactly what it was built to express — it reports what a credential may do and refuses a scan rather than completing one having read nothing.</p>
+<p>The remaining useful question for any customer asking about Adobe is where their Creative Cloud content actually lives. Where it syncs into SharePoint, Drive, Box or Dropbox — which is common — it is already covered.</p>
+<hr>
+<hr>
+<h1>Part 2 · Source repositories</h1>
+<p>Azure DevOps, GitHub, GitLab and Bitbucket. A scan here answers a different question from Part 1 — not <em>who can reach this file</em>, but <strong>is there a live credential committed in our source</strong>.</p>
+<hr>
+<h2>What the scan looks for</h2>
+<p>Credentials in source and configuration: AWS keys, GitHub and Slack tokens, private key blocks, Azure storage connection strings, passwords assigned in config files. Then, as a second pass, the same classifications the rest of the product uses — PII, PHI and the others — because a CSV of real customer data committed to a repository is the same problem on a drive and in git.</p>
+<p><strong>Two things to say out loud before anyone demonstrates this.</strong></p>
+<p>It reads the <strong>current state of the default branch</strong>. A secret deleted last week is not in what we scan — but it is still in git history, and the key is still live. So a clean result means <em>clean at HEAD</em>, never <em>clean</em>, and the fix for every finding is <strong>rotate the credential</strong>, not delete the line.</p>
+<p>It is <strong>read-only</strong>. Every credential below reads repository contents and nothing else. We cannot push, cannot open pull requests, cannot change settings and cannot delete anything.</p>
+<hr>
+<h2>Azure DevOps Repos</h2>
+<p>Two ways to connect. <strong>A service principal is the better one</strong> and is what we recommend — it belongs to the organisation rather than to a person, and it does not expire. A personal access token is quicker if you just want to see a scan run.</p>
+<h3>Option A — service principal (recommended)</h3>
+<p>The same kind of Entra app registration you already use for SharePoint and OneDrive, so this will be familiar.</p>
+<ol>
+<li><strong>Entra admin centre → App registrations → New registration.</strong> Name it something recognisable; no redirect URI is needed.</li>
+<li><strong>Certificates &amp; secrets → New client secret.</strong> Copy the value — it is shown once. Note the expiry you chose.</li>
+<li>Copy the <strong>Application (client) ID</strong> and the <strong>Directory (tenant) ID</strong> from the app's Overview page.</li>
+<li><strong>In Azure DevOps: Organization settings → Users → Add users.</strong> One dialog does all of it:</li>
+</ol>
+<table><thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead><tbody>
+<tr>
+<td>Users or Service Principals</td>
+<td>The app registration's name, or paste its <strong>Application (client) ID</strong> if the name does not resolve</td>
+</tr>
+<tr>
+<td><strong>Access level</strong></td>
+<td><strong>Basic</strong></td>
+</tr>
+<tr>
+<td>Add to projects</td>
+<td>The projects you want scanned</td>
+</tr>
+<tr>
+<td><strong>Azure DevOps Groups</strong></td>
+<td><strong>Project Readers</strong></td>
+</tr>
+</tbody></table>
+<p>Setting the group here means the principal lands read-only in every project you ticked. There is no need to visit each project's Permissions page afterwards — only to add a project later, or to check what it actually has.</p>
+<blockquote><strong>Access level must be Basic, not Stakeholder.</strong> Stakeholder is free and has</blockquote>
+<blockquote><strong>no access to Repos at all</strong>, so the principal authenticates perfectly and</blockquote>
+<blockquote>lists zero repositories — which looks exactly like a clean scan.</blockquote>
+<blockquote><strong>Step 4 is the one that gets missed entirely.</strong> A valid app registration that</blockquote>
+<blockquote>was never added to the organisation fails the same silent way. The connector</blockquote>
+<blockquote>test catches both by listing what it can actually see, which is why you should</blockquote>
+<blockquote>run the test before trusting any scan.</blockquote>
+<p><strong>No API permissions are needed on the app registration.</strong> Unlike Graph, Azure DevOps authorises by what the service principal is granted <em>inside the organisation</em>, not by consented scopes. Nothing to approve in Entra beyond creating the app.</p>
+<h3>Option B — personal access token</h3>
+<ol>
+<li>In Azure DevOps, click your profile picture → <strong>Personal access tokens</strong> → <strong>New Token</strong>.</li>
+<li><strong>Organization:</strong> the one you want scanned.</li>
+<li><strong>Expiration:</strong> a PAT lives at most one year. Note the date — when it expires, scanning stops and the connector reports an authentication error.</li>
+<li><strong>Scopes:</strong> choose <em>Custom defined</em>, then tick <strong>Code → Read</strong> and nothing else.</li>
+<li>Create, and copy the token. Azure DevOps shows it <strong>once</strong>.</li>
+</ol>
+<blockquote><strong>If you use a PAT, create it from a service account rather than a person.</strong> A</blockquote>
+<blockquote>PAT carries its owner's access and dies with their account — so scanning stops</blockquote>
+<blockquote>the day they leave, and the failure arrives weeks later as an authentication</blockquote>
+<blockquote>error with nobody remembering why.</blockquote>
+<h3>What to send us</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Option A — service principal</th>
+<th>Option B — token</th>
+</tr></thead><tbody>
+<tr>
+<td>Organisation</td>
+<td>The part after <code>dev.azure.com/</code> in your URL</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Directory (tenant) ID</td>
+<td>From the app's Overview page</td>
+<td><strong>leave blank</strong></td>
+</tr>
+<tr>
+<td>Application (client) ID</td>
+<td>From the app's Overview page</td>
+<td>leave blank</td>
+</tr>
+<tr>
+<td>Client secret / token</td>
+<td>The client secret</td>
+<td>The personal access token</td>
+</tr>
+<tr>
+<td>Project</td>
+<td>A single project, or <strong>blank for all</strong></td>
+<td>same</td>
+</tr>
+<tr>
+<td>Server URL</td>
+<td>Blank for cloud; for Azure DevOps <strong>Server</strong>, your base URL</td>
+<td>same</td>
+</tr>
+</tbody></table>
+<p>The <strong>Directory (tenant) ID is what selects the mode.</strong> Fill it in and we connect as a service principal; leave it blank and the secret is treated as a token.</p>
+<p>Leave Project blank unless there is a reason not to: a project added next month is picked up automatically, where a named one has to be remembered and edited.</p>
+<h3>After connecting — what to check</h3>
+<p>Run the connector test and compare the <strong>repository count</strong> against what you expect. A credential scoped more narrowly than intended produces a successful scan of a fraction of the organisation, which looks identical to a clean result.</p>
+<p>If the count is lower than it should be:</p>
+<ul>
+<li><strong>Service principal, zero repositories</strong> — either it was never added to the organisation, or its access level is <strong>Stakeholder</strong>, which has no Repos access at all. Both authenticate cleanly.</li>
+<li><strong>Service principal, some repositories</strong> — it is not on every project. Organization settings → Users → the principal → <em>Manage projects</em>, or add it to <strong>Readers</strong> in the missing project's own Permissions page.</li>
+<li><strong>Token</strong> — its owner cannot see the missing projects. A PAT never grants more than the person who made it already has.</li>
+</ul>
+<hr>
+<h2>GitHub</h2>
+<blockquote><strong>Not yet verified against a real GitHub organisation.</strong> The connector is</blockquote>
+<blockquote>built and tested, but every section above earned its accuracy by being run</blockquote>
+<blockquote>before it was written, and this one has not been. Treat the scope lists as</blockquote>
+<blockquote>correct and the step numbering as approximate; tell us where it is wrong and</blockquote>
+<blockquote>we will fix it the same day. The sections for Box, Google and Azure DevOps</blockquote>
+<blockquote>each gained a correction after their first real connection.</blockquote>
+<p>Two ways to connect, and the choice matters more here than anywhere else.</p>
+<p><strong>A GitHub App is the only way to be read-only.</strong> A classic personal access token's <code>repo</code> scope is read <strong>and</strong> write — GitHub offers no read-only equivalent for private repositories. So a token connector holds a credential that <em>could</em> push, even though we never do. An App can be granted <code>Contents: Read-only</code>, and its access belongs to the organisation rather than to a person, so it survives someone leaving and carries a far higher rate limit.</p>
+<p>A token is still supported, because creating an App needs an organisation owner and that is not always available on the first afternoon.</p>
+<h3>Option A — GitHub App (recommended)</h3>
+<p>An organisation owner has to do this.</p>
+<ol>
+<li><strong>Organisation → Settings → Developer settings → GitHub Apps → New GitHub App.</strong> Name it something recognisable. A homepage URL is required; anything valid will do.</li>
+<li>**Webhook → untick <em>Active</em>.** We never receive events, and leaving it on means GitHub retries deliveries to a URL that does not exist.</li>
+<li><strong>Permissions → Repository permissions.</strong> Set exactly two, and nothing else:</li>
+</ol>
+<table><thead><tr>
+<th>Permission</th>
+<th>Access</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Contents</strong></td>
+<td><strong>Read-only</strong></td>
+</tr>
+<tr>
+<td><strong>Metadata</strong></td>
+<td><strong>Read-only</strong> <em>(GitHub selects this automatically)</em></td>
+</tr>
+</tbody></table>
+<ol>
+<li><strong>Where can this App be installed</strong> — <em>Only on this account</em>.</li>
+<li>Create it, then on the App's page: <strong>Generate a private key.</strong> A <code>.pem</code> file downloads. This is the credential, and GitHub keeps no copy.</li>
+<li>Note the <strong>App ID</strong> — the number near the top of the App's settings page.</li>
+<li><strong>Install App → your organisation → All repositories.</strong></li>
+</ol>
+<blockquote><strong>Step 7 is the one that gets missed.</strong> An App that exists but is not</blockquote>
+<blockquote>installed authenticates perfectly and can read nothing — the same silent</blockquote>
+<blockquote>failure as a Stakeholder licence in Azure DevOps. Choosing *Only select</blockquote>
+<blockquote>repositories* and then selecting none does the same thing.</blockquote>
+<blockquote><strong>The App ID is not the Client ID.</strong> They sit near each other on the same</blockquote>
+<blockquote>page. The App ID is a short number; the Client ID begins <code>Iv1.</code> or <code>Iv23</code>.</blockquote>
+<blockquote>We need the App ID.</blockquote>
+<h3>Option B — personal access token</h3>
+<ol>
+<li><strong>Your profile → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token.</strong></li>
+<li><strong>Scope:</strong> tick <strong><code>repo</code></strong>. Nothing else.</li>
+<li>Copy the token — GitHub shows it once.</li>
+<li><strong>If your organisation enforces SAML SSO</strong>, use <em>Configure SSO</em> beside the token and authorise it for the organisation. Without this the token works on your own repositories and returns nothing for the organisation's.</li>
+</ol>
+<blockquote><strong>Create it from a service account rather than a person.</strong> A token carries its</blockquote>
+<blockquote>owner's access and dies with their account, so scanning stops the day they</blockquote>
+<blockquote>leave and the failure arrives weeks later as an authentication error.</blockquote>
+<h3>What to send us</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Option A — App</th>
+<th>Option B — token</th>
+</tr></thead><tbody>
+<tr>
+<td>Organisation</td>
+<td>The part after <code>github.com/</code> — just the name</td>
+<td>same</td>
+</tr>
+<tr>
+<td>App ID / username</td>
+<td>The <strong>App ID</strong> number</td>
+<td><strong>leave blank</strong></td>
+</tr>
+<tr>
+<td>Private key / token</td>
+<td>The whole <code>.pem</code>, including its BEGIN and END lines</td>
+<td>The token</td>
+</tr>
+<tr>
+<td>Server URL</td>
+<td>Blank for github.com; for <strong>Enterprise Server</strong>, your install's base URL</td>
+<td>same</td>
+</tr>
+</tbody></table>
+<p><strong>The private key is what selects the mode.</strong> Paste a PEM block and we connect as the App; paste anything else and it is treated as a token.</p>
+<p>For Enterprise Server, give the plain base URL — <code>https://github.company.com</code>. Do not add <code>/api/v3</code>; we append it.</p>
+<h3>After connecting — what to check</h3>
+<p>Run the connector test and compare the <strong>repository count</strong> against what you expect.</p>
+<ul>
+<li><strong>Zero, using an App</strong> — it is not installed on this organisation, or the installation grants <em>selected repositories</em> and none are selected.</li>
+<li><strong>Zero, using a token</strong> — the organisation name is wrong, the token lacks <code>repo</code>, or SAML authorisation was not done.</li>
+<li><strong>Fewer than expected, using a token</strong> — its owner cannot see the rest. A token never grants more than the person already has.</li>
+</ul>
+<hr>
+<h2>GitLab</h2>
+<p>One credential type, and one decision: <strong>make it a group token, not a project token.</strong> A project token has to be added to every project, so a project created next month is silently never scanned and nothing reports it. A group token covers the group, its subgroups, and projects that do not exist yet.</p>
+<h3>Create it</h3>
+<p>A group <strong>Owner</strong> has to do this.</p>
+<ol>
+<li><strong>Group → Settings → Access tokens → Add new token.</strong></li>
+<li><strong>Role: Reporter.</strong> Lower roles cannot read repository contents.</li>
+<li><strong>Scopes — tick both:</strong></li>
+</ol>
+<table><thead><tr>
+<th>Scope</th>
+<th>Why</th>
+</tr></thead><tbody>
+<tr>
+<td><code>read_api</code></td>
+<td>Lists the group's projects</td>
+</tr>
+<tr>
+<td><code>read_repository</code></td>
+<td>Reads their contents</td>
+</tr>
+</tbody></table>
+<ol>
+<li>Set an expiry you will remember. GitLab requires one.</li>
+<li>Create, and copy the token — it is shown once. Group tokens begin <code>glpat-</code>.</li>
+</ol>
+<blockquote><strong>Both scopes, or the failure is confusing.</strong> With <code>read_api</code> alone the</blockquote>
+<blockquote>connector lists every project and then fails to read any of them, which looks</blockquote>
+<blockquote>like a problem with the repositories rather than with the token.</blockquote>
+<blockquote><strong>It must be created from the group's own Settings page</strong>, not from a user's</blockquote>
+<blockquote>profile. A personal access token also works, but it carries that person's full</blockquote>
+<blockquote>access across every group they belong to — far more than this needs, and it</blockquote>
+<blockquote>dies with their account.</blockquote>
+<h3>What to send us</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead><tbody>
+<tr>
+<td>Group ID or path</td>
+<td>The part after <code>gitlab.com/</code> — <code>acme</code>, or <code>acme/platform</code> for a subgroup. The numeric Group ID from the group's page also works</td>
+</tr>
+<tr>
+<td><em>(client id)</em></td>
+<td><strong>Not used — leave blank</strong></td>
+</tr>
+<tr>
+<td>Group access token</td>
+<td>The <code>glpat-…</code> value</td>
+</tr>
+<tr>
+<td>Server URL</td>
+<td>Blank for gitlab.com; for self-managed, your install's base URL</td>
+</tr>
+</tbody></table>
+<h3>After connecting — what to check</h3>
+<p>Compare the project count with what you expect. We list the group <strong>including its subgroups</strong>, and skip archived projects — an archived project is read-only at GitLab, so findings in it cannot be fixed by anyone.</p>
+<ul>
+<li><strong>Zero projects</strong> — usually the group path. It is the URL path, not the group's display name, and they often differ.</li>
+<li><strong>Fewer than expected</strong> — the token's role is below Reporter on some subgroups, or those projects are archived.</li>
+</ul>
+<hr>
+<h2>Bitbucket</h2>
+<h3>Create it</h3>
+<p>A <strong>workspace admin</strong> should create this from their account.</p>
+<ol>
+<li><strong>Profile → Personal settings → App passwords → Create app password.</strong></li>
+<li>Label it something recognisable.</li>
+<li>**Permissions — tick only <em>Repositories: Read</em>.** Nothing else. Write and admin permissions are not needed and should not be granted.</li>
+<li>Create, and copy it. Bitbucket shows an app password <strong>once</strong>.</li>
+</ol>
+<blockquote><strong>Two things are easy to get wrong, and both produce the same 401.</strong></blockquote>
+<blockquote></blockquote>
+<blockquote>The username is the <strong>Bitbucket username</strong>, not the email address used to sign</blockquote>
+<blockquote>in. They are different, and the email is rejected. Find it under *Personal</blockquote>
+<blockquote>settings → Account settings*.</blockquote>
+<blockquote></blockquote>
+<blockquote>The workspace is the <strong>workspace ID</strong> from the URL — the part after</blockquote>
+<blockquote><code>bitbucket.org/</code> — not the workspace's display name. A workspace called</blockquote>
+<blockquote>"Acme Corporation" usually has the ID <code>acme-corp</code>.</blockquote>
+<h3>What to send us</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead><tbody>
+<tr>
+<td>Workspace</td>
+<td>The workspace <strong>ID</strong> from your browser's URL</td>
+</tr>
+<tr>
+<td>Username</td>
+<td>The Bitbucket username — <strong>not</strong> the email address</td>
+</tr>
+<tr>
+<td>App password</td>
+<td>The value copied in step 4</td>
+</tr>
+<tr>
+<td>Server URL</td>
+<td>Blank for bitbucket.org; for <strong>Data Center</strong>, your install's base URL</td>
+</tr>
+</tbody></table>
+<p>On Data Center, use an <strong>HTTP access token</strong> with <em>Repository Read</em> in place of the app password.</p>
+<h3>After connecting — what to check</h3>
+<p>Compare the repository count with the workspace.</p>
+<ul>
+<li><strong>Zero</strong> — almost always the workspace ID or the username/email confusion.</li>
+<li><strong>Fewer than expected</strong> — the account has not been granted access to every repository in the workspace. An app password never grants more than its owner already has.</li>
+</ul>
+<hr>
+<hr>
+<h1>Part 3 · Sending credentials, and what to expect</h1>
+<h2>How to send the credentials</h2>
+<p>A cloud credential reads every file in the tenant. A repository token reads every line of the source. <strong>Neither goes by email or chat.</strong></p>
+<p>Put them straight into the Defensely connect wizard, which encrypts each one before it is stored — no endpoint ever returns them afterwards.</p>
+<p>If one must be handed over instead, use a secret manager or a one-time secret link, and rotate it once the connector is confirmed working.</p>
+<p>There is a certain irony in emailing a token to a tool whose job is finding tokens people emailed. It is worth not doing.</p>
+<hr>
+<h2>What we can and cannot see — cloud storage</h2>
+<p>Worth setting expectations before the screens are demonstrated. Connecting a provider gives us <strong>what exists, what is in it, and who can reach it</strong>:</p>
+<ul>
+<li>every file, its owner, size, path and type</li>
+<li>classification of the contents — PII, PHI, PFI and the rest</li>
+<li>sharing: public links, org-wide links, named people, and whether any of them are outside the organisation</li>
+<li>who created each link and when — <strong>Microsoft only, and only for links created in the last 14 days.</strong> See below.</li>
+</ul>
+<p>It does <strong>not</strong> give us how far a link has travelled outside the storage provider. Whether a public Drive link was pasted into Slack, a Teams channel or an email thread is not something Google, Box or Dropbox knows — it lives in those other tools. The same applies to counts of how many times an anonymous link has been opened, which comes from each provider's separate audit feed.</p>
+<p>Both are real features; both are separate work from connecting a provider, and neither arrives just because a connector is switched on.</p>
+<h3>Who created a link, and how old it is</h3>
+<p>Two columns on the Public Links screen — <strong>Link Created By</strong> and <strong>Age</strong> — come from somewhere different to everything else, and are worth understanding before anybody asks why they are blank.</p>
+<p>Microsoft Graph does <strong>not</strong> return the creator of a sharing link to an application credential. The field simply is not in the response. So the names come from the Microsoft 365 <strong>audit log</strong> instead, matched back to each link.</p>
+<p><strong>What that needs:</strong></p>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td>Permission</td>
+<td><code>ActivityFeed.Read</code> under <strong>Office 365 Management APIs</strong>, application permission, with admin consent</td>
+</tr>
+<tr>
+<td>Subscription</td>
+<td>The <code>Audit.SharePoint</code> content type must be <strong>started</strong> on the tenant. An unsubscribed feed returns nothing and reports no error</td>
+</tr>
+<tr>
+<td>Provider</td>
+<td>SharePoint and OneDrive only</td>
+</tr>
+</tbody></table>
+<blockquote><strong>The audit log serves 14 days. Not 90.</strong> Microsoft refuses a start time more</blockquote>
+<blockquote>than a fortnight in the past (<code>AF20055</code>). Retention is how long events are</blockquote>
+<blockquote>kept; this is how far back the content endpoint will hand them over, and they</blockquote>
+<blockquote>are different numbers.</blockquote>
+<blockquote></blockquote>
+<blockquote>So a link created more than 14 days before its first attribution attempt can</blockquote>
+<blockquote><strong>never</strong> be given a creator or an age. Nothing recovers it — not a re-scan,</blockquote>
+<blockquote>not a new permission, not more history. Those rows show <code>--</code> permanently.</blockquote>
+<p><strong>What this means in practice:</strong> connect a provider and the first scan will show <code>--</code> in both columns for everything it finds, because those links already exist and were created some time ago. From then on, each scan attributes the links created since the last one, and the columns fill in going forward.</p>
+<p><strong>Box, Dropbox and Google show <code>--</code> always.</strong> Box reports the file's creator rather than the link's, Google reports the person the file was shared <em>with</em>; both are the wrong person, so neither is shown. A name that is confidently wrong on a security screen is worse than a blank one.</p>
+<h2>What we can and cannot see — source repositories</h2>
+<p>Connecting a repository host gives us <strong>every file on the default branch as it stands today</strong>, scanned for committed credentials and for the same classifications the rest of the product uses. Each finding carries the file, the line and which rule matched.</p>
+<p>It does <strong>not</strong> give us:</p>
+<ul>
+<li><strong>git history</strong> — a secret deleted from <code>main</code> last week is invisible to us and still live in the repository</li>
+<li><strong>unmerged branches</strong> — a secret on a feature branch that never merges is never seen</li>
+<li><strong>whether the key still works</strong> — we report that a credential was committed, not that it is currently valid</li>
+</ul>
+<p>So a clean result means <strong>clean at the head of the default branch</strong>, and the fix for every finding is to <strong>rotate the credential</strong>, not to delete the line. Deleting it removes the finding from the next scan and changes nothing about the key.</p>
+<p>That distinction is worth saying out loud in any demo. It is the difference between a useful answer and a reassuring one.</p>
+
+<div class="doc-foot">Defensely DLP &middot; CLOUD-PROVIDER-SETUP &middot; generated 2026-10-23</div>
+</body></html>

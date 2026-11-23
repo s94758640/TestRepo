@@ -1,0 +1,507 @@
+# Azure DevOps Pipeline — SFM.DLP.API (.NET 8 Container App)
+# Build → Push to ACR → Deploy QA Container App → Health Check
+# Modeled on Effortly azure-pipelines-api.yml.
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ BEFORE FIRST RUN — replace every __TODO__ value below with the real │
+# │ names from the Azure portal / Azure DevOps. The pipeline fails      │
+# │ loudly if any placeholder is left in place — nothing is assumed.    │
+# └─────────────────────────────────────────────────────────────────────┘
+
+trigger:
+  branches:
+    include:
+      - Deployment/CICD-QA
+      - Deployment/CICD-Prod1
+      - Deployment/CICD-Prod2
+  paths:
+    include:
+      - SFM.DLP.API/**
+      - SFM.DLP.Application/**
+      - SFM.DLP.CloudDiscovery/**
+      - SFM.DLP.DataDiscovery/**
+      - SFM.DLP.Infrastructure/**
+      - SFM.DLP.Domain/**
+      - SFM.Common.Utilities/**
+      - SFM.Nucleus.Infrastructure/**
+      - SFM.Platform.Storage/**
+      - SFM.GenericRepository/**
+      # The detection/scanning engine, vendored in this repo under ScannerEngine/
+      # (DLP.RegexFilter, DLP.Scanning.Shared, DLP.Database.Connectors,
+      # SFM.DLP.CloudClients). A change to it is a change to what this build ships,
+      # so it has to trigger a build. No longer a submodule.
+      - ScannerEngine/**
+      - nuget.config
+      - azure-pipelines-dlp-api.yml
+      - pipeline-templates/**
+      - SFM.DLP.API/Dockerfile
+
+pr: none
+
+# ── Queue-time switches ──
+#
+# Set under "Run pipeline", not by editing this file.
+parameters:
+  # Whether a QA deploy also applies pending migrations to QA tenants.
+  #
+  # DEFAULT FALSE, by decision: most QA deploys are code-only, and having
+  # every one of them reach into tenant schemas made a routine redeploy fail
+  # the whole pipeline over a migration that had nothing to do with the
+  # change being shipped.
+  #
+  # TICK IT WHENEVER THE BUILD CONTAINS A NEW MIGRATION. This is the cost of
+  # the default and it is worth stating plainly: production applies
+  # migrations unconditionally, so a schema change that is never ticked here
+  # gets its first real execution in PRODUCTION. V0021 failed on QA tenants
+  # that have no discovery schema; under this default and an unticked run it
+  # would have failed in production instead.
+  #
+  # Nothing is skipped permanently either way. The runner goes by
+  # __schema_version, so whatever is pending is applied by the next run that
+  # has this ticked.
+  #
+  # Production is NOT governed by this parameter. Both PROD stages pass
+  # runMigrations: true to deploy-container-app.yml as a constant, so they
+  # always migrate and cannot be queued without it.
+  - name: runMigrations
+    type: boolean
+    default: false
+
+# migrationKey is deliberately NOT declared anywhere in this file. It is the
+# shared key the /admin/migration endpoints authenticate with, and must be a
+# SECRET variable on the pipeline (Edit → Variables → Keep this value secret).
+# The deploy step fails with a clear message if it is unset.
+#
+#   Generate with: openssl rand -base64 32
+#
+# Use a DIFFERENT value per environment — one key across QA and production means
+# a leak from the noisier environment opens the quieter one.
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: dotnetVersion
+    value: '8.0.x'
+  - name: projectPath
+    value: 'SFM.DLP.API/SFM.DLP.API.csproj'
+
+  # ── Registries ──
+  #
+  # One per environment, resolved from the branch below with the rest of the
+  # per-environment values.
+  #
+  # They were a single shared registry until production first tried to deploy:
+  # 'qaemail' sits in subscription Defensely-Common, which the production service
+  # connection has no access to at all, so the build failed with
+  #
+  #   The resource with name 'qaemail' and type
+  #   Microsoft.ContainerRegistry/registries could not be found
+  #
+  # — which reads as a missing registry and is really a missing subscription.
+  # Azure reports no-access and not-present identically.
+  #
+  # Granting the production connection AcrPush on the QA registry would also have
+  # worked and was the wrong fix: it leaves production pulling images from a
+  # registry QA purges, which the previous note here already called out as the
+  # risk being carried.
+  #
+  # Lower-cased deliberately. A registry's login server is always lowercase
+  # whatever case the resource was created with, and the same value is used both
+  # for `az acr build --registry` (case-insensitive) and to build the image
+  # reference '<acr>.azurecr.io/<image>' at deploy time.
+
+  # ── Which environment this run is for ──
+  #
+  # Resolved at compile time from the branch, so one file serves all three
+  # environments and the per-branch difference is a few values rather than a
+  # whole file. Keeping the files identical across branches is what stops every
+  # QA→production merge conflicting on the pipeline itself.
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA') }}:
+    - name: azureServiceConnection
+      value: 'qa-defensely-sc'
+    - name: imageName
+      value: 'qa-dlp-api'
+    # RG QA-Common, subscription Defensely-Common — a different subscription
+    # from the QA-DLP apps, so qa-defensely-sc needs AcrPush on it.
+    - name: acrName
+      value: 'qaemail'
+    - name: acrLoginServer
+      value: 'qaemail.azurecr.io'
+    - name: acrSubscription
+      value: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # Both production branches build the SAME image. PROD1 and PROD2 run identical
+  # code and differ only in configuration, so one repository with build-id tags
+  # means what is verified on PROD1 is bit-for-bit what reaches PROD2.
+  - ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: 'prod-defensely-sa'
+    - name: imageName
+      value: 'prod-dlp-api'
+    # Production's own registry: 'DLPProd', RG DLP-Prod-IN, Central India —
+    # and, like the QA registry, in subscription Defensely-Common rather than
+    # beside the apps it serves.
+    #
+    # So prod-defensely-sa needs AcrPush on THIS registry. Pointing production
+    # at its own ACR does not by itself fix the original failure: both
+    # registries live in a subscription that connection cannot see, and the
+    # error is identical whichever of them it is sent to.
+    #
+    # Note the resource group is DLP-Prod-IN, which is NOT the DLP-PROD-IN that
+    # holds the production container apps. Those differ only in case and are
+    # genuinely different groups in different subscriptions — the registry is in
+    # Defensely-Common, the apps are in Defensely.
+    - name: acrName
+      value: 'dlpprod'
+    # NOT '<name>.azurecr.io'. Registries created recently get a unique DNS
+    # suffix, so this host cannot be derived from the name — read it with
+    # `az acr show --name DLPProd --query loginServer -o tsv`. Deriving it
+    # pushes the image fine and then fails the pull on a host that does not
+    # resolve, which reads as a permissions problem and is not one.
+    - name: acrLoginServer
+      value: 'dlpprod-c5cbcmb9eqb7ecb2.azurecr.io'
+    - name: acrSubscription
+      value: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # Any other branch — a manual run someone started from a feature branch. Left
+  # blank so the Build stage skips rather than pushing an unreviewed image into
+  # a registry production pulls from.
+  - ${{ if not(in(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA', 'refs/heads/Deployment/CICD-Prod1', 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: ''
+    - name: imageName
+      value: ''
+    # Defined but empty, so a reference to them on a feature branch resolves to
+    # nothing rather than to the literal '$(acrName)'. Every stage that reads
+    # them is branch-conditioned and skipped here anyway.
+    - name: acrName
+      value: ''
+    - name: acrLoginServer
+      value: ''
+    - name: acrSubscription
+      value: ''
+
+  # ── Deployment targets ──
+  - name: qaContainerAppName
+    value: 'qa-dlp-api'
+  - name: qaResourceGroup
+    value: 'QA-DLP'
+
+  # Production apps live in subscription 'Defensely', resource group
+  # 'DLP-PROD-IN' — note this is a different resource group from the Nucleus and
+  # User API, which sit in 'DLP-Prod-IN' under 'Defensely-Common'. The two names
+  # differ only in case; they are genuinely different resource groups in
+  # different subscriptions.
+  - name: prodSubscription
+    value: 'Defensely'
+  - name: prodResourceGroup
+    value: 'DLP-PROD-IN'
+  - name: prod1ContainerAppName
+    value: 'prod01-dlp-api'
+  - name: prod2ContainerAppName
+    value: 'prod02-dlp-api'
+
+stages:
+
+# ─── Build & Push ───────────────────────────────────────────────
+- stage: Build
+  displayName: 'Build & Push Image'
+  # Skipped entirely on a branch that is not one of the three deployment
+  # branches, because imageName is blank there. A manual run from a feature
+  # branch does nothing rather than pushing an unreviewed image into the
+  # registry production pulls from.
+  condition: ne(variables['imageName'], '')
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build, Verify & Push Image'
+    steps:
+    # The shared scanner-engine libraries (DLP.RegexFilter, DLP.Scanning.Shared,
+    # DLP.Database.Connectors, SFM.DLP.CloudClients) now live IN this repository
+    # under ScannerEngine/ — no longer a submodule, so there is nothing to fetch.
+    # (Removed the DLP-RegexFilter submodule and its PAT fetch step.)
+    - checkout: self
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore'
+      inputs:
+        command: 'restore'
+        projects: '$(projectPath)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Build'
+      inputs:
+        command: 'build'
+        projects: '$(projectPath)'
+        arguments: '--configuration $(buildConfiguration) --no-restore'
+
+    # Build & push in ACR's cloud builder through the ARM service connection —
+    # no Docker registry service connection required. Dockerfile expects the
+    # repo root as build context.
+    - task: AzureCLI@2
+      displayName: 'Build & Push Container Image (az acr build)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        inlineScript: |
+          az acr build \
+            --subscription $(acrSubscription) \
+            --registry $(acrName) \
+            --image $(imageName):$(Build.BuildId) \
+            --file SFM.DLP.API/Dockerfile \
+            .
+
+# ─── Deploy to QA ──────────────────────────────────────────────
+- stage: DeployQA
+  displayName: 'Deploy to QA'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA'))
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - deployment: DeployQAJob
+    displayName: 'Deploy DLP API to QA Container App'
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureCLI@2
+            displayName: 'Update QA Container App'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+              # Mapped in rather than written inline: secret variables are only
+              # masked in logs, and a secret pasted into a script is a secret in
+              # the script.
+              MIGRATION_KEY: $(migrationKey)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # An undefined ADO variable expands to the literal "$(migrationKey)".
+                # Both the app and the curl would then use that same literal and
+                # everything would appear to work — a key that is public knowledge,
+                # passing its own check. Fail instead.
+                if [ -z "$MIGRATION_KEY" ] || [ "${MIGRATION_KEY#\$\(}" != "$MIGRATION_KEY" ]; then
+                  echo "##vso[task.logissue type=error]Pipeline variable 'migrationKey' is not set. Define it as a SECRET variable on this pipeline."
+                  exit 1
+                fi
+
+                echo "Deploying image tag: $IMAGE_TAG"
+
+                # The migration endpoints authenticate with a shared key. Held as a
+                # Container App secret rather than a plain env var, so it is not
+                # readable from the app's configuration. 'secret set' adds or
+                # updates one entry; 'containerapp update --secrets' would replace
+                # the whole list and drop whatever else the app holds.
+                az containerapp secret set \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --secrets "admin-migration-key=$MIGRATION_KEY"
+
+                # Deployment__BuildId travels with the image so /health can report
+                # which build is actually serving. --set-env-vars updates only the
+                # named variables and leaves the rest of the app's config alone.
+                #
+                # EnableSwagger is set HERE rather than in appsettings.json so that
+                # it is a property of the QA deployment, not of the build. The same
+                # image deployed to production gets no such variable and serves no
+                # Swagger. QA needs it on: the team browses it, and the APIM import
+                # pipeline reads its spec from this backend.
+                az containerapp update \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --image "$(acrLoginServer)/$(imageName):$IMAGE_TAG" \
+                  --set-env-vars \
+                    "Deployment__Environment=QA" \
+                    "Deployment__BuildId=$IMAGE_TAG" \
+                    "EnableSwagger=true" \
+                    "Admin__MigrationKey=secretref:admin-migration-key"
+
+          - task: AzureCLI@2
+            displayName: 'Health Check (wait for revision ready)'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                QA_URL=$(az containerapp show \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --query "properties.configuration.ingress.fqdn" -o tsv)
+
+                echo "Waiting 60s for new revision to activate..."
+                sleep 60
+
+                # /health, not /swagger/index.html. Swagger is gated on the
+                # EnableSwagger flag and is off in production, so probing it tied
+                # "can this deploy" to "does this publish its full API surface".
+                #
+                # The build id is checked as well as the status: a 200 on its own
+                # is also what the PREVIOUS revision returns while the new one is
+                # still starting, so status alone can pass a rollout that never
+                # happened.
+                echo "Checking https://$QA_URL/health ..."
+                for i in $(seq 1 40); do
+                  STATUS=$(curl -s -o /tmp/health.json --max-time 10 \
+                    -w "%{http_code}" "https://$QA_URL/health" || true)
+
+                  if [ "$STATUS" = "200" ]; then
+                    cat /tmp/health.json; echo
+                    SERVED=$(python3 -c "import json; print(json.load(open('/tmp/health.json')).get('buildId',''))" 2>/dev/null || echo "")
+                    if [ "$SERVED" = "$IMAGE_TAG" ]; then
+                      echo "Health check passed on attempt $i — serving build $SERVED"
+                      exit 0
+                    fi
+                    echo "Attempt $i: healthy but serving build '$SERVED', waiting for '$IMAGE_TAG'..."
+                  else
+                    echo "Attempt $i: HTTP $STATUS — retrying in 15s..."
+                  fi
+                  sleep 15
+                done
+                echo "##vso[task.logissue type=error]Health check failed after 40 attempts"
+                exit 1
+
+          # Only present when runMigrations is ticked at queue time, which it is
+          # NOT by default — see the parameter. The step is COMPILED OUT rather
+          # than conditioned at runtime, so the job shows no skipped-but-green
+          # task that could be read as "migrations ran and found nothing".
+          - ${{ if parameters.runMigrations }}:
+            - task: AzureCLI@2
+              displayName: 'Run Migrations on QA Tenants'
+              env:
+                MIGRATION_KEY: $(migrationKey)
+              inputs:
+                azureSubscription: $(azureServiceConnection)
+                scriptType: 'bash'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  QA_URL=$(az containerapp show \
+                    --name $(qaContainerAppName) \
+                    --resource-group $(qaResourceGroup) \
+                    --query "properties.configuration.ingress.fqdn" -o tsv)
+
+                  echo "Running migrations on https://$QA_URL ..."
+                  HTTP_CODE=$(curl -s -o /tmp/mig.txt -w "%{http_code}" \
+                    -X POST "https://$QA_URL/admin/migration/run" \
+                    -H "Content-Type: application/json" \
+                    -H "X-Migration-Key: $MIGRATION_KEY" \
+                    --max-time 900)
+
+                  cat /tmp/mig.txt || true
+
+                  # 404 here means the key did not match, or the app has not picked
+                  # up the secret yet — the endpoints answer 404 rather than 401 so
+                  # that an unauthenticated caller learns nothing about them.
+                  if [ "$HTTP_CODE" = "404" ]; then
+                    echo "##vso[task.logissue type=error]Migration endpoint returned 404 — the X-Migration-Key did not match Admin__MigrationKey on the app."
+                    exit 1
+                  fi
+
+                  if [ "$HTTP_CODE" != "200" ]; then
+                    echo "##vso[task.logissue type=error]Migration endpoint returned HTTP $HTTP_CODE"
+                    exit 1
+                  fi
+
+                  FAILED=$(python3 -c "import json; d=json.load(open('/tmp/mig.txt')); print(d.get('data',{}).get('failedTenants',0))" 2>/dev/null || echo "unknown")
+                  if [ "$FAILED" != "0" ]; then
+                    echo "##vso[task.logissue type=error]$FAILED tenant(s) had migration failures — pipeline FAILED"
+                    exit 1
+                  fi
+
+                  echo "All tenant migrations succeeded."
+
+          - ${{ if not(parameters.runMigrations) }}:
+            # Says so in the log. A deploy whose schema step did not run must not
+            # look identical to one that ran it and found nothing — the next
+            # person reading a failure needs to know the schema may be behind
+            # the code.
+            #
+            # A plain echo, NOT logissue. Skipping is the default and therefore
+            # the common case, and a warning annotation on every routine deploy
+            # is noise that teaches people to ignore the annotation — including
+            # the run where it means something.
+            - script: |
+                echo "Migrations SKIPPED for this run (runMigrations = false, the default)."
+                echo "If this build contains a new migration, re-run the pipeline with runMigrations ticked."
+                echo "Nothing is lost by skipping: the runner goes by __schema_version and applies whatever is still pending on the next ticked run."
+              displayName: 'Migrations skipped (runMigrations = false)'
+
+# ─── Deploy to Production ──────────────────────────────────────
+#
+# Both stages are defined, but a branch condition means only one runs per build,
+# so a run deploys to exactly one environment and needs exactly one approval.
+# PROD2 is reached by a separate merge, which is also what paces the two apart —
+# the soak between them is the merge, not a timer.
+#
+# The DLP API owns the schema, so these are the only stages in any pipeline that
+# run migrations.
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd1
+    displayName: 'Deploy to PROD1'
+    branch: 'refs/heads/Deployment/CICD-Prod1'
+    adoEnvironment: 'PROD1'
+    variableGroup: 'defensely-prod1'
+    deploymentEnvironment: 'PROD1'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod1ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    runMigrations: true
+
+    # The secret and its env var are set BY HAND on the production apps, so the
+    # pipeline does not touch them.
+    #
+    # Turned off while prod01-dlp-api could not provision any revision at all:
+    # every operation against it expired after twenty minutes, and this step was
+    # simply the first one in the stage to try. Skipping it removes one of the
+    # two revision-creating operations per deploy.
+    #
+    # The cost, stated plainly: the key is no longer one value in one variable
+    # group that the pipeline distributes. Rotate it in the group and the apps
+    # keep the old one, and the migration call below starts answering 404 with
+    # nothing to explain why. It also drops the guard that catches an unset or
+    # unexpanded migrationKey. Whoever rotates the key must now also run
+    # `containerapp secret set` on each production app.
+    #
+    # Turn back on once the apps deploy normally — the pipeline will write the
+    # same value and nothing changes.
+    setMigrationKey: false
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd2
+    displayName: 'Deploy to PROD2'
+    branch: 'refs/heads/Deployment/CICD-Prod2'
+    adoEnvironment: 'PROD2'
+    variableGroup: 'defensely-prod2'
+    deploymentEnvironment: 'PROD2'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prod2ContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    runMigrations: true
+    # Set by hand on the production apps — see the PROD1 stage above.
+    setMigrationKey: false

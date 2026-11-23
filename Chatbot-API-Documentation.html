@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM DLP — AI Chatbot API</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { background:#1b1b1b; padding:14px 28px; display:flex; gap:12px; align-items:baseline; border-bottom:1px solid #000; }
+        .topbar h1 { color:#fff; font-size:18px; font-weight:700; margin:0; }
+        .topbar span { color:#89bf04; font-size:13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM DLP</h1>
+        <span>AI Chatbot API — integration guide for the UI team</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM DLP — AI Chatbot",
+            "version": "1.0.0",
+            "description": "A single endpoint the UI calls to ask the AI chatbot a question about DLP data.\n\n### What the UI does and does not do\n\nThe chatbot is a **separate external service** with its own login and its own bearer token. The UI never touches either. This API logs in on your behalf, caches the token for its full 8-hour life, renews it before it expires, and retries once if the chatbot rejects it. From the UI's side there is only one call: `POST /chatbot/ask`.\n\n### Conversation flow\n\n1. First question — send `sessionId: null` (or omit it).\n2. Read `sessionId` from the response and **store it in component state**.\n3. Every later question in the same conversation — send that same `sessionId`.\n4. New conversation (\"New chat\" button) — send `sessionId: null` again and discard the old one.\n\nEvery turn **is stored on our side**, so a conversation survives a refresh: call `POST /chatbot/history` for the user's conversations and `POST /chatbot/history/messages` with a `sessionId` to replay one. History writes are best-effort — if storage fails the user still gets their answer.\n\n### What comes back\n\nEach answer has several parts, and any of them can be empty depending on the question:\n\n| Field | Render as |\n|---|---|\n| `answer` | the chat bubble — prose, always present |\n| `columns` + `rows` | a data table; `rows[i][j]` lines up with `columns[j]` |\n| `chart` | `<img src=\"{chart}\">` — already a full `data:image/png;base64,…` URI |\n| `suggestions` | **tappable chips under the bubble.** Tapping one sends it as the next `question` with the same `sessionId`. Always present, often empty |\n| `meta` | a quiet provenance line — `meta.dataAsOf` is how fresh the data is, and `meta.truncated` says the table is partial |\n| `reportPdfUrl` | a download button, when the question asked for a report. Usually null, and never replayed from history — the link is temporary |\n| `turnId` | nothing on screen; keep it so a bad answer can be reported against it |\n\nThe same `suggestions`, `meta` and `turnId` come back from `/chatbot/history/messages`, so a replayed conversation offers the chips it offered live.\n\n`rows` cells are mixed types — number, string or `null`. Do not assume a type per column.\n\nThe SQL the bot ran is **not returned** by any endpoint. It is recorded server-side for auditing only.\n\n### Payload size\n\n`chart` is a base64 PNG and is by far the largest part of the response (often 100–400 KB). If a view does not draw the chart, send `includeChart: false` and the field comes back `null`.\n\n### Errors\n\nEvery chatbot failure — service down, timeout, bad credentials, malformed reply — returns **502** with exactly this body:\n\n```json\n{ \"success\": false, \"message\": \"Chatbot unAvailable right now.\", \"data\": null, \"errors\": null }\n```\n\nRender `message` directly; there is no extra detail to inspect. The real cause is written to our server-side action log. A missing `question` is a **400** (a caller mistake, not an outage) and an aborted request is **499** with no body.\n\n### Timing\n\nA turn runs a SQL query and renders a chart server-side, so **5–30 seconds is normal** and the server allows up to 120 s. Show a typing/loading state and do not set a short client timeout. Requests are safe to abort — the API handles the cancellation cleanly.\n\nAll responses use the standard `ApiResponse<T>` envelope: `{ success, message, data, errors }`."
+        },
+        "servers": [
+            { "url": "https://localhost:5001", "description": "Local dev" },
+            { "url": "https://qa-email.azure-api.net/qadlp", "description": "QA DLP (APIM)" },
+            { "url": "https://sfm-prod.azure-api.net/dlp", "description": "Production (APIM)" }
+        ],
+        "tags": [
+            { "name": "Chatbot", "description": "Natural-language questions over DLP data." },
+            { "name": "History", "description": "Stored conversations and turns — paged and filterable." }
+        ],
+        "paths": {
+            "/chatbot/ask": {
+                "post": {
+                    "tags": ["Chatbot"],
+                    "summary": "Ask the chatbot a question",
+                    "description": "Sends `question` to the chatbot and returns its answer together with the result set and a rendered chart.\n\n**Send `sessionId: null` to start a conversation**, then echo back the `sessionId` from the response on every following turn.\n\nSet `includeChart: false` when the view does not draw a chart — it removes the largest part of the payload.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        {
+                            "name": "ClientGUID",
+                            "in": "header",
+                            "required": false,
+                            "schema": { "type": "string", "format": "uuid" },
+                            "description": "Tenant selector. Required when the JWT does not already carry a `ClientGUID` claim — same rule as every other DLP endpoint."
+                        }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ChatbotAskRequest" },
+                            "examples": {
+                                "newConversation": {
+                                    "summary": "First question (new conversation)",
+                                    "value": { "question": "who is the highest risk user chart", "sessionId": null, "includeChart": true }
+                                },
+                                "followUp": {
+                                    "summary": "Follow-up in the same conversation",
+                                    "value": { "question": "show only the HIGH band ones", "sessionId": "c89919ce-f7b8-42b2-8f69-453657fc4902", "includeChart": true }
+                                },
+                                "noChart": {
+                                    "summary": "Text-only view — skip the chart",
+                                    "value": { "question": "how many blocked transfers yesterday", "sessionId": null, "includeChart": false }
+                                }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "The chatbot answered.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ChatbotAnswerResponse" },
+                                "examples": {
+                                    "withChart": {
+                                        "summary": "Answer with table + chart",
+                                        "value": {
+                                            "success": true, "message": null, "errors": null,
+                                            "data": {
+                                                "sessionId": "c89919ce-f7b8-42b2-8f69-453657fc4902",
+                                                "answer": "The highest risk users currently are Saihu M and Arun Ramachandran M, both with a high risk score of 68.0. Several others, including Starvin Arul Antony and Saravanan Rajavel, have medium risk scores around 55.",
+                                                "columns": ["user_id", "username", "weighted_risk_score_v2", "risk_band_v2"],
+                                                "rows": [
+                                                    [107, "Saihu M", 68.0, "HIGH"],
+                                                    [11, "Arun Ramachandran M", 68.0, "HIGH"],
+                                                    [27, "Starvin Arul Antony", 55.0, "MEDIUM"],
+                                                    [82, "DlpTest1 DlpTest1", 48.7, "LOW"],
+                                                    [55, "Manikandan C", 34.7, "SAFE"]
+                                                ],
+                                                "chart": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA3AAAAImCAYAAAAS…(truncated)",
+                                                "rowCount": 36,
+                                                "suggestions": [
+                                                    "What types of sensitive content is Saihu M most involved with?",
+                                                    "How does Saihu M's high risk event count compare to last month?",
+                                                    "Can you show a chart of Saihu M's high risk events by channel?"
+                                                ],
+                                                "turnId": "60232b574c89483591003c82c0641798",
+                                                "reportPdfUrl": null,
+                                                "meta": {
+                                                    "period": null,
+                                                    "dataAsOf": "2026-11-16T21:07:19.294+05:30",
+                                                    "definitions": [],
+                                                    "verified": false,
+                                                    "verifiedTemplate": null,
+                                                    "rows": 36,
+                                                    "truncated": false,
+                                                    "model": "gpt-4.1"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "noChart": {
+                                        "summary": "includeChart = false",
+                                        "value": {
+                                            "success": true, "message": null, "errors": null,
+                                            "data": {
+                                                "sessionId": "c89919ce-f7b8-42b2-8f69-453657fc4902",
+                                                "answer": "There were 42 blocked transfers yesterday.",
+                                                "columns": ["count"],
+                                                "rows": [[42]],
+                                                "chart": null,
+                                                "rowCount": 1,
+                                                "suggestions": ["Which policies blocked them?", "Show the same for last week"],
+                                                "turnId": "8f1c0a7e4b2d41a0a1c9f0b2d3e4f5a6",
+                                                "reportPdfUrl": null,
+                                                "meta": { "period": "yesterday", "dataAsOf": "2026-11-16T21:07:19.294+05:30", "definitions": [], "verified": true, "verifiedTemplate": "blocked_transfers_count", "rows": 1, "truncated": false, "model": "gpt-4.1" }
+                                            }
+                                        }
+                                    },
+                                    "prosaOnly": {
+                                        "summary": "Answer with no data or chart",
+                                        "value": {
+                                            "success": true, "message": null, "errors": null,
+                                            "data": {
+                                                "sessionId": "c89919ce-f7b8-42b2-8f69-453657fc4902",
+                                                "answer": "I can help with questions about users, transfers, policies and risk scores.",
+                                                "columns": [], "rows": [], "chart": null, "rowCount": 0,
+                                                "suggestions": ["Who are the highest risk users?", "How many transfers were blocked yesterday?"],
+                                                "turnId": "2d9b6c1f7a3e4850bb41d2e6c7f80913", "reportPdfUrl": null, "meta": null
+                                            }
+                                        }
+                                    }
+                                }
+                            } }
+                        },
+                        "400": {
+                            "description": "The request was malformed — most commonly a missing question.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "Invalid request.", "data": null, "errors": ["Question is required."] }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid application JWT." },
+                        "499": { "description": "Client closed the request (user navigated away or aborted). No body." },
+                        "502": {
+                            "description": "The chatbot service could not answer. Always this exact body — render `message` as-is.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "Chatbot unAvailable right now.", "data": null, "errors": null }
+                            } }
+                        }
+                    }
+                }
+            },
+            "/chatbot/history": {
+                "post": {
+                    "tags": ["History"],
+                    "summary": "List conversations (chat history by user)",
+                    "description": "Stored conversations, newest activity first, paged. Send `userId` to scope it to one user — omit it to read across everyone.\n\n`search` matches the conversation title **and the text of any turn inside it**, so \"find the chat where I asked about PHI\" works. Use the returned `sessionId` with `/chatbot/history/messages` to replay a conversation, or with `/chatbot/ask` to carry on where it left off.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "name": "ClientGUID", "in": "header", "required": false, "schema": { "type": "string", "format": "uuid" }, "description": "Tenant selector, as on every DLP endpoint." }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ChatHistoryRequest" },
+                            "examples": {
+                                "byUser": { "summary": "A user's conversations, first page", "value": { "userId": 4, "page": 1, "pageSize": 20 } },
+                                "search": { "summary": "Search a user's chats", "value": { "userId": 4, "search": "PHI", "page": 1, "pageSize": 20 } },
+                                "dateRange": { "summary": "Within a date range, oldest first", "value": { "userId": 4, "fromDate": "2026-08-01T00:00:00Z", "toDate": "2026-08-05T23:59:59Z", "sortBy": "lastMessageOn", "sortDescending": false, "page": 1, "pageSize": 20 } },
+                                "byTitle": { "summary": "Sorted by title", "value": { "userId": 4, "sortBy": "title", "sortDescending": false, "page": 1, "pageSize": 20 } }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ChatSessionPageResponse" },
+                                "example": {
+                                    "success": true, "message": null, "errors": null,
+                                    "data": {
+                                        "totalCount": 2, "page": 1, "pageSize": 20, "totalPages": 1,
+                                        "items": [
+                                            { "chatSessionId": 12, "sessionId": "e376279a-1c4e-4a55-9d1a-0f1b2c3d4e5f", "userId": 4, "userName": "Dinesh T", "title": "how many blocked transfers", "messageCount": 1, "lastMessageOn": "2026-08-05T12:22:09Z", "isActive": true, "dateAdded": "2026-08-05T12:22:09Z" },
+                                            { "chatSessionId": 11, "sessionId": "3ae333c8-77b0-42e1-8f6a-9c0d1e2f3a4b", "userId": 4, "userName": "Dinesh T", "title": "who is the highest risk user chart", "messageCount": 2, "lastMessageOn": "2026-08-05T12:22:08Z", "isActive": true, "dateAdded": "2026-08-05T12:22:07Z" }
+                                        ]
+                                    }
+                                }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid application JWT." },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            },
+            "/chatbot/history/messages": {
+                "post": {
+                    "tags": ["History"],
+                    "summary": "Replay a conversation, or search turns across conversations",
+                    "description": "Stored question/answer turns.\n\n- **Replay one conversation** — send `sessionId` with `sortDescending: false` for transcript order (oldest first).\n- **Search across a user's chats** — send `userId` + `search`; results come back newest first.\n\n`chart` is omitted unless `includeChart: true`. A page of charts can run to several megabytes, so leave it off for list views and fetch the chart only for the turn being displayed.\n\n`columns` and `rows` come back in the same shape `/chatbot/ask` returned them, so the same table renderer works for live answers and history.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "name": "ClientGUID", "in": "header", "required": false, "schema": { "type": "string", "format": "uuid" }, "description": "Tenant selector, as on every DLP endpoint." }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ChatHistoryRequest" },
+                            "examples": {
+                                "replay": { "summary": "Replay a conversation (oldest first)", "value": { "sessionId": "3ae333c8-77b0-42e1-8f6a-9c0d1e2f3a4b", "sortDescending": false, "page": 1, "pageSize": 50 } },
+                                "replayWithCharts": { "summary": "Replay including charts", "value": { "sessionId": "3ae333c8-77b0-42e1-8f6a-9c0d1e2f3a4b", "sortDescending": false, "includeChart": true, "page": 1, "pageSize": 20 } },
+                                "searchTurns": { "summary": "Search a user's turns", "value": { "userId": 4, "search": "risk score", "page": 1, "pageSize": 20 } }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ChatMessagePageResponse" },
+                                "example": {
+                                    "success": true, "message": null, "errors": null,
+                                    "data": {
+                                        "totalCount": 2, "page": 1, "pageSize": 50, "totalPages": 1,
+                                        "items": [
+                                            {
+                                                "chatMessageId": 21, "sessionId": "3ae333c8-77b0-42e1-8f6a-9c0d1e2f3a4b", "userId": 4,
+                                                "question": "who is the highest risk user chart",
+                                                "answer": "The highest risk users currently are Saihu M and Arun Ramachandran M…",
+                                                "columns": ["user_id", "username", "weighted_risk_score_v2", "risk_band_v2"],
+                                                "rows": [[107, "Saihu M", 68.0, "HIGH"], [11, "Arun Ramachandran M", 68.0, "HIGH"]],
+                                                "rowCount": 2, "chart": null, "durationMs": 1200, "isError": false,
+                                                "dateAdded": "2026-08-05T12:22:07Z"
+                                            },
+                                            {
+                                                "chatMessageId": 22, "sessionId": "3ae333c8-77b0-42e1-8f6a-9c0d1e2f3a4b", "userId": 4,
+                                                "question": "show only HIGH band", "answer": "Two users are in the HIGH band.",
+                                                "columns": ["user_id", "username"], "rows": [[107, "Saihu M"], [11, "Arun Ramachandran M"]],
+                                                "rowCount": 2, "chart": null, "durationMs": 900, "isError": false,
+                                                "dateAdded": "2026-08-05T12:22:09Z"
+                                            }
+                                        ]
+                                    }
+                                }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid application JWT." },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+                    "description": "The standard SFM application JWT — the same token every other DLP endpoint uses. This is **not** the chatbot's own token; the UI never sees that one." }
+            },
+            "schemas": {
+                "ChatbotAskRequest": {
+                    "type": "object",
+                    "required": ["question"],
+                    "properties": {
+                        "question": { "type": "string", "minLength": 1, "description": "The user's question. Required — an empty value returns 400.", "example": "who is the highest risk user chart" },
+                        "sessionId": { "type": "string", "format": "uuid", "nullable": true, "description": "Conversation to continue. `null` (or omitted) starts a new one; the response returns the id to reuse.", "example": null },
+                        "includeChart": { "type": "boolean", "default": true, "description": "Set false to omit the base64 chart from the response. Use it for text-only views — the chart dominates payload size." }
+                    }
+                },
+                "ChatbotAnswer": {
+                    "type": "object",
+                    "properties": {
+                        "sessionId": { "type": "string", "format": "uuid", "nullable": true, "description": "Send this back as `sessionId` on the next question to stay in the same conversation." },
+                        "answer": { "type": "string", "nullable": true, "description": "Natural-language answer. Render as the chat bubble." },
+                        "columns": { "type": "array", "items": { "type": "string" }, "description": "Column headers, in order. Empty when the answer carries no table." },
+                        "rows": {
+                            "type": "array",
+                            "description": "Result rows. Each inner array lines up with `columns` by position. Cells are mixed types — number, string or null.",
+                            "items": { "type": "array", "items": { "nullable": true, "oneOf": [ { "type": "string" }, { "type": "number" }, { "type": "boolean" } ] } }
+                        },
+                        "chart": { "type": "string", "nullable": true, "description": "Rendered chart as a complete data URI (`data:image/png;base64,…`). Drop straight into an `<img src>`. Null when the bot drew nothing or `includeChart` was false." },
+                        "rowCount": { "type": "integer", "description": "Number of entries in `rows`, so a count can be shown without walking the array." },
+                        "suggestions": { "type": "array", "items": { "type": "string" }, "description": "Follow-up questions the bot proposes, in its order. **Render as tappable chips under the answer bubble** — tapping one sends it as the next `question` with the same `sessionId`. Always present; empty array when it offered none." },
+                        "turnId": { "type": "string", "nullable": true, "description": "The bot's own id for this turn. Opaque — quote it when reporting a bad answer so it can be found in the AI team's logs." },
+                        "reportPdfUrl": { "type": "string", "nullable": true, "description": "A rendered PDF of this answer, when the question asked for a report. Null otherwise, which is the usual case. Temporary link — not stored, so it is absent when a conversation is replayed from history." },
+                        "meta": { "$ref": "#/components/schemas/ChatbotAnswerMeta" }
+                    }
+                },
+                "ChatbotAnswerMeta": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "What the answer is based on. Null when the bot sent none. Unrecognised fields are passed through as-is, so this can grow without a UI change.",
+                    "properties": {
+                        "period": { "type": "string", "nullable": true, "description": "The period the answer covers, as the bot described it. Null when the question named none." },
+                        "dataAsOf": { "type": "string", "format": "date-time", "nullable": true, "description": "When the data behind the answer was last refreshed. Worth showing as a quiet line under the table." },
+                        "definitions": { "type": "array", "items": {}, "description": "Terms the bot defined for this answer. Shape is the bot's; passed through untouched." },
+                        "verified": { "type": "boolean", "description": "True when the answer came from a query the AI team has verified." },
+                        "verifiedTemplate": { "type": "string", "nullable": true, "description": "Which verified template answered it, when one did." },
+                        "rows": { "type": "integer", "nullable": true, "description": "Rows the bot's query matched. Can exceed `rowCount`, which counts what it returned." },
+                        "truncated": { "type": "boolean", "description": "True when the result was cut short — show the table as partial." },
+                        "model": { "type": "string", "nullable": true, "description": "The model that wrote the answer." }
+                    }
+                },
+                "ChatbotAnswerResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "$ref": "#/components/schemas/ChatbotAnswer" },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "ChatHistoryRequest": {
+                    "type": "object",
+                    "description": "Paging + filters shared by both history reads. Everything except paging is optional.",
+                    "properties": {
+                        "userId": { "type": "integer", "nullable": true, "description": "Whose history to read. Omit to read across all users.", "example": 4 },
+                        "sessionId": { "type": "string", "format": "uuid", "nullable": true, "description": "Restrict to one conversation. Required to replay a transcript." },
+                        "search": { "type": "string", "nullable": true, "description": "Case-insensitive contains. On /history it matches the title **and any turn's text**; on /history/messages it matches question and answer.", "example": "PHI" },
+                        "fromDate": { "type": "string", "format": "date-time", "nullable": true, "description": "Inclusive lower bound. A date without an offset is treated as UTC." },
+                        "toDate": { "type": "string", "format": "date-time", "nullable": true, "description": "Inclusive upper bound." },
+                        "activeOnly": { "type": "boolean", "default": true, "description": "Exclude soft-deleted conversations. /history only." },
+                        "includeChart": { "type": "boolean", "default": false, "description": "Include the base64 chart on message rows. Off by default — a page of charts can be several MB. /history/messages only." },
+                        "sortBy": { "type": "string", "nullable": true, "enum": ["lastMessageOn", "title", "messageCount", "dateAdded"], "description": "/history only. Defaults to lastMessageOn. Unknown values fall back to it rather than erroring." },
+                        "sortDescending": { "type": "boolean", "default": true, "description": "On /history/messages, `false` gives transcript order (oldest first) when a sessionId is supplied." },
+                        "page": { "type": "integer", "default": 1, "minimum": 1 },
+                        "pageSize": { "type": "integer", "default": 20, "minimum": 1, "maximum": 200, "description": "Capped at 200 — message rows carry result sets and charts." }
+                    }
+                },
+                "ChatSessionSummary": {
+                    "type": "object",
+                    "properties": {
+                        "chatSessionId": { "type": "integer", "format": "int64", "description": "Our internal key." },
+                        "sessionId": { "type": "string", "format": "uuid", "description": "The chatbot's session id — pass to /chatbot/ask to continue, or to /history/messages to replay." },
+                        "userId": { "type": "integer", "nullable": true },
+                        "userName": { "type": "string", "nullable": true },
+                        "title": { "type": "string", "nullable": true, "description": "The first question, truncated to 200 chars. Use as the list label." },
+                        "messageCount": { "type": "integer" },
+                        "lastMessageOn": { "type": "string", "format": "date-time", "nullable": true },
+                        "isActive": { "type": "boolean" },
+                        "dateAdded": { "type": "string", "format": "date-time" }
+                    }
+                },
+                "ChatMessageItem": {
+                    "type": "object",
+                    "properties": {
+                        "chatMessageId": { "type": "integer", "format": "int64" },
+                        "sessionId": { "type": "string", "format": "uuid" },
+                        "userId": { "type": "integer", "nullable": true },
+                        "question": { "type": "string" },
+                        "answer": { "type": "string", "nullable": true },
+                        "columns": { "type": "array", "items": { "type": "string" } },
+                        "rows": { "type": "array", "items": { "type": "array", "items": { "nullable": true, "oneOf": [ { "type": "string" }, { "type": "number" }, { "type": "boolean" } ] } } },
+                        "rowCount": { "type": "integer" },
+                        "chart": { "type": "string", "nullable": true, "description": "Null unless includeChart was true." },
+                        "suggestions": { "type": "array", "items": { "type": "string" }, "description": "The follow-up chips offered with this answer, so a replayed conversation offers the same ones. Empty for turns recorded before the chatbot started sending them." },
+                        "turnId": { "type": "string", "nullable": true, "description": "The bot's id for the turn. Null on anything stored before it sent one." },
+                        "meta": { "$ref": "#/components/schemas/ChatbotAnswerMeta" },
+                        "tables": { "type": "array", "items": { "type": "object" }, "description": "Only on turns that came through the streaming assistant (`/chatbot/ask/stream`), in the same shape its `table` event carried: `{ tool, columns: [{key, label}], rows, totalCount }`. An answer can have several. The field is **omitted** on every `/chatbot/ask` turn — handle both." },
+                        "durationMs": { "type": "integer", "format": "int64", "nullable": true, "description": "How long the chatbot took for this turn." },
+                        "isError": { "type": "boolean", "description": "True when the turn failed; answer then holds the reason." },
+                        "dateAdded": { "type": "string", "format": "date-time" }
+                    }
+                },
+                "ChatSessionPageResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "totalCount": { "type": "integer", "description": "Matches before paging." },
+                                "page": { "type": "integer" },
+                                "pageSize": { "type": "integer" },
+                                "totalPages": { "type": "integer" },
+                                "items": { "type": "array", "items": { "$ref": "#/components/schemas/ChatSessionSummary" } }
+                            }
+                        }
+                    }
+                },
+                "ChatMessagePageResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "totalCount": { "type": "integer" },
+                                "page": { "type": "integer" },
+                                "pageSize": { "type": "integer" },
+                                "totalPages": { "type": "integer" },
+                                "items": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessageItem" } }
+                            }
+                        }
+                    }
+                },
+                "ApiResponseString": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": false },
+                        "message": { "type": "string", "example": "Chatbot unAvailable right now." },
+                        "data": { "type": "string", "nullable": true, "example": null },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" }, "example": null }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        SwaggerUIBundle({
+            spec,
+            dom_id: '#swagger',
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: 'BaseLayout',
+            docExpansion: 'full',
+            defaultModelsExpandDepth: 1,
+            tryItOutEnabled: true
+        });
+    };
+    </script>
+</body>
+</html>

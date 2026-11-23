@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM DLP — Log Summary Redesign API</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { background:#1b1b1b; padding:14px 28px; display:flex; gap:12px; align-items:baseline; border-bottom:1px solid #000; }
+        .topbar h1 { color:#fff; font-size:18px; font-weight:700; margin:0; }
+        .topbar span { color:#89bf04; font-size:13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM DLP</h1>
+        <span>Log Summary redesign — GetTransferLogs changes &amp; GetTransferLogDetails (2026-10-28)</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM DLP — Log Summary redesign",
+            "version": "1.0.0",
+            "description": "Documents the **Log Summary redesign (Oct 2026)** changes to **GetTransferLogs** / **GetTransferLogsByUrl** and the new **GetTransferLogDetails** endpoint.\n\n**New fields on every event / drill-down row**\n\n| Field | Grid element |\n|---|---|\n| `severity` | Severity badge — `Critical` / `High` / `Medium` / `Low`; null on rows crunched before severity scoring |\n| `designation` | Role line under the user name (\"Innovative Designer\") |\n| `activityCategory` | Second line of the Activity cell — `File Sharing` / `Content Sharing` / `Web Filtering` / `Other` (same taxonomy as the Activity filter dropdown) |\n| `source` | Detail panel's Activity → Source — `Local device` on file rows, the capture surface (e.g. `Browser`) on prompt rows |\n| `isOverrideApplied` | Override already applied to this activity |\n| `isPendingApproval` | Override awaiting approval — the clock badge beside a Blocked status |\n\n**New filters** — `likeFilters[\"Severity\"]` and `likeFilters[\"Designation\"]` are now applied in SQL on both the file-only and combined event branches.\n\n**Activity filtering now works on every view.** `likeFilters[\"Activity\"]` used to be honoured only on the Events view; on the grouped views (`user`, `endpoint`, `url`, `app`, `device`) the key named no column and was silently dropped, and a section name like `\"File Sharing\"` matched nothing anywhere but Events. It is now lifted out and applied **before the GroupBy**, so filtering to `Download` on the Users view returns only users who downloaded, and their `totalActivity` / `unCoveredCount` / `contentTypes` describe those downloads alone. Those views now also return `activityFilter` and `activityCounts`, the same groups and numbers the Events view returns. `GetTransferLogsByUrl` applies the same filter, so an expanded row set matches the group it was expanded from.\n\n**Fix** — `GetTransferLogsByUrl` rows now carry `metaId`, so `hasShadowCopy` (the View File gate) is populated on drill-down rows; it was always null before.\n\n**New endpoint** — `GET /GetTransferLogDetails/{enrichedId}`: everything the right-hand detail panel shows for one event in one call (grid row + File Flow + `hasShadowCopy` + Activity and Policy Enforcement sections). Keyword counts are masked per the tenant setting; the unmasked drill-down remains `GetSensitiveContentById`.\n\n⚠ **Deploy prerequisite** — run `scripts/create_combined_activity_view.sql` (rev 2026-10-28, adds `Designation` / `IsOverrideApplied` / `IsPendingApproval`) on **every tenant DB before deploying**. Combined mode is the *default* Events view, so an un-migrated tenant fails with `column \"Designation\" does not exist`.\n\n**Not populated yet** — `policyEnforcement.ruleApplied` and `policyEnforcement.channel` are in the contract but null on file rows: the pipeline does not store the rule text or inspection channel today. The UI should hide empty lines.\n\nResponses are wrapped in the standard `ApiResponse<T>` envelope: `{ success, message, data, errors }`."
+        },
+        "servers": [
+            { "url": "https://localhost:5001", "description": "Local dev" },
+            { "url": "https://qa-email.azure-api.net/qadlp", "description": "QA DLP (APIM)" }
+        ],
+        "tags": [
+            { "name": "Transfer Logs", "description": "Log Summary lists (Events / Users / URL / Application views)." },
+            { "name": "Detail Panel", "description": "The right-hand detail panel for one event." }
+        ],
+        "paths": {
+            "/GetTransferLogs": {
+                "post": {
+                    "tags": ["Transfer Logs"],
+                    "summary": "Log Summary lists — redesign fields, and Activity filtering on every view",
+                    "description": "Same contract; the **event view rows** (`groupBy: \"event\"`, both file-only and combined modes) now also carry `severity`, `designation`, `activityCategory`, `source`, `isOverrideApplied`, `isPendingApproval`.\n\n**GroupBy values**: `event` (Events tab), `user` (Users tab), `app` (Application tab), `device`, `endpoint`, default = URL tab.\n\n**New filter keys** (event views, applied in SQL): `likeFilters[\"Severity\"]` and `likeFilters[\"Designation\"]`. In combined mode `Severity` is null on prompt rows, so a severity filter keeps file rows only.\n\n### Activity filter — all views\n\n`likeFilters[\"Activity\"]` (aliases: `TransferTypeName`, `ActivityType`, `TransferType`) takes either **activity names** (`Upload`, `Download`, `Copy / Paste`, …, matched as contains) or a **section name** (`File Sharing`, `Content Sharing`, `Web Filtering`, `Other`, which selects every activity in it). `All` / `All activities` means no filter. Several values OR together.\n\nIt behaves the same on every view, but lands in a different place:\n\n| View | Where it applies | Effect |\n|---|---|---|\n| `event` | after projection | rows of that activity only |\n| `user` / `endpoint` / `url` / `app` / `device` | **before the GroupBy, in SQL** | groups with no matching activity disappear; `totalActivity`, `unCoveredCount`, `contentTypes` and `fileTypes` describe the matching rows only |\n\n**Counts never move when you tick a box.** `activityFilter` and `activityCounts` are computed over the window with every *other* filter applied but before the activity filter narrows it, so each option keeps showing its number while one is selected. Grouped views compute this with one extra `GROUP BY` count over the same window — the numbers are event counts, so the dropdown reads identically on every tab. Both fields are omitted (not null) on responses that do not carry them.\n\n### Content Type column — grouped views (fix)\n\n`contentTypes` on a grouped row is **one entry per DLP type**, on every tab. The underlying value is a comma-joined list on both halves of the record (a blocked prompt's matched rule labels, a file's detected types), and the Content tab used to return those whole: `[\"PII, PCI\", \"PCI, PII\", \"PII, PCI, Policy\", \"PCI\", \"PII\"]` — the same type over and over, in whatever order each event happened to record it, against the File tab's `[\"CUI\", \"PII\", \"PCI\"]` for the same column. It is now split, trimmed and de-duplicated case-insensitively before the row is folded, so the two tabs agree. Order is first-seen, newest event first.",
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueryParameters" },
+                            "examples": {
+                                "eventsView": { "summary": "Events tab (combined mode is the default)", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "event", "page": 1, "pageSize": 15 } },
+                                "severityFilter": { "summary": "Events tab filtered to Critical + High", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "event", "page": 1, "pageSize": 15, "likeFilters": { "Severity": ["Critical", "High"] } } },
+                                "activityGroupFilter": { "summary": "Only File Sharing activities", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "event", "page": 1, "pageSize": 15, "likeFilters": { "Activity": ["File Sharing"] } } },
+                                "usersView": { "summary": "Users tab", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "page": 1, "pageSize": 15 } },
+                                "usersViewDownloads": { "summary": "Users tab — only users who downloaded", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "page": 1, "pageSize": 15, "likeFilters": { "Activity": ["Download"] } } },
+                                "appViewSection": { "summary": "Application tab — a whole section", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "app", "page": 1, "pageSize": 15, "likeFilters": { "Activity": ["File Sharing"] } } },
+                                "excludeBlocked": { "summary": "Events tab with the blocked rows left out", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "event", "page": 1, "pageSize": 15, "notLikeFilters": { "policyAction": ["Block"] } } },
+                                "excludeExactAction": { "summary": "Leave out only PolicyAction = Block, keeping \"Blocked by override\"", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "event", "page": 1, "pageSize": 15, "notExactFilters": { "policyAction": ["Block"] } } }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TransferLogsResponse" },
+                            "examples": {
+                                "groupedFiltered": {
+                                    "summary": "Users tab filtered to Download — counts stay whole",
+                                    "value": { "success": true, "message": null, "data": {
+                                        "totalCount": 3,
+                                        "isSensitiveContentMasked": false,
+                                        "data": [
+                                            { "userId": 101, "username": "Jordyn Rosser", "emailId": "jordyn@example.com", "employeeCode": "IPL001",
+                                              "appliedPolicy": "Default Policy", "totalUsers": 1, "unCoveredCount": 1,
+                                              "totalActivity": 4,
+                                              "contentTypes": ["PII", "PFI"], "appNames": ["MS Teams", "Chrome"], "fileTypes": [".xlsx", ".pdf"],
+                                              "receivedTime": "2025-12-10T22:12:00Z" }
+                                        ],
+                                        "activityCounts": { "Upload": 5, "Download": 2, "Device Read": 1, "Device Write": 1, "Prompt": 2, "Typed Content": 1, "Copy / Paste": 2, "Web Access": 4, "Tenant Access": 3 },
+                                        "activityFilter": { "totalCount": 21, "groups": [
+                                            { "groupCode": "FileSharing", "groupName": "File Sharing", "count": 9, "activities": [ { "name": "Upload", "count": 5 }, { "name": "Download", "count": 2 }, { "name": "Device Read", "count": 1 }, { "name": "Device Write", "count": 1 } ] },
+                                            { "groupCode": "ContentSharing", "groupName": "Content Sharing", "count": 5, "activities": [ { "name": "Prompt", "count": 2 }, { "name": "Typed Content", "count": 1 }, { "name": "Copy / Paste", "count": 2 } ] },
+                                            { "groupCode": "WebFiltering", "groupName": "Web Filtering", "count": 7, "activities": [ { "name": "Web Access", "count": 4 }, { "name": "Tenant Access", "count": 3 } ] }
+                                        ] }
+                                    } }
+                                },
+                                "eventRow": {
+                                    "summary": "Event row with the redesign fields",
+                                    "value": { "success": true, "message": null, "data": {
+                                        "totalCount": 187,
+                                        "isSensitiveContentMasked": false,
+                                        "activityFilter": { "totalCount": 21, "groups": [
+                                            { "groupCode": "FileSharing", "groupName": "File Sharing", "count": 9, "activities": [ { "name": "Upload", "count": 5 }, { "name": "Download", "count": 2 }, { "name": "Device Read", "count": 1 }, { "name": "Device Write", "count": 1 } ] },
+                                            { "groupCode": "ContentSharing", "groupName": "Content Sharing", "count": 5, "activities": [ { "name": "Prompt", "count": 2 }, { "name": "Typed Content", "count": 1 }, { "name": "Copy / Paste", "count": 2 } ] },
+                                            { "groupCode": "WebFiltering", "groupName": "Web Filtering", "count": 7, "activities": [ { "name": "Web Access", "count": 4 }, { "name": "Tenant Access", "count": 3 } ] }
+                                        ] },
+                                        "data": [
+                                            { "enrichedId": 48210, "metaId": "4bd11665-9a2e", "hasShadowCopy": true,
+                                              "receivedTime": "2025-12-10T14:45:00Z",
+                                              "userId": 101, "username": "Sophia", "emailId": "sophia@example.com", "employeeCode": "IPL001",
+                                              "designation": "Innovative Designer",
+                                              "policyAction": "Allowed", "processStatus": "Completed",
+                                              "severity": "Critical", "isOverrideApplied": false, "isPendingApproval": false,
+                                              "fileName": "Medical_recoders.Pdf", "fileType": ".PDF", "fileSize": 2097152, "fileSizeFormatted": "2 MB",
+                                              "contentType": "PHI",
+                                              "transferTypeName": "Upload", "activityCategory": "File Sharing", "source": "Local device",
+                                              "appName": "Chrome", "url": "www.github.com",
+                                              "appliedPolicy": "Healthcare Data Policy",
+                                              "category": "File", "isAIScan": true, "isInvestigation": false }
+                                        ]
+                                    } }
+                                }
+                            }
+                        } } },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            },
+            "/GetTransferLogsByUrl": {
+                "post": {
+                    "tags": ["Transfer Logs"],
+                    "summary": "Drill-down rows — same new fields, hasShadowCopy now works, and category is honoured",
+                    "description": "Returns the individual rows behind one group value (the expanded row inside the Users / URL / Application tabs), chosen by `groupBy`:\n- `user` → filter by `userId`\n- `app` → filter by `appname`\n- `device` → filter by `devicename`\n- `endpoint` → filter by `endpointUserId`\n- (default) → filter by `url`\n\n**Changed**: rows now carry `severity`, `designation`, `activityCategory`, `source`, `isOverrideApplied`, `isPendingApproval`, and — fix — `metaId`, so `hasShadowCopy` is populated (it was always null here before, leaving the View File action without its gate).\n\n**`likeFilters[\"Activity\"]` is applied here too**, with the same names and section names as the lists. Send the grid's current activity selection along with the drill-down request: the expanded rows then match the group they came from, instead of showing every activity under a row whose `totalActivity` counted only one.\n\n**`likeFilters[\"category\"]` is applied here too (fix)**. It was drained by nothing and matched nothing — the key names no column on the file table, and an unbindable key returns every row — so expanding a Content Sharing group listed that group's FILE activity (QA: 138 rows, file uploads included, under a group row that said 36), and expanding a Content-only application group returned `totalCount: 0` because those events live in `dlp.\"AIPromptBlockLog\"`, not in the crunched table. `[\"Content\"]` now reads the combined view with the same scope the group row was built from, so the rows and the `totalActivity` that opened them agree; `[\"All\"]` interleaves both halves. **Absent still means files alone** — the same opt-in reading the grouped lists use, so every existing drill-down is unchanged. Send the grid's current category selection with the drill-down request, exactly as you already send its activity selection.",
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UrlQueryParameters" },
+                            "examples": {
+                                "userDrilldown": { "summary": "Users tab — expand one user", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "userId": 101, "page": 1, "pageSize": 10 } },
+                                "urlDrilldown": { "summary": "URL tab — expand one URL", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "url": "www.example.com", "page": 1, "pageSize": 10 } },
+                                "userDrilldownFiltered": { "summary": "Expand a user while Download is selected", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "userId": 101, "page": 1, "pageSize": 10, "likeFilters": { "Activity": ["Download"] } } },
+                                "userDrilldownExcluded": { "summary": "Expand a user with the blocked rows left out — the in-flight rows (Pending / Failed / Under review) stay", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "userId": 12, "page": 1, "pageSize": 10, "notLikeFilters": { "policyAction": ["Block"] } } },
+                                "userDrilldownContent": { "summary": "Content Sharing tab — expand one user (returns that user's blocked-prompt events alone, matching the group row's totalActivity)", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "user", "userId": 148, "page": 1, "pageSize": 10, "likeFilters": { "category": ["Content"] } } },
+                                "appDrilldownContent": { "summary": "Content Sharing tab — expand one application group", "value": { "fromDate": "2025-09-12T00:00:00Z", "toDate": "2025-09-23T23:59:59Z", "groupBy": "app", "appname": "outlook.cloud.microsoft", "page": 1, "pageSize": 10, "likeFilters": { "category": ["Content"] } } }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TransferLogsResponse" } } } },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            },
+            "/GetTransferLogDetails/{enrichedId}": {
+                "get": {
+                    "tags": ["Detail Panel"],
+                    "summary": "NEW — everything the detail panel shows for one event",
+                    "description": "One call for the right-hand panel:\n- **`log`** — the same grid-row DTO the lists return. Its `incidentInfoJson` carries the panel's lower sections (`FileInformation` with Created On / Last Modified, `ProcessingDetails` with DLP Detected / Confidence Score / Detected DLP Types, `KeywordsMatched`), masked per the tenant's `IsProtectSensitiveContent` setting — the unmasked drill-down stays `GetSensitiveContentById`. Its `fileFlow` is the File Flow tab and `hasShadowCopy` gates View File.\n- **`activity`** — the panel's Activity section: type, category, source, destination (`\"Chrome (www.github.com)\"` — same string the File Flow rail renders), timestamp.\n- **`policyEnforcement`** — policy name plus a derived `restriction` basis (e.g. `\"Content / App / Channel based\"`, from what the row actually carries). `ruleApplied` and `channel` are null on file rows until the pipeline stores them — hide empty lines.",
+                    "parameters": [
+                        { "name": "enrichedId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" }, "example": 48210 }
+                    ],
+                    "responses": {
+                        "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseTransferLogDetail" },
+                            "examples": {
+                                "detail": {
+                                    "summary": "Detail panel payload",
+                                    "value": { "success": true, "message": null, "data": {
+                                        "log": {
+                                            "enrichedId": 48210, "metaId": "4bd11665-9a2e", "hasShadowCopy": true,
+                                            "userId": 101, "username": "Sophia", "emailId": "sophia@example.com", "employeeCode": "IPL001", "designation": "Innovative Designer",
+                                            "policyAction": "Allowed", "processStatus": "Completed", "severity": "Critical",
+                                            "isOverrideApplied": false, "isPendingApproval": false,
+                                            "fileName": "Medical_recoders.Pdf", "fileType": ".PDF", "fileSizeFormatted": "2 MB",
+                                            "contentType": "PHI", "transferTypeName": "Upload", "activityCategory": "File Sharing", "source": "Local device",
+                                            "appName": "Chrome", "url": "www.github.com", "appliedPolicy": "Healthcare Data Policy",
+                                            "receivedTime": "2025-12-10T14:45:00Z", "isAIScan": true,
+                                            "incidentInfoJson": {
+                                                "fileInformation": { "fileName": "Medical_recoders.Pdf", "fileType": "PDF", "fileSize": "2 MB", "createdOn": "12/10/25 02:45pm", "lastModified": "12/10/25 02:45pm" },
+                                                "processingDetails": { "dlpDetected": true, "confidenceScore": 60, "detectedDlpTypes": ["PHI"] },
+                                                "keywordsMatched": { "PHI": ["Patient Name = R. Menon", "Medical Record No = MRN-448120"] }
+                                            },
+                                            "fileFlow": [
+                                                { "kind": "activity", "title": "File Uploaded on Chrome", "detail": "Chrome (www.github.com)", "occurredAt": "2025-12-10T05:59:00Z" },
+                                                { "kind": "scan", "title": "DLP Scan Initiated", "occurredAt": "2025-12-10T05:59:00Z" },
+                                                { "kind": "policy", "title": "File Allowed", "detail": "Healthcare Data Policy", "occurredAt": "2025-12-10T06:00:00Z" }
+                                            ]
+                                        },
+                                        "activity": { "activityType": "Upload", "activityCategory": "File Sharing", "source": "Local device", "destination": "Chrome (www.github.com)", "occurredAt": "2025-12-10T14:45:00Z" },
+                                        "policyEnforcement": { "policy": "Healthcare Data Policy", "restriction": "Content / App / Channel based", "ruleApplied": null, "channel": null }
+                                    } }
+                                }
+                            }
+                        } } },
+                        "404": { "description": "No row with that enrichedId", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "QueryParameters": {
+                    "type": "object",
+                    "properties": {
+                        "fromDate": { "type": "string", "format": "date-time" },
+                        "toDate": { "type": "string", "format": "date-time" },
+                        "groupBy": { "type": "string", "enum": ["event", "user", "app", "device", "endpoint", "url"], "description": "Which Log Summary tab. Omitted/unknown = URL grouping." },
+                        "page": { "type": "integer", "default": 1 },
+                        "pageSize": { "type": "integer", "default": 15, "description": "<= 0 returns everything (export path)." },
+                        "sortBy": { "type": "string", "nullable": true, "description": "Any row property, e.g. severity, receivedTime." },
+                        "sortDescending": { "type": "boolean", "default": true },
+                        "likeFilters": {
+                            "type": "object",
+                            "additionalProperties": { "type": "array", "items": { "type": "string" } },
+                            "description": "Column filters. Redesign adds Severity and Designation; Activity accepts activity names or a whole section name (\"File Sharing\") and now applies on every groupBy, not just event; category opts between File/Content/All, and now applies on every groupBy — and on GetTransferLogsByUrl, the drill-down behind a grouped row — where it is the opt-in (absent still means files alone, where the event view's absent means both)."
+                        },
+                        "exactFilters": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "nullable": true },
+                        "notLikeFilters": {
+                            "type": "object",
+                            "additionalProperties": { "type": "array", "items": { "type": "string" } },
+                            "nullable": true,
+                            "description": "Exclusions. Same keys as likeFilters; a row is DROPPED when the field CONTAINS any of the values. Rows with no value recorded (NULL or blank) are never dropped. Several keys drop the union of what each would drop; sent with likeFilters, the positive filter narrows first and this subtracts from what it kept. Computed columns are judged on the value the grid DISPLAYS, not the underlying one — policyAction reads ProcessStatus on an in-flight row, so excluding Block leaves the Pending / Failed / Under review rows alone, and likeFilters + notLikeFilters on the same value always add back up to the unfiltered total."
+                        },
+                        "notExactFilters": {
+                            "type": "object",
+                            "additionalProperties": { "type": "array", "items": { "type": "string" } },
+                            "nullable": true,
+                            "description": "Exclusions by whole value: a row is DROPPED when the field EQUALS any of the values. Use where a substring over-matches — notExactFilters {\"policyAction\":[\"Block\"]} keeps \"Blocked by override\", notLikeFilters does not. A blank among the values means \"no value recorded\" and drops the NULL / empty rows."
+                        }
+                    }
+                },
+                "UrlQueryParameters": {
+                    "allOf": [
+                        { "$ref": "#/components/schemas/QueryParameters" },
+                        { "type": "object", "properties": {
+                            "url": { "type": "string", "nullable": true },
+                            "appname": { "type": "string", "nullable": true },
+                            "devicename": { "type": "string", "nullable": true },
+                            "userId": { "type": "integer", "nullable": true },
+                            "endpointUserId": { "type": "integer", "nullable": true }
+                        } }
+                    ]
+                },
+                "EnrichedLogRow": {
+                    "type": "object",
+                    "description": "One Log Summary row (subset — unchanged fields elided). ★ = new in the Oct 2026 redesign.",
+                    "properties": {
+                        "enrichedId": { "type": "integer" },
+                        "metaId": { "type": "string", "nullable": true, "description": "Transfer correlation id. Now also returned by GetTransferLogsByUrl." },
+                        "hasShadowCopy": { "type": "boolean", "nullable": true, "description": "Gate for the View File action. Null on rows without a MetaId." },
+                        "userId": { "type": "integer", "nullable": true },
+                        "username": { "type": "string", "nullable": true },
+                        "emailId": { "type": "string", "nullable": true },
+                        "employeeCode": { "type": "string", "nullable": true },
+                        "designation": { "type": "string", "nullable": true, "description": "★ Role line under the user name. Null on grouped views and pre-migration combined rows." },
+                        "severity": { "type": "string", "nullable": true, "enum": ["Critical", "High", "Medium", "Low", null], "description": "★ Severity badge. Null on prompt rows and rows crunched before severity scoring." },
+                        "isOverrideApplied": { "type": "boolean", "nullable": true, "description": "★ Override already applied." },
+                        "isPendingApproval": { "type": "boolean", "nullable": true, "description": "★ Override awaiting approval — the clock badge." },
+                        "policyAction": { "type": "string", "nullable": true, "description": "Scan Status badge: Allowed / Blocked / Warned / UnCovered, or the pipeline stage while processing." },
+                        "processStatus": { "type": "string", "nullable": true, "description": "Process Status column: Completed, Override Requested/Applied/Cancelled, Under Investigation, Investigation Closed, …" },
+                        "fileName": { "type": "string", "nullable": true },
+                        "fileType": { "type": "string", "nullable": true },
+                        "fileSizeFormatted": { "type": "string", "nullable": true },
+                        "contentType": { "type": "string", "nullable": true, "description": "Detected DLP types (PHI, PII, PFI, PCI, Code) — parsed from the scan JSON with column fallback." },
+                        "transferTypeName": { "type": "string", "nullable": true, "description": "Activity: Upload / Download / Prompt / Copy Paste / Typed Content / Device Read / Device Write / Web Access / …" },
+                        "activityCategory": { "type": "string", "nullable": true, "enum": ["File Sharing", "Content Sharing", "Web Filtering", "Other", null], "description": "★ Second line of the Activity cell. Same section names as activityFilter." },
+                        "source": { "type": "string", "nullable": true, "description": "★ \"Local device\" on file rows; the capture surface (e.g. \"Browser\") on prompt rows." },
+                        "appName": { "type": "string", "nullable": true, "description": "Destination application (AI provider on prompt rows)." },
+                        "url": { "type": "string", "nullable": true, "description": "Destination URL, second line of the Destination cell." },
+                        "appliedPolicy": { "type": "string", "nullable": true, "description": "Policy column — the policy that fired, by name." },
+                        "receivedTime": { "type": "string", "format": "date-time", "nullable": true },
+                        "category": { "type": "string", "description": "\"File\" or \"Content\" (blocked AI prompt, combined mode)." },
+                        "fileFlow": { "type": "array", "items": { "$ref": "#/components/schemas/FileFlowStep" }, "nullable": true },
+                        "incidentInfo": { "type": "string", "nullable": true, "description": "Legacy HTML rendering of the detail sections." },
+                        "incidentInfoJson": { "type": "object", "nullable": true, "description": "{ fileInformation, processingDetails, keywordsMatched } — the detail panel's lower sections, masked per tenant." }
+                    }
+                },
+                "FileFlowStep": {
+                    "type": "object",
+                    "properties": {
+                        "kind": { "type": "string", "enum": ["activity", "scan", "policy", "override", "recording"] },
+                        "title": { "type": "string" },
+                        "detail": { "type": "string", "nullable": true },
+                        "occurredAt": { "type": "string", "format": "date-time", "nullable": true }
+                    }
+                },
+                "ActivityFilter": {
+                    "type": "object",
+                    "description": "The Activity dropdown pre-grouped, counts computed before the activity filter narrows the window. Returned on the event views and on every grouped view (user / endpoint / url / app / device).",
+                    "properties": {
+                        "totalCount": { "type": "integer", "description": "The \"All activities\" row." },
+                        "groups": { "type": "array", "items": { "type": "object", "properties": {
+                            "groupCode": { "type": "string" },
+                            "groupName": { "type": "string", "description": "Also accepted as a likeFilters[\"Activity\"] value selecting the whole section." },
+                            "count": { "type": "integer" },
+                            "activities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "count": { "type": "integer" } } } }
+                        } } }
+                    }
+                },
+                "TransferLogsResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean" },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "type": "object", "properties": {
+                            "totalCount": { "type": "integer" },
+                            "data": { "type": "array", "items": { "$ref": "#/components/schemas/EnrichedLogRow" } },
+                            "isSensitiveContentMasked": { "type": "boolean" },
+                            "activityCounts": { "type": "object", "additionalProperties": { "type": "integer" }, "nullable": true, "description": "Flat activity name → count. Returned on the event views and, new, on every grouped view. Omitted when absent." },
+                            "activityFilter": { "$ref": "#/components/schemas/ActivityFilter" },
+                            "policyActionCounts": { "type": "object", "additionalProperties": { "type": "integer" }, "nullable": true },
+                            "appliedSort": { "type": "object", "nullable": true }
+                        } },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                },
+                "TransferLogDetail": {
+                    "type": "object",
+                    "properties": {
+                        "log": { "$ref": "#/components/schemas/EnrichedLogRow" },
+                        "activity": { "type": "object", "properties": {
+                            "activityType": { "type": "string", "nullable": true },
+                            "activityCategory": { "type": "string", "nullable": true },
+                            "source": { "type": "string", "nullable": true },
+                            "destination": { "type": "string", "nullable": true, "description": "\"Chrome (www.github.com)\" — same string as the File Flow rail." },
+                            "occurredAt": { "type": "string", "format": "date-time", "nullable": true }
+                        } },
+                        "policyEnforcement": { "type": "object", "properties": {
+                            "policy": { "type": "string", "nullable": true },
+                            "restriction": { "type": "string", "nullable": true, "description": "Derived basis, e.g. \"Content / App / Channel based\". Null when no policy fired." },
+                            "ruleApplied": { "type": "string", "nullable": true, "description": "Null on file rows today — rule text is not stored yet." },
+                            "channel": { "type": "string", "nullable": true, "description": "Null today — inspection channel is not reported yet." }
+                        } }
+                    }
+                },
+                "ApiResponseTransferLogDetail": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean" },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "$ref": "#/components/schemas/TransferLogDetail" },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                },
+                "ApiResponseString": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean" },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "type": "string", "nullable": true },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        window.ui = SwaggerUIBundle({
+            spec: spec,
+            dom_id: '#swagger',
+            deepLinking: true,
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: 'BaseLayout',
+            defaultModelsExpandDepth: 1,
+            docExpansion: 'list'
+        });
+    };
+    </script>
+</body>
+</html>

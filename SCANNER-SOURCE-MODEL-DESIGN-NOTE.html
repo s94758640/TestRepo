@@ -1,0 +1,162 @@
+<title>Scanner — Source & Hosting Model (design-planning note)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2027; --muted:#5d6675; --faint:#8b94a3;
+    --line:#e5e8ee; --line2:#eef1f5; --accent:#2f6e70; --accent-soft:#e4f5f4;
+    --have:#2f8f63; --have-bg:#e5f3ec; --partial:#9a6a1a; --partial-bg:#faf0dd;
+    --miss:#b4443a; --miss-bg:#f7e5e3; --code-bg:#1d232c; --code-ink:#e8ecf2;
+    --radius:12px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#14171c; --panel:#1b1f26; --ink:#e7ebf1; --muted:#9aa3b2; --faint:#6b7483;
+      --line:#2a2f38; --line2:#242831; --accent:#5bb8ba; --accent-soft:#17312f;
+      --have:#5fc48c; --have-bg:#15271e; --partial:#d7a24a; --partial-bg:#2a2112;
+      --miss:#e07a70; --miss-bg:#2c1816; --code-bg:#0f141a; --code-ink:#dde3ec;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14171c; --panel:#1b1f26; --ink:#e7ebf1; --muted:#9aa3b2; --faint:#6b7483;
+    --line:#2a2f38; --line2:#242831; --accent:#5bb8ba; --accent-soft:#17312f;
+    --have:#5fc48c; --have-bg:#15271e; --partial:#d7a24a; --partial-bg:#2a2112;
+    --miss:#e07a70; --miss-bg:#2c1816; --code-bg:#0f141a; --code-ink:#dde3ec;
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2027; --muted:#5d6675; --faint:#8b94a3;
+    --line:#e5e8ee; --line2:#eef1f5; --accent:#2f6e70; --accent-soft:#e4f5f4;
+    --have:#2f8f63; --have-bg:#e5f3ec; --partial:#9a6a1a; --partial-bg:#faf0dd;
+    --miss:#b4443a; --miss-bg:#f7e5e3; --code-bg:#1d232c; --code-ink:#e8ecf2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+  header.doc{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+  .eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.15;margin:.35em 0 .15em;
+    text-wrap:balance;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px;max-width:62ch}
+  .meta{color:var(--faint);font-size:12.5px;margin-top:10px}
+  h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:40px 0 6px;letter-spacing:-.01em}
+  h2 .n{color:var(--accent);font-size:14px;font-family:var(--mono);margin-right:8px;vertical-align:1px}
+  .lede{color:var(--muted);font-size:13.5px;margin:0 0 16px;max-width:70ch}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;margin:14px 0}
+  .principle{display:flex;gap:14px;align-items:flex-start}
+  .principle .k{flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:var(--accent-soft);
+    color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;
+    display:block;overflow-x:auto}
+  @media(min-width:720px){table{display:table}}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;
+    border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  td.src{font-weight:600;white-space:nowrap}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+    padding:2px 9px;border-radius:999px;white-space:nowrap;line-height:1.7}
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%}
+  .have{color:var(--have);background:var(--have-bg)} .have::before{background:var(--have)}
+  .partial{color:var(--partial);background:var(--partial-bg)} .partial::before{background:var(--partial)}
+  .miss{color:var(--miss);background:var(--miss-bg)} .miss::before{background:var(--miss)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);color:var(--accent);
+    padding:1px 5px;border-radius:5px}
+  .codeblock{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12.5px;
+    border-radius:10px;padding:14px 16px;overflow-x:auto;line-height:1.6}
+  ol.decisions{counter-reset:d;list-style:none;padding:0;margin:8px 0}
+  ol.decisions>li{counter-increment:d;position:relative;padding:12px 0 12px 44px;border-bottom:1px solid var(--line2)}
+  ol.decisions>li:last-child{border-bottom:none}
+  ol.decisions>li::before{content:counter(d);position:absolute;left:0;top:11px;width:28px;height:28px;
+    border-radius:8px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px;
+    display:grid;place-items:center;font-family:var(--mono)}
+  ol.decisions b{font-weight:600}
+  .tag{font-size:11px;font-weight:600;padding:1px 7px;border-radius:5px;margin-left:6px;vertical-align:1px}
+  .tag.build{color:var(--miss);background:var(--miss-bg)}
+  .tag.prod{color:var(--partial);background:var(--partial-bg)}
+  .tag.quick{color:var(--have);background:var(--have-bg)}
+  .note{color:var(--muted);font-size:13px}
+  .foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+  a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+  <header class="doc">
+    <div class="eyebrow">Scanner · Architecture note for design planning</div>
+    <h1>How each source is scanned — and what platform-hosted coverage we still need</h1>
+    <p class="sub">For the UX / product team. Captures the agent-vs-platform model across all five Scanner tabs, corrects the Network tab to its full source set, and lists the builds and design decisions ahead.</p>
+    <div class="meta">Status reflects the API + agent code as of this review. “Have / Partial / Missing” is verified against the repository, not planned work.</div>
+  </header>
+
+  <h2><span class="n">01</span>The one principle: reachability decides who scans</h2>
+  <p class="lede">Every source lands in one of two homes. Which one is not a preference — it is forced by whether our cloud can reach the data.</p>
+  <div class="card principle"><div class="k">☁</div><div>
+    <b>Public / internet-reachable</b> (SaaS, object-storage buckets, anything on a public IP) →
+    <b>our cloud scans it directly</b>. Platform-hosted, nothing to install.</div></div>
+  <div class="card principle"><div class="k">⌂</div><div>
+    <b>Private / internal</b> (10.x, 192.168.x file servers and shares) → our cloud cannot reach it, so software must run
+    <b>inside the network</b>: a <b>scanner node</b> (crawls many shares by IP) or a <b>host agent</b> (reads one server’s own disks).</div></div>
+
+  <h2><span class="n">02</span>The “Network” tab is 5 source kinds × 2 methods</h2>
+  <p class="lede">“Network” and “Server Scanner” are the same tab. The design’s add-flow is far broader than “install an agent on a server” — it offers direct-attached disks, SAN, SMB/NFS shares, cluster shares, and cloud buckets, scanned either by a <b>host agent</b> or a <b>scanner node</b>.</p>
+  <table>
+    <thead><tr><th>Source kind</th><th>Design method</th><th>Reachable</th><th>Do we have it?</th></tr></thead>
+    <tbody>
+      <tr><td class="src">DAS — server disks</td><td>Host agent on the box</td><td>internal</td><td><span class="pill have">Have</span></td></tr>
+      <tr><td class="src">SAN — LUN volume</td><td>Agent on the mounting host</td><td>internal</td><td><span class="pill have">Have</span></td></tr>
+      <tr><td class="src">NAS — SMB/NFS share (by IP)</td><td>Scanner node, network crawl</td><td>internal · by IP</td><td><span class="pill partial">Partial</span></td></tr>
+      <tr><td class="src">HCI — cluster shares</td><td>Scanner node (Nutanix/vSAN)</td><td>internal · by IP</td><td><span class="pill partial">Partial</span></td></tr>
+      <tr><td class="src">Cloud buckets — S3 / Azure Blob / GCS</td><td>API connector</td><td>public</td><td><span class="pill miss">Missing</span></td></tr>
+    </tbody>
+  </table>
+  <p class="note"><b>Partial (NAS/HCI):</b> the host agent can read a UNC path if you list it in its settings — but there is no scanner-node model, no native NFS, remote-share encryption reads <code>Unknown</code>, and targets are local-config only (no console). <b>Missing (buckets):</b> our cloud clients are SaaS drives, not object storage — though the AWS S3 and Azure Blob SDKs are already referenced for our own storage, so AWS/Azure have a head start; GCS does not.</p>
+
+  <h2><span class="n">03</span>Platform-hosted coverage — have vs missing</h2>
+  <p class="lede">Platform-hosted means our cloud does the scanning with no on-prem install. We have it for three source types; the gaps are all on the file-share / bucket / network-crawl side.</p>
+  <table>
+    <thead><tr><th>Source</th><th>Platform-hosted today</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td class="src">Database</td><td><span class="pill have">Have</span></td><td>Worker connects directly; run-now + daily/weekly schedule</td></tr>
+      <tr><td class="src">Code repository</td><td><span class="pill have">Have</span></td><td>Worker calls the git host API</td></tr>
+      <tr><td class="src">Cloud SaaS drives</td><td><span class="pill have">Have</span></td><td>SharePoint / OneDrive / Box / Dropbox / Google Drive</td></tr>
+      <tr><td class="src">Object-storage buckets (S3 / Azure / GCS)</td><td><span class="pill miss">Missing</span></td><td>Net-new connector; AWS/Azure SDK head start</td></tr>
+      <tr><td class="src">Public SMB / SFTP / FTP by IP</td><td><span class="pill miss">Missing</span></td><td>Net-new cloud-side network crawl</td></tr>
+      <tr><td class="src">Scanner node (internal SMB/NFS/cluster)</td><td><span class="pill miss">Missing</span></td><td>On-prem node crawling many shares by IP</td></tr>
+      <tr><td class="src">File share via host agent</td><td><span class="pill have">Have</span></td><td>Agent on the box (not cloud-hosted by nature)</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="n">04</span>Where each tab’s scan runs today</h2>
+  <table>
+    <thead><tr><th>Tab</th><th>Runs where</th><th>Trigger</th></tr></thead>
+    <tbody>
+      <tr><td class="src">Endpoint</td><td>On the laptop (agent, on-device)</td><td>Poll — admin schedules, agent pulls</td></tr>
+      <tr><td class="src">Network (= Server Scanner)</td><td>On the server / node (agent or node)</td><td>Run-the-exe; config pulled</td></tr>
+      <tr><td class="src">Database · Code · Cloud</td><td>Our cloud worker — <em>or</em> on-prem agent if <code>AuthMethod=AgentHosted</code></td><td>Run-now / schedule from console (or agent exe)</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="n">05</span>Decisions &amp; builds to plan around</h2>
+  <ol class="decisions">
+    <li><b>Network tab = four options, not one.</b> Host agent (have) · scanner node (new) · cloud buckets (new) · public share by IP (new). The add-flow should present a source-kind picker + method, not just “install agent.” <span class="tag build">build</span></li>
+    <li><b>Object-storage connector</b> — S3 / Azure Blob / GCS as a scan source. <span class="tag build">build</span></li>
+    <li><b>Scanner-node model</b> — one console-managed on-prem node crawling many internal shares by IP, instead of an agent per server. <span class="tag build">build</span></li>
+    <li><b>Console-driven agent config.</b> Today agent-hosted targets live in a local JSON file and start by running the exe — the console cannot configure or start them. A console-driven flow needs a <b>config-pull</b> (targets + sealed credentials delivered to the agent on register). <span class="tag build">build</span></li>
+    <li><b>Network agent polish</b> — MSI installer + enroll key, 24h key expiry, in-wizard drive picker the agent honors, in-agent scheduling, LUKS detection, and the finer “Team only / Owner only” share labels. <span class="tag build">build</span></li>
+    <li><b>Cloud capability gaps (product call).</b> The design shows data the product does not collect: LIVE/webhooks, link-spread (Slack/Teams/email), link open-counts, apply-policy / response-mode, “Continuous” schedule, granted-scopes list. <span class="tag prod">product decision</span></li>
+    <li><b>Small API adds — no design needed.</b> Error “what to do” guidance text + cause-specific messages, test-before-save (test with inline credentials), repo result-tab counts, Oracle service-name field. <span class="tag quick">in progress</span></li>
+  </ol>
+
+  <h2><span class="n">06</span>What is already solid</h2>
+  <p class="lede">So the plan builds on a working base, not a blank one — these are verified COVERED:</p>
+  <div class="card note">
+    All five tabs’ core reads · connectors list + test + run-now + schedule · grids, filters and detail drawers ·
+    confidence on one 0–100 scale across DB/Code/Cloud · code findings resolve/reopen with resolution type ·
+    container exclusion with reason/who/when · the server-scanner wire contract (register → start → progress → batch ≤500 → complete) ·
+    agent-hosted vs platform-hosted split for DB/Code/Cloud · on-device classification with only masked evidence leaving the machine.
+  </div>
+
+  <div class="foot">Internal planning note · Defensely Scanner · source model &amp; hosting coverage. Verified against the API and agent code.</div>
+</div>

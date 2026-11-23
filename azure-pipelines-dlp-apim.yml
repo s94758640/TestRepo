@@ -1,0 +1,305 @@
+# Azure DevOps Pipeline — QA APIM Import (Manual Trigger Only)
+# Imports OpenAPI/Swagger specs into API Management and preserves backend URLs.
+# Run ONLY when new endpoints are added — not on every deploy: an import
+# REPLACES the API's operation list, so any operation-level change made by hand
+# in the APIM portal is lost. Modeled on Effortly azure-pipelines-apim.yml.
+#
+# Covers all four QA APIs; pick one with the appType parameter, or All.
+# api-id and path come from the APIM portal: APIs blade → select the API →
+# the id is in the browser URL, the path on the Settings tab.
+
+trigger: none   # Never auto-trigger — manual only
+
+parameters:
+  - name: appType
+    displayName: 'Which app to update in QA APIM'
+    type: string
+    default: 'WebAPI'
+    values:
+      - WebAPI        # DLP API           (qadlp)
+      - ExeApi        # DLP Exe API       (exe)
+      - UserApi       # Identity/User API (qauser)
+      - NucleusApi    # Nucleus API       (qanucleus)
+      - Both          # WebAPI + ExeApi — the original DLP pair
+      - All           # every API above
+
+variables:
+  azureServiceConnection: 'qa-defensely-sc'
+  # Passed as a macro, not a literal. Azure DevOps authorises every service
+  # connection NAMED in the YAML when the pipeline is compiled, so a literal for
+  # a connection that does not exist yet would make the whole pipeline invalid —
+  # including its QA stage. A macro cannot be resolved at compile time, so the
+  # check happens when the production stage actually runs.
+  prodServiceConnection: 'prod-defensely-sa'
+  # APIM QA-Email lives in QA-Common / subscription Defensely-Common —
+  # cross-subscription like the ACR, hence the explicit --subscription flag
+  # and the need for the qa-defensely-sc principal to hold API Management
+  # Service Contributor on this resource.
+  apimName: 'QA-Email'
+  apimResourceGroup: 'QA-Common'
+  apimSubscription: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # DLP Web API entry in APIM (from the portal Settings tab: Name dlp-api,
+  # suffix qadlp, gateway custom domain services.effortly.ai)
+  webApiApimId: 'dlp-api'
+  webApiApimPath: 'qadlp'
+  webApiBackendUrl: 'https://qa-dlp-api.whitegrass-abb3b3ae.eastus2.azurecontainerapps.io'
+  webApiDisplayName: 'DLP API'
+
+  # DLP ExeApi (Function App) entry in APIM (Name qa-dlp-exe-api, suffix exe)
+  exeApiApimId: 'qa-dlp-exe-api'
+  exeApiApimPath: 'exe'
+  exeApiBackendUrl: 'https://qadlp-exe-api-b9fggpe5fhdfdhg4.eastus2-01.azurewebsites.net'
+  exeApiDisplayName: 'Qa DLP Exe API'
+
+  # Identity / User API entry in APIM (Name user-api, suffix qauser)
+  userApiApimId: 'user-api'
+  userApiApimPath: 'qauser'
+  userApiBackendUrl: 'https://qa-com-user-api.calmfield-83f25eaf.eastus2.azurecontainerapps.io'
+  userApiDisplayName: 'User API'
+
+  # Nucleus API entry in APIM (Name nucleus-api, suffix qanucleus)
+  nucleusApiApimId: 'nucleus-api'
+  nucleusApiApimPath: 'qanucleus'
+  nucleusApiBackendUrl: 'https://qa-nucleus-api.proudsky-24cd301a.eastus2.azurecontainerapps.io'
+  nucleusApiDisplayName: 'SFM Nucleus API'
+
+stages:
+
+- stage: UpdateQA
+  displayName: 'Update QA APIM'
+  pool:
+    vmImage: 'windows-latest'
+  jobs:
+  - job: ImportQA
+    displayName: 'Import OpenAPI specs to QA APIM'
+    steps:
+
+    # ── DLP Web API ──
+    - task: AzureCLI@2
+      displayName: 'Import DLP Web API spec'
+      condition: or(eq('${{ parameters.appType }}', 'WebAPI'), eq('${{ parameters.appType }}', 'Both'), eq('${{ parameters.appType }}', 'All'))
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Without this, a failed az import is followed by the success echo below
+          # and the step exits 0 - the pipeline reports an import that never happened,
+          # which is exactly how a 404 survives a green build.
+          set -euo pipefail
+
+          SPEC_URL="$(webApiBackendUrl)/swagger/v1/swagger.json"
+          echo "Importing OpenAPI spec from: $SPEC_URL"
+          echo "Target APIM: $(apimName) / $(webApiApimId) (path: $(webApiApimPath))"
+
+          az apim api import \
+            --subscription "$(apimSubscription)" \
+            --service-name "$(apimName)" \
+            --resource-group "$(apimResourceGroup)" \
+            --api-id "$(webApiApimId)" \
+            --path "$(webApiApimPath)" \
+            --specification-url "$SPEC_URL" \
+            --specification-format OpenApiJson \
+            --service-url "$(webApiBackendUrl)" \
+            --display-name "$(webApiDisplayName)"
+
+          echo "QA DLP Web API imported. Backend URL set to: $(webApiBackendUrl)"
+
+    # ── DLP ExeApi (Function App) ──
+    - task: AzureCLI@2
+      displayName: 'Import DLP ExeApi spec'
+      condition: or(eq('${{ parameters.appType }}', 'ExeApi'), eq('${{ parameters.appType }}', 'Both'), eq('${{ parameters.appType }}', 'All'))
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Without this, a failed az import is followed by the success echo below
+          # and the step exits 0 - the pipeline reports an import that never happened,
+          # which is exactly how a 404 survives a green build.
+          set -euo pipefail
+
+          SPEC_URL="$(exeApiBackendUrl)/swagger.json"
+          echo "Importing OpenAPI spec from: $SPEC_URL"
+          echo "Target APIM: $(apimName) / $(exeApiApimId) (path: $(exeApiApimPath))"
+
+          az apim api import \
+            --subscription "$(apimSubscription)" \
+            --service-name "$(apimName)" \
+            --resource-group "$(apimResourceGroup)" \
+            --api-id "$(exeApiApimId)" \
+            --path "$(exeApiApimPath)" \
+            --specification-url "$SPEC_URL" \
+            --specification-format OpenApiJson \
+            --service-url "$(exeApiBackendUrl)" \
+            --display-name "$(exeApiDisplayName)"
+
+          echo "QA DLP ExeApi imported. Backend URL set to: $(exeApiBackendUrl)"
+
+    # ── Identity / User API ──
+    - task: AzureCLI@2
+      displayName: 'Import User API spec'
+      condition: or(eq('${{ parameters.appType }}', 'UserApi'), eq('${{ parameters.appType }}', 'All'))
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Without this, a failed az import is followed by the success echo below
+          # and the step exits 0 - the pipeline reports an import that never happened,
+          # which is exactly how a 404 survives a green build.
+          set -euo pipefail
+
+          SPEC_URL="$(userApiBackendUrl)/swagger/v1/swagger.json"
+          echo "Importing OpenAPI spec from: $SPEC_URL"
+          echo "Target APIM: $(apimName) / $(userApiApimId) (path: $(userApiApimPath))"
+
+          az apim api import \
+            --subscription "$(apimSubscription)" \
+            --service-name "$(apimName)" \
+            --resource-group "$(apimResourceGroup)" \
+            --api-id "$(userApiApimId)" \
+            --path "$(userApiApimPath)" \
+            --specification-url "$SPEC_URL" \
+            --specification-format OpenApiJson \
+            --service-url "$(userApiBackendUrl)" \
+            --display-name "$(userApiDisplayName)"
+
+          echo "QA User API imported. Backend URL set to: $(userApiBackendUrl)"
+
+    # ── Nucleus API ──
+    - task: AzureCLI@2
+      displayName: 'Import Nucleus API spec'
+      condition: or(eq('${{ parameters.appType }}', 'NucleusApi'), eq('${{ parameters.appType }}', 'All'))
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Without this, a failed az import is followed by the success echo below
+          # and the step exits 0 - the pipeline reports an import that never happened,
+          # which is exactly how a 404 survives a green build.
+          set -euo pipefail
+
+          SPEC_URL="$(nucleusApiBackendUrl)/swagger/v1/swagger.json"
+          echo "Importing OpenAPI spec from: $SPEC_URL"
+          echo "Target APIM: $(apimName) / $(nucleusApiApimId) (path: $(nucleusApiApimPath))"
+
+          az apim api import \
+            --subscription "$(apimSubscription)" \
+            --service-name "$(apimName)" \
+            --resource-group "$(apimResourceGroup)" \
+            --api-id "$(nucleusApiApimId)" \
+            --path "$(nucleusApiApimPath)" \
+            --specification-url "$SPEC_URL" \
+            --specification-format OpenApiJson \
+            --service-url "$(nucleusApiBackendUrl)" \
+            --display-name "$(nucleusApiDisplayName)"
+
+          echo "QA Nucleus API imported. Backend URL set to: $(nucleusApiBackendUrl)"
+
+# ─── Production APIM ───────────────────────────────────────────
+#
+# Still manual-only (trigger: none above). Run it by selecting the production
+# branch, which is what the stage conditions and the environment's branch
+# control both key off.
+#
+# Run AFTER the service deploy, never before — otherwise the gateway publishes
+# operations the backend does not serve yet.
+#
+# The specs are fetched from the QA backends because production serves no
+# Swagger. QA and production run the same image, so QA's document is an accurate
+# description of production's routes; the backend URL is set separately, to the
+# resolved production app.
+
+- template: pipeline-templates/import-apim-apis.yml
+  parameters:
+    stageName: ImportProd1
+    displayName: 'Import to PROD1 gateway paths'
+    branch: 'refs/heads/Deployment/CICD-Prod1'
+    adoEnvironment: 'PROD1'
+    serviceConnection: $(prodServiceConnection)
+    apimName: 'DLP-Prod-APIMS'
+    apimResourceGroup: 'DLP-Prod-IN'
+    apimSubscription: 'Defensely-Common'
+    apis:
+      - apiId: 'prod-dlp-api'
+        path: 'dlp'
+        displayName: 'Prod DLP API'
+        specUrl: '$(webApiBackendUrl)/swagger/v1/swagger.json'
+        appKind: 'containerapp'
+        appName: 'prod01-dlp-api'
+        appGroup: 'DLP-PROD-IN'
+        appSub: 'Defensely'
+
+      - apiId: 'prod-user-api'
+        path: 'user'
+        displayName: 'User API'
+        specUrl: '$(userApiBackendUrl)/swagger/v1/swagger.json'
+        appKind: 'containerapp'
+        appName: 'prod01-com-user'
+        appGroup: 'DLP-Prod-IN'
+        appSub: 'Defensely-Common'
+
+      # The Nucleus appears ONLY here. There is one production Nucleus serving
+      # both customer sets, so importing it again under PROD2 would rewrite the
+      # same gateway entry for a second time to the same value.
+      - apiId: 'sfm-nucleus-api'
+        path: 'nucleus'
+        displayName: 'SFM Nucleus API'
+        specUrl: '$(nucleusApiBackendUrl)/swagger/v1/swagger.json'
+        appKind: 'containerapp'
+        appName: 'prod-com-nucleus'
+        appGroup: 'DLP-Prod-IN'
+        appSub: 'Defensely-Common'
+
+      # Note the api-id is 'prod-dlp-exe-ap' — the trailing 'i' is missing in
+      # the portal and an api-id is immutable, so this matches what exists
+      # rather than what it should have been called.
+      - apiId: 'prod-dlp-exe-ap'
+        path: 'exe'
+        displayName: 'Prod DLP Exe API'
+        specUrl: '$(exeApiBackendUrl)/swagger.json'
+        appKind: 'functionapp'
+        appName: 'prod01-dlp-exe-api'
+        appGroup: 'DLP-PROD-IN'
+        appSub: 'Defensely'
+
+- template: pipeline-templates/import-apim-apis.yml
+  parameters:
+    stageName: ImportProd2
+    displayName: 'Import to PROD2 gateway paths'
+    branch: 'refs/heads/Deployment/CICD-Prod2'
+    adoEnvironment: 'PROD2'
+    serviceConnection: $(prodServiceConnection)
+    apimName: 'DLP-Prod-APIMS'
+    apimResourceGroup: 'DLP-Prod-IN'
+    apimSubscription: 'Defensely-Common'
+    apis:
+      - apiId: 'prod2-dlp-api'
+        path: 'srhdlp'
+        displayName: 'Prod2 DLP API'
+        specUrl: '$(webApiBackendUrl)/swagger/v1/swagger.json'
+        appKind: 'containerapp'
+        appName: 'prod02-dlp-api'
+        appGroup: 'DLP-PROD-IN'
+        appSub: 'Defensely'
+
+      - apiId: 'prod2-user-api'
+        path: 'srhuser'
+        displayName: 'Prod2 User API'
+        specUrl: '$(userApiBackendUrl)/swagger/v1/swagger.json'
+        appKind: 'containerapp'
+        appName: 'prod02-com-user'
+        appGroup: 'DLP-Prod-IN'
+        appSub: 'Defensely-Common'
+
+      - apiId: 'prod2-dlp-exe-api'
+        path: 'srhexe'
+        displayName: 'Prod2 DLP Exe API'
+        specUrl: '$(exeApiBackendUrl)/swagger.json'
+        appKind: 'functionapp'
+        appName: 'prod02-dlp-exe-api'
+        appGroup: 'DLP-PROD-IN'
+        appSub: 'Defensely'

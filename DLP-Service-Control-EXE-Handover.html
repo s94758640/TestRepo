@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DLP Service Control — backend ready on QA</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1b2027; --muted:#5d6775; --line:#dde2ea; --soft:#f5f7fa;
+    --accent:#1f5fa9; --accent-soft:#e9f0f9; --ok:#1b7a4b; --ok-soft:#e8f5ee;
+    --warn:#8d5400; --warn-soft:#fdf3e3; --stop:#a32a24; --stop-soft:#fdeeed;
+    --code-bg:#f3f5f9; --mono:Consolas,"Cascadia Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme=light]){
+      --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+      --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+      --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+      --code-bg:#1a1e25; color-scheme:dark;
+    }
+  }
+  :root[data-theme=dark]{
+    --bg:#12151a; --fg:#e3e8ef; --muted:#97a1b0; --line:#2a313b; --soft:#1a1e25;
+    --accent:#7fb0ef; --accent-soft:#17263a; --ok:#63cb95; --ok-soft:#122a1d;
+    --warn:#e4b263; --warn-soft:#2a2113; --stop:#f08f88; --stop-soft:#2c1715;
+    --code-bg:#1a1e25; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.6 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:960px;margin:0 auto;padding:36px 20px 80px}
+  h1{font-size:28px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:20px;margin:40px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:24px 0 8px}
+  p,li{max-width:80ch}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .box{border-left:4px solid var(--accent);background:var(--accent-soft);
+       padding:12px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+  .box.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+  .box.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .box.stop{border-left-color:var(--stop);background:var(--stop-soft)}
+  .box b:first-child{display:block;margin-bottom:4px}
+  code{font-family:var(--mono);font-size:13px;background:var(--code-bg);
+       border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:7px;
+      padding:13px 15px;overflow-x:auto;font:13px/1.55 var(--mono);margin:10px 0}
+  pre code{background:none;border:0;padding:0}
+  .tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:7px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:540px}
+  th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{background:var(--soft);font-weight:600;font-size:12px;letter-spacing:.03em;
+     text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;font:600 11px/1.5 var(--mono);padding:1px 8px;border-radius:10px;
+       background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .tag.ok{background:var(--ok-soft);color:var(--ok)}
+  .tag.todo{background:var(--warn-soft);color:var(--warn)}
+  @media print{h2{break-after:avoid}pre,table{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>DLP Service Control — backend is ready on QA</h1>
+<div class="meta">
+  Our side of <b>DLP Service Control: Backend Requirements v1.0</b> (20 Nov 2026) ·
+  for the EXE team · 23 Nov 2026
+</div>
+
+<div class="box ok">
+  <b>Status: built to your spec, unchanged, and deploying to QA</b>
+  The protocol, state machine, business rules and acceptance tests are implemented exactly as
+  written. <b>Nothing we did asks you to modify the agent.</b> We verified the whole state
+  machine with a test client that plays the part of <code>iseccmd</code> — 36 checks, all
+  passing, against the real API and the real database.
+  <br><br>
+  What we need from you now is the agent build on QA endpoints. Everything else is in place.
+</div>
+
+<!-- ───────────────────────────── -->
+<h2>1. What to connect to</h2>
+
+<div class="tw"><table>
+  <tr><th></th><th>QA</th></tr>
+  <tr><td><b>WebSocket</b></td>
+      <td><code>wss://services.effortly.ai/qadlp/ws/endpoint-commands?serial={serial}</code></td></tr>
+  <tr><td><b>HTTP fallback</b></td>
+      <td><code>https://services.effortly.ai/qadlp/ReportServiceCommandResult</code></td></tr>
+  <tr><td><b>Headers</b></td>
+      <td><code>ClientGUID</code> — required. <code>CompanyGUID</code> and
+          <code>X-Desktop-Client</code> are accepted and ignored (see §5)</td></tr>
+</table></div>
+
+<div class="box warn">
+  <b>Please confirm this matches the agent's configured BaseUrl</b>
+  We registered the socket on the gateway against the <b>DLP API</b> path, per your note that
+  <code>GetEndPointCommand</code> goes there. That makes the agent's BaseUrl
+  <code>https://services.effortly.ai/qadlp</code>, and the socket path appends to it exactly as
+  §3 describes.
+  <br><br>
+  If the agent is actually configured with a different BaseUrl, the upgrade will fail with a
+  gateway <b>404</b> that reads like a wrong URL. One decrypted <code>BaseUrl</code> from a QA
+  agent config settles it. Prod registration follows once QA is confirmed.
+</div>
+
+<!-- ───────────────────────────── -->
+<h2>2. The protocol, as implemented</h2>
+
+<p>No deviations from §4. For the avoidance of doubt, this is what the server does:</p>
+
+<div class="tw"><table>
+  <tr><th>Direction</th><th>type</th><th>Behaviour</th></tr>
+  <tr><td>agent → us</td><td><code>hello</code></td><td>Accepted and logged. No reply</td></tr>
+  <tr><td>agent → us</td><td><code>ping</code></td><td><b>Always answered</b> with <code>{"type":"pong"}</code></td></tr>
+  <tr><td>us → agent</td><td><code>ping</code></td><td><b>Never sent.</b> We only answer yours</td></tr>
+  <tr><td>us → agent</td><td><code>ServiceCommand</code></td><td>On an admin click, and on connect for every open command, oldest first</td></tr>
+  <tr><td>agent → us</td><td><code>ServiceCommandAck</code></td><td>Moves the command to <code>Acked</code></td></tr>
+  <tr><td>agent → us</td><td><code>ServiceCommandResult</code></td><td>Moves it to <code>Succeeded</code> / <code>Failed</code> and stores every reported field</td></tr>
+  <tr><td>either</td><td>anything else</td><td>Ignored, not an error — this is what lets us add message types later without breaking an older agent</td></tr>
+</table></div>
+
+<h3>Connection rules</h3>
+<ul>
+  <li><b>One socket per serial</b>, newest wins — a second connection for the same serial
+      displaces and aborts the first.</li>
+  <li><b>Idle timeout 90 s.</b> We drop a socket that sends nothing for that long, so your 30 s
+      ping keeps it alive comfortably.</li>
+  <li><b>Frames capped at 64 KB</b>; a larger one closes the socket with
+      <code>MessageTooBig</code>.</li>
+  <li><b>A malformed frame is ignored</b>, not fatal. We will not drop your connection over one
+      bad message.</li>
+</ul>
+
+<!-- ───────────────────────────── -->
+<h2>3. What we verified</h2>
+
+<p>A test client connects as <code>iseccmd</code> would and drives the real API end to end.
+All 36 checks pass.</p>
+
+<div class="tw"><table>
+  <tr><th>Spec test</th><th>Verified</th></tr>
+  <tr><td>1, 2, 3 — Stop / Start / Restart online</td>
+      <td><span class="tag ok">pass</span> full lifecycle to <code>Succeeded</code>, with
+          <code>finalStatus</code>, <code>startType</code> and <code>elapsedMs</code> stored</td></tr>
+  <tr><td>4 — offline, then reconnect</td>
+      <td><span class="tag ok">pass</span> <code>Pending</code> + <code>endpointConnected:false</code>,
+          replayed on connect with the same <code>commandId</code></td></tr>
+  <tr><td>5 — second click supersedes</td><td><span class="tag ok">pass</span></td></tr>
+  <tr><td>7 — idle keep-alive</td><td><span class="tag ok">pass</span> ping answered with pong</td></tr>
+  <tr><td>9 — duplicate result</td>
+      <td><span class="tag ok">pass</span> a late result does not revive a finished command</td></tr>
+  <tr><td>10 — bad client on upgrade</td>
+      <td><span class="tag ok">pass</span> refused for an unknown serial and for a missing <code>ClientGUID</code></td></tr>
+  <tr><td>11 — cross-endpoint result</td>
+      <td><span class="tag ok">pass</span> endpoint B cannot close endpoint A's command</td></tr>
+  <tr><td>12, 13 — validation and auth</td>
+      <td><span class="tag ok">pass</span> invalid action 400, no token 401, unknown id 404</td></tr>
+  <tr><td>6 — Restart expiry after 10 min</td>
+      <td><span class="tag todo">needs the agent</span> the rule is implemented; verifying it needs a real 10-minute gap</td></tr>
+  <tr><td>8 — socket drops mid-execution</td>
+      <td><span class="tag todo">needs the agent</span> the HTTP fallback is implemented and ownership-checked</td></tr>
+</table></div>
+
+<!-- ───────────────────────────── -->
+<h2>4. What we need from you</h2>
+
+<div class="tw"><table>
+  <tr><th></th><th>Item</th></tr>
+  <tr><td>1</td><td><b>Deploy the <code>iseccmd</code> build with WebSocket support to QA
+      endpoints</b>, and tell us the version and date. Until then QA can exercise the console
+      and the offline path, but no real service stop can happen</td></tr>
+  <tr><td>2</td><td><b>Confirm the BaseUrl</b> in §1 matches the agent's configuration</td></tr>
+  <tr><td>3</td><td><b>Serial check — please widen it slightly</b>, see below</td></tr>
+</table></div>
+
+<div class="box warn">
+  <b>Your serial verification plan covers two cases; our QA data has four</b>
+  Thank you for the explanation — it resolved the question, and the shapes you described are
+  all present. You proposed checking one physical machine and one Hyper-V VM. Our QA endpoint
+  records also contain:
+  <pre><code>PW0F6X3B, 5CD2026Q39, F0WJNQ2            physical  (Dell / HP service tags)
+1415-6109-6884-2945-9939-7533-26         Hyper-V   (as you described)
+VirtualBox-3652e024-5313-4ff1-b010-…     VirtualBox prefix, 47 chars
+Parallels-C7 05 13 60 87 78 48 20 A6…    Parallels prefix, 57 chars, contains SPACES</code></pre>
+  The Parallels and VirtualBox shapes are not in the three you listed, and the Parallels one
+  contains spaces. They are opaque to us and our column is wide enough, so nothing breaks on
+  our side — but if <code>iseccmd</code> derives them differently from whatever registered
+  those endpoints, those machines will never appear online and nothing on screen will say why.
+  <br><br>
+  If any developer endpoints run Parallels or VirtualBox, one of each in the QA check would
+  close this completely.
+</div>
+
+<!-- ───────────────────────────── -->
+<h2>5. Decisions on our side (no agent impact)</h2>
+
+<div class="tw"><table>
+  <tr><th>Decision</th><th>Why it does not affect you</th></tr>
+  <tr><td><b>Raw WebSocket, not SignalR</b></td>
+      <td>Your frames are a string-named <code>type</code> sent bare; SignalR negotiates,
+          handshakes, separates records and wraps an integer type in an envelope. Switching
+          would have meant you rewriting the half that is already tested</td></tr>
+  <tr><td><b>Socket auth is <code>ClientGUID</code> + serial ownership</b></td>
+      <td><code>CompanyGUID</code> and <code>X-Desktop-Client</code> do not exist anywhere in
+          our API, so there is nothing to validate them against. We check that the ClientGUID
+          resolves to an active tenant and the serial is registered under it. Keep sending the
+          other two if the agent already does</td></tr>
+  <tr><td><b>Cross-replica delivery</b></td>
+      <td>Our API runs several instances, so a command can be created on one while your socket
+          is held by another. Handled internally. Invisible on the wire</td></tr>
+  <tr><td><b>One open command per endpoint, enforced in the database</b></td>
+      <td>Two admins clicking at the same instant cannot leave two commands racing to the
+          agent. You still only ever receive one</td></tr>
+  <tr><td><b><code>commandId</code> is 32-char lowercase hex</b></td>
+      <td>Matches your sample. Opaque to the agent</td></tr>
+</table></div>
+
+<!-- ───────────────────────────── -->
+<h2>6. When something does not work</h2>
+
+<p>Where to look first, by symptom:</p>
+
+<div class="tw"><table>
+  <tr><th>Symptom</th><th>Most likely cause</th></tr>
+  <tr><td><b>Upgrade gets 404</b></td>
+      <td>The agent's BaseUrl does not match what we registered on the gateway (§1)</td></tr>
+  <tr><td><b>Upgrade gets 401</b></td>
+      <td><code>ClientGUID</code> missing or not an active tenant, <b>or</b> the serial is not
+          registered under that client. We log which</td></tr>
+  <tr><td><b>Connects, then drops after ~90 s</b></td>
+      <td>Pings are not arriving. We answer every one; we never send our own</td></tr>
+  <tr><td><b>Console shows the endpoint offline</b></td>
+      <td>The serial on the socket does not match the stored endpoint serial — the case in the
+          box above</td></tr>
+  <tr><td><b>Command stays on <code>Delivered</code></b></td>
+      <td>The ack or result is not reaching us. Check the <code>commandId</code> is echoed back
+          exactly as sent</td></tr>
+  <tr><td><b>Result is accepted but the command does not finish</b></td>
+      <td>The result's serial must match the command's. A mismatch is ignored deliberately, so
+          one endpoint cannot close another's command</td></tr>
+</table></div>
+
+<p>On a successful connection our logs record <code>Endpoint {serial} connected.</code> and,
+for each delivery, the command id, action and serial. Every command's full lifecycle —
+created, delivered, acked, completed, and the reported duration — is stored, so we can answer
+"what happened to this click" precisely.</p>
+
+<p style="color:var(--muted);font-size:13px;margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+Companion to our full plan, <b>DLP-Service-Control-Plan.html</b>, which covers the UI and our
+internal design. This document is the integration surface only.</p>
+
+</main>
+</body>
+</html>

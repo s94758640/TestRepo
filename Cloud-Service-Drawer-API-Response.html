@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloud service drawer — API response</title>
+<style>
+  :root{
+    --bg:#f3f5f9; --surface:#ffffff; --line:#dde3ec;
+    --ink:#101728; --ink-2:#4a5568; --muted:#6b7689;
+    --accent:#2563eb; --accent-soft:#eef3ff;
+    --yes:#0f766e; --yes-bg:#e9f6f4;
+    --part:#a16207; --part-bg:#fdf5e3;
+    --no:#b91c1c;  --no-bg:#fdecec;
+    --code-bg:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0d1119; --surface:#151b26; --line:#263040;
+      --ink:#e8edf6; --ink-2:#b2bccd; --muted:#8793a8;
+      --accent:#7aa2f7; --accent-soft:#19233a;
+      --yes:#5eead4; --yes-bg:#10312e;
+      --part:#fcd34d; --part-bg:#332808;
+      --no:#fca5a5; --no-bg:#3a1414;
+      --code-bg:#1d2533;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1119; --surface:#151b26; --line:#263040;
+    --ink:#e8edf6; --ink-2:#b2bccd; --muted:#8793a8;
+    --accent:#7aa2f7; --accent-soft:#19233a;
+    --yes:#5eead4; --yes-bg:#10312e;
+    --part:#fcd34d; --part-bg:#332808;
+    --no:#fca5a5; --no-bg:#3a1414;
+    --code-bg:#1d2533;
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f5f9; --surface:#ffffff; --line:#dde3ec;
+    --ink:#101728; --ink-2:#4a5568; --muted:#6b7689;
+    --accent:#2563eb; --accent-soft:#eef3ff;
+    --yes:#0f766e; --yes-bg:#e9f6f4;
+    --part:#a16207; --part-bg:#fdf5e3;
+    --no:#b91c1c;  --no-bg:#fdecec;
+    --code-bg:#eef1f6;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:880px;margin:0 auto;padding:40px 24px 72px;display:flex;flex-direction:column;gap:30px}
+
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{margin:0;font-size:clamp(25px,4vw,32px);line-height:1.2;letter-spacing:-.02em;text-wrap:balance;font-weight:680}
+  .lede{margin:0;max-width:66ch;color:var(--ink-2);font-size:16.5px}
+  header.top{display:flex;flex-direction:column;gap:10px}
+
+  section{display:flex;flex-direction:column;gap:13px}
+  h2{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  p{margin:0;max-width:72ch;color:var(--ink-2)}
+  strong{color:var(--ink);font-weight:650}
+
+  .item{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:17px 19px;display:flex;flex-direction:column;gap:11px;
+  }
+  .item-head{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .n{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted);font-weight:650}
+  .what{font-weight:650;color:var(--ink);font-size:16px;margin:0;flex:1 1 auto;min-width:0}
+  .ep{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;
+    color:var(--accent);overflow-wrap:anywhere;
+  }
+  .verdict{
+    font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    padding:4px 10px;border-radius:999px;white-space:nowrap;
+  }
+  .v-yes{background:var(--yes-bg);color:var(--yes)}
+  .v-part{background:var(--part-bg);color:var(--part)}
+  .v-no{background:var(--no-bg);color:var(--no)}
+
+  .lbl{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;
+  }
+
+  code{
+    background:var(--code-bg);padding:2px 6px;border-radius:5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;overflow-wrap:anywhere;
+  }
+  pre{
+    margin:0;background:var(--code-bg);padding:11px 13px;border-radius:8px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+    overflow-x:auto;color:var(--ink);line-height:1.5;
+  }
+
+  .flag{border-radius:10px;padding:12px 15px;font-size:14.5px;display:flex;flex-direction:column;gap:6px}
+  .flag p{max-width:none;color:inherit}
+  .flag .t{font-weight:680;color:inherit}
+  .bug{background:var(--no-bg);color:var(--no);border:1px solid color-mix(in srgb,var(--no) 28%,transparent)}
+  .bug strong{color:inherit}
+  .fyi{background:var(--accent-soft);color:var(--ink-2);border:1px solid var(--line)}
+  .good{background:var(--yes-bg);color:var(--yes);border:1px solid color-mix(in srgb,var(--yes) 28%,transparent)}
+  .good strong{color:inherit}
+
+  ul{margin:0;padding-left:20px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px}
+
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+
+  footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+  a{color:var(--accent)}
+  a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="top">
+  <div class="eyebrow">Cloud discovery · reply to the service drawer asks</div>
+  <h1>Built — item by item, with the shapes you'll get</h1>
+  <p class="lede">Answered against your numbering. <strong>Five of the six field asks are
+  done</strong> and both bugs you found are fixed. Item 6 is out, as agreed. Two sub-fields
+  of item 3 are deferred, and the reason matters for how you build the Connection tab.</p>
+  <p class="lede" style="font-size:15px"><strong>Not on QA yet.</strong> Needs a deploy;
+  item 2 carries migration <code>V0017</code> and item 4 is a new route, so it needs an
+  APIM operation.</p>
+</header>
+
+<section>
+  <h2>At a glance</h2>
+  <div class="scroll">
+    <table>
+      <tr><th>#</th><th>What you asked for</th><th>Where it stands</th></tr>
+      <tr><td>1</td><td>Five tiles on the connector row</td><td>Done — all five, names as you specified</td></tr>
+      <tr><td>2</td><td><code>tenantDomain</code> + the Dropbox data bug</td><td>Done — both</td></tr>
+      <tr><td>3</td><td>Authorized as / on / granted scopes</td><td>2 of 4 — the other two are not API-side</td></tr>
+      <tr><td>4</td><td><code>POST /cloud/scans/list</code></td><td>Done — exactly your shape</td></tr>
+      <tr><td>5</td><td>Container share % and class + the filter bug</td><td>Done — both</td></tr>
+      <tr><td>6</td><td><code>detectionMethod</code></td><td>Dropped by agreement</td></tr>
+      <tr><td>7</td><td>"Response on match"</td><td>Product decision — leave the line out</td></tr>
+      <tr><td>8</td><td>Setup guide link</td><td>Product decision — nothing exists yet</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Fields to add</h2>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">1</span>
+      <p class="what">Objects · Sensitive · Public links · External shares · Volume</p>
+      <span class="verdict v-yes">Done</span>
+    </div>
+    <p class="ep">GET /cloud/connectors · POST /cloud/connectors/list</p>
+    <p>All five are on the connector row, so the drawer works from Integrations as well as
+    the Service Board. Field names are the ones you specified:</p>
+<pre>"sensitiveFiles":      1284,
+"publicLinkFiles":      949,
+"externalShareFiles":   317,
+"totalSizeBytes": 197568495616,
+"totalSize":       "184 GB"</pre>
+    <p>One grouped query per figure across the whole page, not a count per connector, so
+    adding them costs the grid nothing.</p>
+    <div class="flag fyi">
+      <p class="t">Volume is what we catalogued, not what the tenant holds.</p>
+      <p>We never ask the provider for a storage quota, so this is the size of the objects
+      we have inventoried. If the tile is meant to read "this tenant holds 184 GB" we cannot
+      produce that today. If it means "184 GB of content we have scanned", it is right.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">2</span>
+      <p class="what">Tenant domain, not a GUID</p>
+      <span class="verdict v-yes">Done</span>
+    </div>
+    <p class="ep">GET /cloud/connectors</p>
+<pre>"externalTenantId": "a6b7b9b2-f986-4877-b371-d56f29345671",   // unchanged
+"tenantDomain":     "innovly.co"</pre>
+    <p>Easier than it looked: <strong>the crawl already asks the provider for the tenant's
+    verified domains on every run</strong> — it needs them to decide who counts as external
+    — and then discarded them. We keep the primary one now, which is the provider's own
+    answer rather than a host parsed out of a file URL.</p>
+    <p><code>null</code> until a crawl has run, and on providers that have no such notion.</p>
+    <div class="flag bug">
+      <p class="t">Your Dropbox finding was worse than it looked. Fixed.</p>
+      <p><code>"&lt;any non-empty string&gt;"</code> got stored because that field's
+      <strong>entire validation was "not empty"</strong>. The guide's placeholder passed,
+      and so would anything else.</p>
+      <p>It is rejected on save now, matched on <em>what a placeholder looks like</em>
+      rather than on a format — Box, Dropbox and Adobe have no tenant id at all, so a
+      "must be a GUID" rule would break three providers to fix one row.
+      <code>V0017</code> clears the stored ones to empty, which makes the row visibly
+      incomplete instead of quietly wrong.</p>
+      <p>Worth checking whether connector 5 has ever completed a crawl — if that id was
+      nonsense, anything keyed on it is suspect.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">3</span>
+      <p class="what">Authorized as · Authorized on · Granted API scopes</p>
+      <span class="verdict v-part">2 of 4</span>
+    </div>
+    <p class="ep">GET /cloud/connectors</p>
+    <p><span class="lbl">Shipped</span></p>
+<pre>"authMethod":   "AdminConsent",          // | ServiceAccount | AppKey
+"authorizedAt": "2026-10-14T09:21:48Z"   // UTC</pre>
+    <p><code>authMethod</code> is recorded on save rather than inferred from which
+    credential column is filled — an inferred answer changes when a secret is rotated, and
+    "how was this authorised" must not.</p>
+
+    <p><span class="lbl">Not shipped, and not API-side</span></p>
+    <ul>
+      <li><strong><code>authorizedBy</code></strong> — nothing captures who gave consent.
+      No person is recorded anywhere on a connector. It has to be captured <em>at the
+      consent step</em>, which is the setup wizard.</li>
+      <li><strong><code>grantedScopes</code></strong> — we never ask the provider what it
+      actually granted; we find out when a call fails. Reading the real grant is a change
+      to connector validation, and it will not be uniform across providers.</li>
+    </ul>
+    <p>Your reason for wanting the scopes — <em>"we can show it before a scan fails"</em> —
+    is a good one and we want it too. But it is connector-validation work, not drawer work.
+    <strong>Please build the Connection tab to work without those two.</strong></p>
+  </div>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">4</span>
+      <p class="what">Sync activity — scan history</p>
+      <span class="verdict v-yes">Done</span>
+    </div>
+    <p class="ep">POST /cloud/scans/list &nbsp;<span style="color:var(--muted)">(new)</span></p>
+<pre>request:  { "cloudConnectorId": 2, "page": 1, "pageSize": 20 }
+
+response: { "success": true, "data": { "totalCount": 47, "data": [{
+  "cloudScanJobId": 1182,
+  "scanType": "Incremental",
+  "status": "Completed",
+  "startedAt":  "2026-11-02T06:12:04Z",
+  "finishedAt": "2026-11-02T06:16:33Z",
+  "filesSeen": 8420,
+  "newFiles": 1204,
+  "sensitiveFound": 38,
+  "error": null
+}] } }</pre>
+    <p>Your shape, unchanged. Two things worth knowing:</p>
+    <ul>
+      <li><code>newFiles</code> and <code>sensitiveFound</code> are not stored on the job —
+      they are derived from when each object was first recorded. A crawl still in progress
+      therefore reports what is new <strong>so far</strong>, not zero.</li>
+      <li><code>status</code> is the <strong>effective</strong> status. A crawl whose worker
+      died reads <code>Stalled</code> rather than <code>Running</code> forever, so this list
+      cannot contradict the Scan button next to it.</li>
+    </ul>
+    <p>The 404s you hit were real: <code>/cloud/scans</code> and
+    <code>/cloud/connectors/{id}/activity</code> do not exist and were never routes.</p>
+  </div>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">5</span>
+      <p class="what">Where it sits — share % and main class</p>
+      <span class="verdict v-yes">Done</span>
+    </div>
+    <p class="ep">POST /cloud/containers</p>
+<pre>"sharedBeyondOwnerPct": 38.4,        // number, 0–100, one decimal
+"topClassification":    "PHI"        // null when nothing sensitive here</pre>
+    <p><strong>Same type as <code>/cloud/locations</code>, not just the same meaning.</strong>
+    We first made this an integer, which would have had one field name arriving as an int
+    on one endpoint and a decimal on the other — one client, two types. It is a decimal with
+    one place on both.</p>
+    <p>The percentage is over the location's <em>sensitive</em> files, matching
+    <code>/cloud/locations</code>. <code>topClassification</code> breaks ties by name, so the
+    tag does not flip between reads of unchanged data.</p>
+    <div class="flag bug">
+      <p class="t">The filter bug was two bugs. Both fixed.</p>
+      <p><strong>The location row carried no connector.</strong> Only a provider — which is
+      why two connectors on one provider could not be told apart, exactly as you found.
+      Rows now carry <code>cloudConnectorId</code>, so
+      <code>exactFilters.cloudConnectorId: ["2"]</code> works.</p>
+      <p><strong>The unknown key was swallowed.</strong> The shared filter helper catches
+      per-key failures and carries on, so your filtered request returned every row with a
+      200 — a filter that did nothing and said nothing. Keys are validated before they are
+      applied now.</p>
+    </div>
+    <div class="flag fyi">
+      <p class="t">Please re-test your existing cloud grid calls.</p>
+      <p>A consequence of that second fix: cloud grids now answer <strong>400 with the
+      offending key named</strong> where they previously returned everything. That is the
+      point — but if any current call sends a key that does not exist on the row, it will
+      start failing where it used to silently succeed. Better to find that now than later.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-head">
+      <span class="n">6</span>
+      <p class="what">detectionMethod: Regex · AI · Both</p>
+      <span class="verdict v-no">Dropped</span>
+    </div>
+    <p class="ep">POST /cloud/files</p>
+    <p>Confirmed out, per your reply. For the record: <strong>cloud files are classified by
+    pattern matching only.</strong> There is no AI path for cloud content and nothing records
+    which engine produced a finding, so the chip would read "Regex" on every row forever.</p>
+    <p>Your own probe said it best — <code>Bad6.txt</code> returning
+    <code>PCI_CARD_NUMBER</code> and <code>PII_PAN</code> is exactly what the pattern scanner
+    emits, because it is the only thing that ran.</p>
+    <p>Making it real is crawl work in two parts: recording the engine per finding, and
+    deciding whether cloud files should be AI-classified at all.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Your two questions</h2>
+
+  <div class="item">
+    <div class="item-head"><span class="n">7</span>
+      <p class="what">"Response on match" — Restrict link · Notify owner · Alert only</p>
+    </div>
+    <p>You are right that nothing like it exists. Cloud discovery reads and reports; it does
+    not act on what it finds, and the only action today is a person pressing Restrict all.</p>
+    <p>Whether it becomes a feature is a product decision and has been passed on.
+    <strong>Leaving the line out is the right call</strong> — better than a control that
+    silently does nothing.</p>
+  </div>
+
+  <div class="item">
+    <div class="item-head"><span class="n">8</span>
+      <p class="what">Setup guide links</p>
+    </div>
+    <p>No such documents exist on the server and nothing references them. If they get
+    written, a per-provider <code>setupGuideUrl</code> on the connector row is the natural
+    home and is trivial to add — but somebody has to own writing them first. Also a product
+    question.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The four you confirmed working</h2>
+  <div class="flag good">
+    <p><strong>Still true, with one caveat on the first.</strong></p>
+    <p>Exposure filters, re-sync, disconnect and reconfigure all behave as you found them.
+    The <code>exposureLevel: "PublicLink"</code> filter on <code>/cloud/files</code> is
+    unchanged.</p>
+    <p>The caveat is the filter-key validation in item 5: it applies to
+    <code>/cloud/files</code> too. <code>exposureLevel</code> is a real field so your call is
+    fine — but any other key you send has to exist on the row.</p>
+  </div>
+  <p>Running the probes on a real connector and quoting what came back is what made this
+  answerable in one pass. Both bugs in here were found by you, not by us.</p>
+</section>
+
+<footer>
+  Verified against <code>discovery."CloudConnector"</code>, <code>"CloudContainer"</code>,
+  <code>"CloudFile"</code>, <code>"CloudFileLink"</code>, <code>"CloudScanJob"</code>,
+  <code>CloudConnectorService</code>, <code>CloudDashboardService</code> and the crawl in
+  <code>SFM.DLP.CloudDiscovery</code>. Solution builds clean.
+</footer>
+
+</div>
+</body>
+</html>

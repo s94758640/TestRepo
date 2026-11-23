@@ -1,0 +1,263 @@
+# Azure DevOps Pipeline — SFM.Nucleus.API (.NET 8, Container App "qa-nucleus-api")
+# Build → SDK container publish to ACR → Deploy QA Container App → Health Check
+#
+# No Dockerfile: the publish profile uses the .NET SDK container publish
+# (/t:PublishContainer), so the pipeline does the same.
+#
+# Resource names come from SFM.Nucleus.API/Properties/PublishProfiles/
+# qa-nucleus-api.pubxml. The container app is in RG QA-Nucleus and the registry
+# in RG QA-Common, both in the Defensely-Common subscription — a different one
+# from the DLP container apps — hence the explicit --subscription on every call.
+# The qa-defensely-sc principal needs Contributor on RG QA-Nucleus.
+
+trigger:
+  branches:
+    include:
+      - Deployment/CICD-QA
+      - Deployment/CICD-Prod1
+      - Deployment/CICD-Prod2
+  paths:
+    include:
+      - SFM.Nucleus.API/**
+      - SFM.Nucleus.Application/**
+      - SFM.Nucleus.Domain/**
+      - SFM.Nucleus.Infrastructure/**
+      - SFM.Common.Utilities/**
+      # SFM.Nucleus.Infrastructure's GenericRepository<T> derives from the
+      # shared one, so it is compiled into this image too — see the note in
+      # azure-pipelines-user-api.yml for what leaving it out costs.
+      - SFM.GenericRepository/**
+      # This API references SFM.DLP.Application, which reaches SFM.DLP.CloudClients
+      # in ScannerEngine/ (vendored, no longer the shared/ submodule), so the engine
+      # is compiled into this image too and a change to it must trigger a build.
+      - ScannerEngine/**
+      - azure-pipelines-nucleus-api.yml
+      - pipeline-templates/**
+
+pr: none
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: dotnetVersion
+    value: '8.0.x'
+  - name: projectPath
+    value: 'SFM.Nucleus.API/SFM.Nucleus.API.csproj'
+
+  # Registry per environment, resolved from the branch below. Production builds
+  # into its own ACR rather than QA's — see azure-pipelines-dlp-api.yml for the
+  # failure that prompted it.
+  #
+  # Only the NAME varies: DLPProd (RG DLP-Prod-IN) and qaemail (RG QA-Common)
+  # are both in the subscription below, so it serves both.
+
+  # Defensely-Common — holds both registries, the QA app
+  # (RG QA-Nucleus) and the production app (RG DLP-Prod-IN).
+  - name: azureSubscriptionId
+    value: '7f849832-28ba-4261-bd1e-93dc264bad93'
+
+  # Resolved at compile time from the branch — see azure-pipelines-dlp-api.yml
+  # for why the branch selects the values rather than the file.
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA') }}:
+    - name: azureServiceConnection
+      value: 'qa-defensely-sc'
+    - name: imageName
+      value: 'qa-nucleus-api'
+    - name: acrName
+      value: 'qaemail'
+    - name: acrLoginServer
+      value: 'qaemail.azurecr.io'
+
+  - ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod1'), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: 'prod-defensely-sa'
+    - name: imageName
+      value: 'prod-com-nucleus'
+    - name: acrName
+      value: 'dlpprod'
+    - name: acrLoginServer
+      value: 'dlpprod-c5cbcmb9eqb7ecb2.azurecr.io'
+
+  - ${{ if not(in(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA', 'refs/heads/Deployment/CICD-Prod1', 'refs/heads/Deployment/CICD-Prod2')) }}:
+    - name: azureServiceConnection
+      value: ''
+    - name: imageName
+      value: ''
+    - name: acrName
+      value: ''
+    - name: acrLoginServer
+      value: ''
+
+  - name: qaContainerAppName
+    value: 'qa-nucleus-api'
+  - name: qaResourceGroup
+    value: 'QA-Nucleus'
+
+  # ONE production Nucleus, shared by PROD1 and PROD2 — there is no
+  # prod02-com-nucleus. It is the tenant registry for both customer sets, which
+  # is why the migration runner has to filter tenants by environment: nothing in
+  # the infrastructure separates them.
+  - name: prodSubscription
+    value: 'Defensely-Common'
+  - name: prodResourceGroup
+    value: 'DLP-Prod-IN'
+  - name: prodContainerAppName
+    value: 'prod-com-nucleus'
+
+stages:
+
+# ─── Build & Push ───────────────────────────────────────────────
+- stage: Build
+  condition: ne(variables['imageName'], '')
+  displayName: 'Build & Push Image'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - job: BuildJob
+    displayName: 'SDK Container Publish to ACR'
+    steps:
+    - checkout: self
+      # Transitively compiles SFM.DLP.CloudDiscovery, whose engine (DLP.RegexFilter
+      # etc.) lives in this repo under ScannerEngine/ — vendored, no longer a
+      # submodule, so there is nothing extra to fetch.
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+
+    - task: AzureCLI@2
+      displayName: 'Publish container image to ACR (dotnet /t:PublishContainer)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        inlineScript: |
+          az acr login --name $(acrName) --subscription $(azureSubscriptionId)
+
+          dotnet publish $(projectPath) \
+            --configuration $(buildConfiguration) \
+            /t:PublishContainer \
+            -p ContainerRegistry=$(acrLoginServer) \
+            -p ContainerRepository=$(imageName) \
+            -p ContainerImageTags=$(Build.BuildId) \
+            -p ContainerRuntimeIdentifier=linux-x64
+
+# ─── Deploy to QA ──────────────────────────────────────────────
+- stage: DeployQA
+  displayName: 'Deploy to QA'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/Deployment/CICD-QA'))
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+  - deployment: DeployQAJob
+    displayName: 'Deploy Nucleus API to QA Container App'
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureCLI@2
+            displayName: 'Update QA Container App'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Deploying image tag: $IMAGE_TAG"
+                az containerapp update \
+                  --subscription $(azureSubscriptionId) \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --image "$(acrLoginServer)/$(imageName):$IMAGE_TAG" \
+                  --set-env-vars \
+                    "Deployment__Environment=QA" \
+                    "Deployment__BuildId=$IMAGE_TAG" \
+                    "EnableSwagger=true"
+                # Deployment__BuildId lets /health report which build is serving.
+                # EnableSwagger is a property of the QA deployment, not of the
+                # build: the same image in production gets no such variable and
+                # serves no Swagger. QA needs it on — the team browses it, and the
+                # APIM import pipeline reads its spec from this backend.
+
+          - task: AzureCLI@2
+            displayName: 'Health Check (wait for revision ready)'
+            env:
+              IMAGE_TAG: $(Build.BuildId)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                QA_URL=$(az containerapp show \
+                  --subscription $(azureSubscriptionId) \
+                  --name $(qaContainerAppName) \
+                  --resource-group $(qaResourceGroup) \
+                  --query "properties.configuration.ingress.fqdn" -o tsv)
+
+                echo "Waiting 60s for new revision to activate..."
+                sleep 60
+
+                # /health, not /swagger/index.html. This API used to map Swagger
+                # unconditionally, so the probe worked everywhere — at the cost of
+                # publishing the full route list in every environment. Swagger is
+                # now behind the EnableSwagger flag and this probe is independent
+                # of it.
+                #
+                # The build id is checked as well as the status: a 200 on its own
+                # is also what the PREVIOUS revision returns while the new one is
+                # still starting, so status alone can pass a rollout that never
+                # happened.
+                echo "Checking https://$QA_URL/health ..."
+                for i in $(seq 1 40); do
+                  STATUS=$(curl -s -o /tmp/health.json --max-time 10 \
+                    -w "%{http_code}" "https://$QA_URL/health" || true)
+
+                  if [ "$STATUS" = "200" ]; then
+                    cat /tmp/health.json; echo
+                    SERVED=$(python3 -c "import json; print(json.load(open('/tmp/health.json')).get('buildId',''))" 2>/dev/null || echo "")
+                    if [ "$SERVED" = "$IMAGE_TAG" ]; then
+                      echo "Health check passed on attempt $i — serving build $SERVED"
+                      exit 0
+                    fi
+                    echo "Attempt $i: healthy but serving build '$SERVED', waiting for '$IMAGE_TAG'..."
+                  else
+                    echo "Attempt $i: HTTP $STATUS — retrying in 15s..."
+                  fi
+                  sleep 15
+                done
+                echo "##vso[task.logissue type=error]Health check failed after 40 attempts"
+                exit 1
+
+# ─── Deploy to Production ──────────────────────────────────────
+#
+# ONE stage, not two. There is a single production Nucleus serving both customer
+# sets, so there is nothing separate to deploy for PROD2.
+#
+# It is reached from the PROD1 branch and gated by the PROD1 environment. That is
+# a real asymmetry worth naming: a Nucleus change approved for PROD1 reaches
+# PROD2's customer at the same instant, because it is the same running app. Until
+# there is a second Nucleus, no approval gate can make that otherwise.
+
+- template: pipeline-templates/deploy-container-app.yml
+  parameters:
+    stageName: DeployProd
+    displayName: 'Deploy to Production (shared by PROD1 and PROD2)'
+    branch: 'refs/heads/Deployment/CICD-Prod1'
+    adoEnvironment: 'PROD1'
+    variableGroup: 'defensely-prod1'
+    deploymentEnvironment: 'PROD1'
+    serviceConnection: $(azureServiceConnection)
+    subscription: $(prodSubscription)
+    resourceGroup: $(prodResourceGroup)
+    containerAppName: $(prodContainerAppName)
+    acrName: $(acrName)
+    acrLoginServer: $(acrLoginServer)
+    imageName: $(imageName)
+    setMigrationKey: false

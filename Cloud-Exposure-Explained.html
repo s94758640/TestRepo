@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloud exposure — what Blast Radius means</title>
+<style>
+  :root{
+    --bg:#f3f5f9; --surface:#ffffff; --line:#dde3ec;
+    --ink:#101728; --ink-2:#4a5568; --muted:#6b7689;
+    --accent:#2563eb; --accent-soft:#eef3ff;
+    --calm:#0f766e; --calm-bg:#e9f6f4;
+    --warn:#a16207; --warn-bg:#fdf5e3;
+    --hot:#c2410c;  --hot-bg:#fdf0e8;
+    --crit:#b91c1c; --crit-bg:#fdecec;
+    --code-bg:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0d1119; --surface:#151b26; --line:#263040;
+      --ink:#e8edf6; --ink-2:#b2bccd; --muted:#8793a8;
+      --accent:#7aa2f7; --accent-soft:#19233a;
+      --calm:#5eead4; --calm-bg:#10312e;
+      --warn:#fcd34d; --warn-bg:#332808;
+      --hot:#fdba74;  --hot-bg:#3a2211;
+      --crit:#fca5a5; --crit-bg:#3a1414;
+      --code-bg:#1d2533;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1119; --surface:#151b26; --line:#263040;
+    --ink:#e8edf6; --ink-2:#b2bccd; --muted:#8793a8;
+    --accent:#7aa2f7; --accent-soft:#19233a;
+    --calm:#5eead4; --calm-bg:#10312e;
+    --warn:#fcd34d; --warn-bg:#332808;
+    --hot:#fdba74;  --hot-bg:#3a2211;
+    --crit:#fca5a5; --crit-bg:#3a1414;
+    --code-bg:#1d2533;
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f5f9; --surface:#ffffff; --line:#dde3ec;
+    --ink:#101728; --ink-2:#4a5568; --muted:#6b7689;
+    --accent:#2563eb; --accent-soft:#eef3ff;
+    --calm:#0f766e; --calm-bg:#e9f6f4;
+    --warn:#a16207; --warn-bg:#fdf5e3;
+    --hot:#c2410c;  --hot-bg:#fdf0e8;
+    --crit:#b91c1c; --crit-bg:#fdecec;
+    --code-bg:#eef1f6;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:860px;margin:0 auto;padding:40px 24px 72px;display:flex;flex-direction:column;gap:34px}
+
+  header.top{display:flex;flex-direction:column;gap:10px}
+  .eyebrow{
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;
+  }
+  h1{
+    margin:0;font-size:clamp(26px,4vw,34px);line-height:1.18;letter-spacing:-.02em;
+    text-wrap:balance;font-weight:680;
+  }
+  .lede{margin:0;max-width:62ch;color:var(--ink-2);font-size:16.5px}
+
+  section{display:flex;flex-direction:column;gap:14px}
+  h2{
+    margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;
+  }
+  p{margin:0;max-width:66ch;color:var(--ink-2)}
+  strong{color:var(--ink);font-weight:650}
+
+  /* The ladder: each rung is visibly wider than the one above it. */
+  .ladder{display:flex;flex-direction:column;gap:10px;list-style:none;margin:0;padding:0}
+  .rung{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;display:grid;gap:10px;
+    grid-template-columns:minmax(0,1fr);
+  }
+  .rung-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .chip{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12px;font-weight:650;padding:4px 10px;border-radius:999px;white-space:nowrap;
+  }
+  .reach{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);font-weight:650;margin-left:auto;
+  }
+  .plain{font-size:16px;color:var(--ink);font-weight:600;margin:0}
+  .rule{
+    margin:0;font-size:14px;color:var(--ink-2);
+    border-left:2px solid var(--line);padding-left:12px;
+  }
+  /* The widening bar — form carrying the same information as the words. */
+  .bar{height:5px;border-radius:999px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;border-radius:999px}
+
+  .r1 .chip{background:var(--calm-bg);color:var(--calm)}
+  .r1 .bar span{background:var(--calm);width:14%}
+  .r2 .chip{background:var(--warn-bg);color:var(--warn)}
+  .r2 .bar span{background:var(--warn);width:42%}
+  .r3 .chip{background:var(--hot-bg);color:var(--hot)}
+  .r3 .bar span{background:var(--hot);width:72%}
+  .r4 .chip{background:var(--crit-bg);color:var(--crit)}
+  .r4 .bar span{background:var(--crit);width:100%}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  th{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;
+  }
+  td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  code{
+    background:var(--code-bg);padding:2px 6px;border-radius:5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;
+  }
+
+  .callout{
+    border-radius:12px;padding:15px 18px;font-size:15px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .callout p{max-width:none;color:inherit}
+  .callout .title{font-weight:680;color:inherit}
+  .watch{background:var(--crit-bg);color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 28%,transparent)}
+  .note{background:var(--accent-soft);color:var(--ink-2);border:1px solid var(--line)}
+  .watch strong{color:inherit}
+
+  .example{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .example ol{margin:0;padding-left:20px;color:var(--ink-2);display:flex;flex-direction:column;gap:6px}
+  .verdict{
+    display:inline-flex;align-items:center;gap:9px;font-size:14px;
+    background:var(--crit-bg);color:var(--crit);border-radius:9px;padding:9px 13px;font-weight:620;
+    align-self:flex-start;
+  }
+
+  footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+  a{color:var(--accent)}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="top">
+  <div class="eyebrow">Cloud discovery · for QA</div>
+  <h1>What Blast Radius is counting</h1>
+  <p class="lede">Every sensitive file we find in a connected cloud gets one word
+  describing <strong>how far it reaches</strong>. Four words, and a file always gets the
+  widest one that is true of it. This page says what each means, and explains the three
+  numbers above the grid.</p>
+</header>
+
+<section>
+  <h2>The four levels</h2>
+  <ol class="ladder">
+
+    <li class="rung r1">
+      <div class="rung-head">
+        <span class="chip">Restricted</span>
+        <span class="reach">Named people only</span>
+      </div>
+      <p class="plain">Only the people it was explicitly given to can open it.</p>
+      <div class="bar"><span></span></div>
+      <p class="rule">This is also what "not shared at all" looks like. A file nobody has
+      shared is Restricted — the level means <em>nothing reaches past the named
+      people</em>, not that somebody chose a restriction.</p>
+    </li>
+
+    <li class="rung r2">
+      <div class="rung-head">
+        <span class="chip">OrgWide</span>
+        <span class="reach">Anyone signed in</span>
+      </div>
+      <p class="plain">Anyone inside the company who is signed in can open it.</p>
+      <div class="bar"><span></span></div>
+      <p class="rule">A link of the "people in your organisation" kind. No outsider can
+      use it — they would have to sign in, and they cannot — but it is no longer limited
+      to the people who were given it. Every employee can reach it.</p>
+    </li>
+
+    <li class="rung r3">
+      <div class="rung-head">
+        <span class="chip">External</span>
+        <span class="reach">Someone outside the company</span>
+      </div>
+      <p class="plain">At least one named person on it does not belong to the company.</p>
+      <div class="bar"><span></span></div>
+      <p class="rule">Decided by the email domain of each person the file is shared with,
+      checked against the tenant's own verified domains as the provider reports them —
+      not guessed from the file owner's address. Most tenants have more than one domain,
+      and guessing would turn colleagues into outsiders.</p>
+    </li>
+
+    <li class="rung r4">
+      <div class="rung-head">
+        <span class="chip">PublicLink</span>
+        <span class="reach">No sign-in needed</span>
+      </div>
+      <p class="plain">Anyone holding the link can open it, signed in or not.</p>
+      <div class="bar"><span></span></div>
+      <p class="rule">The widest answer there is. Nothing outranks it, so the moment one
+      anonymous link is found the file is Public and the other permissions stop
+      mattering.</p>
+    </li>
+
+  </ol>
+</section>
+
+<section>
+  <h2>One file, one level — the widest that is true</h2>
+  <div class="example">
+    <p><strong>A file can be shared several ways at once.</strong> The level is not a
+    list; it is the single worst case. Take a budget spreadsheet with three permissions
+    on it:</p>
+    <ol>
+      <li>The finance team, by name — on its own, <strong>Restricted</strong></li>
+      <li>An "anyone in the organisation" link — on its own, <strong>OrgWide</strong></li>
+      <li>One "anyone with the link" link — on its own, <strong>PublicLink</strong></li>
+    </ol>
+    <div class="verdict">This file counts once, as PublicLink</div>
+    <p>If it were counted at its narrowest, a single tight permission would hide a public
+    link behind it. That is the one mistake this grid exists to prevent, so the rule is
+    worst-wins and it is never averaged.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The three numbers above the grid</h2>
+  <div class="scroll">
+    <table>
+      <tr><th>Figure</th><th>What it counts</th><th>In terms of the four levels</th></tr>
+      <tr>
+        <td class="num">38,815<br><span style="font-weight:600">Sensitive</span></td>
+        <td>Every sensitive object in the grid.</td>
+        <td>Restricted + OrgWide + External + PublicLink</td>
+      </tr>
+      <tr>
+        <td class="num">17,034<br><span style="font-weight:600">Beyond owner</span></td>
+        <td>The ones somebody other than the named people can reach — the ones worth
+        acting on.</td>
+        <td>OrgWide + External + PublicLink<br><em>(everything except Restricted)</em></td>
+      </tr>
+      <tr>
+        <td class="num">3,087<br><span style="font-weight:600">Public</span></td>
+        <td>Reachable with no sign-in at all. The most urgent slice.</td>
+        <td>PublicLink only</td>
+      </tr>
+    </table>
+  </div>
+  <p>So the three nest inside one another: every Public file is also counted in Beyond
+  owner, and every Beyond-owner file is also counted in Sensitive. They are not three
+  separate buckets and will never add up to each other.</p>
+</section>
+
+<section>
+  <h2>Before you raise it as a bug</h2>
+
+  <div class="callout watch">
+    <p class="title">"Sensitive" here will not match the Sensitive tile at the top of the page.</p>
+    <p>The grid has one row per classification, and <strong>a file carrying two
+    classifications is counted under both</strong>. A spreadsheet holding PII and PFI
+    appears on the PII row and on the PFI row, so the grid's total runs ahead of the
+    number of files.</p>
+    <p>The tile counts files. The grid counts classified objects. Both are right; they
+    answer different questions. Expect the grid's total to be the larger of the two.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="title">External is only known for files the provider already told us were shared.</p>
+    <p>Working out who a file reaches needs a separate permissions request per file.
+    Asking that for every file in a tenant is the difference between a scan and getting
+    throttled, so we ask only about files the provider has flagged as shared.</p>
+    <p>A file nobody shared has nothing to say, so nothing is lost — but read the figure
+    as <em>external among shared files</em>, not a sweep of everything.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The other screen — Public Links in Circulation</h2>
+  <p>Same data, one level down. <strong>Exposure</strong> is the verdict on a whole file
+  after looking at every permission on it. <strong>A link</strong> is one of those
+  permissions. This screen lists the links themselves — so one file can appear more than
+  once, with a different row for each way it is shared.</p>
+
+  <div class="callout note">
+    <p class="title">"In circulation" means someone could open it today.</p>
+    <p>The list only carries links that still work. A link that has been revoked, or one
+    on a file that has since been deleted, never appears here.</p>
+    <p>Revoked links are not thrown away — "this was public for six weeks and is not any
+    more" is exactly what an investigation needs — but a list headed <em>in
+    circulation</em> must not carry them. So the count answers <strong>"what could be
+    opened right now"</strong>, not "what has ever been shared".</p>
+  </div>
+
+  <h2 style="margin-top:8px">The four tabs, by what they say on screen</h2>
+  <div class="scroll">
+    <table>
+      <tr>
+        <th>Tab</th>
+        <th>What it is showing you</th>
+        <th>How to check it</th>
+      </tr>
+      <tr>
+        <td><strong>Anyone with the link</strong></td>
+        <td>Links that need <strong>no sign-in at all</strong>. Anyone who has the URL can
+        open the file, inside the company or outside it. The urgent ones.</td>
+        <td>Every row here should also show its file as <code>PublicLink</code> on the
+        Blast Radius grid. If one does not, that is worth raising.</td>
+      </tr>
+      <tr>
+        <td><strong>Anyone in the company</strong></td>
+        <td>Links that work for <strong>any signed-in employee</strong>. An outsider
+        cannot use one — they would have to sign in, and they cannot.</td>
+        <td>Wider than intended sharing, but contained inside the tenant. These are not
+        public and should not be counted as such.</td>
+      </tr>
+      <tr>
+        <td><strong>Named people</strong></td>
+        <td>Shared with <strong>specific individuals</strong>, by name.</td>
+        <td>Careful here: a named person can be from <em>outside</em> the company. Being
+        on this tab does not mean the file is internal — check the external count on the
+        row.</td>
+      </tr>
+      <tr>
+        <td><strong>Every link</strong></td>
+        <td>All three of the above together, with no filter.</td>
+        <td>Its count should equal the other three added up. If it does not, something is
+        being filtered that should not be.</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Two things to know before raising a bug</h2>
+
+  <div class="callout watch">
+    <p class="title">The heading says "Public Links" on every tab — but only the first tab is public.</p>
+    <p>On <strong>Every link</strong> the figure counts links of all three kinds, so a
+    number far larger than the public one is correct, not a defect. A tenant with 144,504
+    under that heading does not have 144,504 public links.</p>
+    <p>What is worth reporting is the <em>heading</em>: it should follow the tab, or say
+    something neutral like "Sharing links in circulation" with the public figure shown on
+    its own.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="title">Leaving the filter out is not the same as clearing it.</p>
+    <p>If you are testing the API directly rather than clicking the tabs, these two
+    requests give different answers:</p>
+    <p><code>{"page":1,"pageSize":100}</code> → <strong>public links only</strong>, because
+    leaving the field out keeps the screen's own default.</p>
+    <p><code>{"scope":null,"page":1,"pageSize":100}</code> → <strong>every link</strong>,
+    because sending it empty clears the filter.</p>
+    <p>The tabs send the second form, so the screen is right. It is only hand-written
+    requests that can trip on this — and "no filter gave me fewer rows" reads exactly like
+    a bug when it is not.</p>
+  </div>
+</section>
+
+<footer>
+  Where this comes from: <code>CloudExposurePolicy.Derive</code> decides a file's level,
+  <code>POST /cloud/overview</code> returns the Blast Radius grid, and
+  <code>POST /cloud/links</code> returns the links list. The level is stored per file on
+  <code>discovery."CloudFile"."ExposureLevel"</code> and recalculated from the live
+  permission rows on every crawl.
+</footer>
+
+</div>
+</body>
+</html>

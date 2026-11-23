@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM DLP — File Trace Boundary API</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { background:#1b1b1b; padding:14px 28px; display:flex; gap:12px; align-items:baseline; border-bottom:1px solid #000; }
+        .topbar h1 { color:#fff; font-size:18px; font-weight:700; margin:0; }
+        .topbar span { color:#89bf04; font-size:13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM DLP</h1>
+        <span>File Trace — boundary view, integration guide for the UI team</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM DLP — File Trace Boundary",
+            "version": "1.0.0",
+            "description": "Backs the **redesigned File Trace detail page**: one boundary view in place of the four tabs (Timeline, Graph, Flow, Time scale). One call returns a **tree of every person and place that held a copy** of the file, plus a **move for every attempt** to transfer it — each move with an explicit outcome, so the client never derives \"got out\" from a verdict and an exit flag.\n\nThe list-page endpoints `POST /summary` and `POST /traced-files` are unchanged and documented in *File-Trace-History-API-Documentation.html*. The old detail endpoints (`/trace`, `/timeline`, `/graph`, `/flow`, `/time-scale`) keep working until mobile confirms it no longer calls them.\n\nAll paths are relative to `/file-trace`. Every response uses the standard envelope: `{ success, message, data, errors }`.\n\n### Identifying a chain\n\nA **chain** is one piece of content, identified by its **content hash (HashID)** — every transfer of the same bytes is one chain, whoever moved them and whatever the file was renamed to along the way. The grid returns the hash, lower-cased, as `traceKey` on every row; `traceKey` and `hashId` are the **same identifier under two names**. `metaId` and `fileName` are still accepted so an analyst can paste either straight in; each resolves to the hash of the newest hop carrying it. Send **at least one** of the four, or you get a `400`.\n\n### Holders — the tree\n\n`holders[]` is **one tree rooted at the origin**: `parentHolderId` is `null` only there, and every other holder points at one parent in the same response. Holders are sent **after their parent**, siblings in `occurredAt` order, so the page can lay out as the array arrives.\n\nTwo kinds:\n\n| `kind` | What it is | Fields |\n|---|---|---|\n| `Person` | Someone who received a copy | `person` (the usual TracePerson), `badge: null` |\n| `Place` | A OneDrive, SharePoint site, shared drive or similar the file was saved into | `badge` (1–2 chars: `\"1D\"`, `\"SP\"`, `\"G\"`), `person: null` |\n\nA Place hangs under the person who saved into it, and downloads the server could tie to that save hang under the Place — the \"Sam downloaded it from Talia's OneDrive\" linkage is done **server-side**. When the lineage cannot tie a download to the save that created the place, the downloader **falls back to the sender person as its parent**; a place is never a reason to drop a holder.\n\nFour rules you can rely on:\n\n1. **A holder exists only if the copy actually arrived**, so a holder's `verdict` is never `Blocked`. It is `Allowed`, `Warned` or `Uncovered` — the outcome of the action that put the copy there. Blocked attempts appear only in `moves`. A person whose *only* event was a blocked **receive** is not a holder at all — just a `BlockedInside` move from whoever held the file. A blocked **send** is the opposite: it proves the sender already held the file, so they appear as a holder (`verdict: \"Uncovered\"`, their arrival was never observed) and the blocked action is their move — which is why a chain whose every hop was blocked still has its origin.\n2. **One place per (parent, app).** The same person saving into seven OneDrive folders is one shelf on the canvas, not seven siblings; the extra saves widen the place and a `Seen` fact (`\"7 saves\"`) counts them. The place reports the harshest verdict of its saves.\n3. **Renames are not nodes.** A holder whose copy wears a different name shows it in its `File` fact.\n4. **`stats` agrees with the arrays** — `holders = holders.length`, `blocked` and `gotOut` = the counts of the matching `result` values. Unit-tested; they cannot drift.\n\n### Moves — explicit outcomes\n\n| `result` | When | Drawn as |\n|---|---|---|\n| `GotOut` | A copy reached a destination outside the organisation and nothing stopped it. `Allowed`, `Warned` (overridden or approved) and `Uncovered` all count. | Amber card past the wall |\n| `BlockedAtBoundary` | An attempt to send the file outside was prevented (USB, personal email, WeTransfer, personal cloud, Bluetooth, …). | Red ✕ stop on the wall |\n| `BlockedInside` | An internal action was prevented, e.g. an org-wide link that was revoked, or a blocked internal receive. | Red tag under the holder |\n| `SharedInside` | An internal share policy flagged (`Warned` / `Uncovered`) without blocking, e.g. a post to a large channel. | Amber tag under the holder |\n\nA `SharedInside` move is a tag on the **sender**; anyone who then received the file still appears in `holders` as a child of that sender. Every `fromHolderId` matches a `holderId` in the same response.\n\n**Moves collapse to one record per (`fromHolderId`, `result`, `destination`)** — a user retrying a blocked upload 545 times is **one** stop on the wall, not 545. Each move carries `count` (how many attempts it stands for), `firstOccurredAt` / `lastOccurredAt` (the span), `occurredAt` = the latest attempt, the facts of the latest attempt plus a `Seen` fact (`\"545 attempts\"`) when `count > 1`, and the **harshest** verdict of the group — so a collapse can never make the chain look safer than it was.\n\n**Inside vs outside is heuristic**, and worth knowing the shape of: a *blocked* save into a storage app is drawn at the boundary (policy treated it as an exit — the personal-cloud case); an allowed or warned save becomes a Place inside; a share that names a recipient address counts as external. Email, USB, print and FTP count as exits. If a tenant's corporate storage gets blocked for unrelated reasons, raise it — the fallback is an org-domain list.\n\n### Facts\n\nEvery holder and move carries `facts[]` — label/value pairs **in display order**, so the client never hardcodes a list per kind. A fact whose value is unknown is **left out**, never sent as `null` or `\"—\"`. Labels you will see: `File`, `Where`, `Sent to`, `Device`, `Role`, `Policy`, `Result`, `Seen` (when collapsed repeats stand behind one record).\n\n> **Audience sizes are not available.** \"Visible to 9 members + guests\" and \"Would expose 812 people\" are not in the transfer log — it records the destination, not the size of its audience. Those facts simply do not appear; since unknown facts are omitted, nothing special is needed to handle that.\n\n### Times\n\nAll times are **UTC ISO strings**; the client formats them. `spanStart` / `spanEnd` are the chain's first and last event.\n\n### Header\n\n`header` is the same object the old views used, so it carries a few fields beyond the draft contract — `sha256`, `sha256Display`, `metaId`, `isReadOnly` — alongside `traceKey`, `fileName` (the name at the origin), `typeBadge` and `contentTags`. Ignore what you don't draw.\n\n### Errors\n\n| Code | When |\n|---|---|\n| `400` | None of `fileName` / `traceKey` / `hashId` / `metaId` was sent. |\n| `404` | Nothing matched that identifier. |\n| `499` | Client aborted. No body. |\n| `500` | Server error, with a short `message`. |"
+        },
+        "servers": [
+            { "url": "https://localhost:5001/file-trace", "description": "Local dev" },
+            { "url": "https://qa-email.azure-api.net/qadlp/file-trace", "description": "QA DLP (APIM)" },
+            { "url": "https://sfm-prod.azure-api.net/dlp/file-trace", "description": "Production (APIM)" }
+        ],
+        "tags": [
+            { "name": "Detail", "description": "The boundary view for one chain." }
+        ],
+        "paths": {
+            "/boundary": {
+                "post": {
+                    "tags": ["Detail"],
+                    "summary": "Boundary view",
+                    "description": "The whole detail page in one call: `header`, the three header counts, the holder tree and the move list.\n\nSend any one of `traceKey`, `metaId`, `hashId` or `fileName` — the same request the old detail tabs took, so **View Trace** needs no change. `fromDate` / `toDate` are accepted but normally omitted: a chain is worth seeing whole, and clipping it to the grid's window hides the exit that matters.\n\n### Rendering order\n\nHolders arrive **parent before child**, siblings in `occurredAt` order — lay them out as they come. Moves arrive in time order. Use `stats` for the header counts rather than re-counting; they are guaranteed equal to the arrays.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "name": "ClientGUID", "in": "header", "required": false, "schema": { "type": "string", "format": "uuid" }, "description": "Tenant selector, as on every DLP endpoint." }
+                    ],
+                    "requestBody": { "required": true, "content": { "application/json": {
+                        "schema": { "$ref": "#/components/schemas/FileTraceDetailRequest" },
+                        "examples": {
+                            "fromTheGrid": { "summary": "View Trace — the grid row's traceKey", "value": { "traceKey": "a3f9c1d4e5b6a7c8d9e0f1a2b3c4d5e6" } },
+                            "pastedHash": { "summary": "Analyst pastes a content hash", "value": { "hashId": "A3F9C1D4E5B6A7C8D9E0F1A2B3C4D5E6" } },
+                            "pastedName": { "summary": "Analyst pastes a file name", "value": { "fileName": "Q3_Patient_Billing.xlsx" } },
+                            "savedMetaLink": { "summary": "Saved link from the MetaID era", "value": { "metaId": "meta-q3-billing" } }
+                        }
+                    } } },
+                    "responses": {
+                        "200": { "description": "OK", "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/TraceBoundaryResponse" },
+                            "example": { "success": true, "message": null, "errors": null,
+                                "data": {
+                                    "header": {
+                                        "traceKey": "a3f9c1d4e5b6a7c8d9e0f1a2b3c4d5e6",
+                                        "fileName": "Q3_Patient_Billing.xlsx",
+                                        "typeBadge": "XLS",
+                                        "sha256": "a3f9c1d4e5b6a7c8d9e0f1a2b3c4d5e6",
+                                        "sha256Display": "a3f9c1d4…d5e6",
+                                        "metaId": "meta-q3-billing",
+                                        "contentTags": ["PHI", "PII"],
+                                        "isReadOnly": true
+                                    },
+                                    "stats": { "holders": 7, "blocked": 3, "gotOut": 1 },
+                                    "spanStart": "2025-10-12T03:44:00Z",
+                                    "spanEnd": "2025-10-14T06:48:00Z",
+                                    "holders": [
+                                        {
+                                            "holderId": "h1", "parentHolderId": null, "kind": "Person",
+                                            "name": "Jordyn Rosser", "badge": null,
+                                            "person": { "userId": 1, "endpointUserId": 1, "name": "Jordyn Rosser", "initials": "JR", "designation": "Finance Analyst", "emailId": "j.rosser@acme.com", "machineName": "FIN-LT-014" },
+                                            "app": { "name": "MS Teams", "badge": "T", "category": "Collaboration", "isDevice": false },
+                                            "how": "Uploaded to MS Teams",
+                                            "occurredAt": "2025-10-12T03:44:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [
+                                                { "label": "File", "value": "Q3_Patient_Billing.xlsx" },
+                                                { "label": "Where", "value": "https://teams.microsoft.com/l/channel/q3-billing" },
+                                                { "label": "Device", "value": "FIN-LT-014" },
+                                                { "label": "Role", "value": "Finance Analyst" }
+                                            ]
+                                        },
+                                        {
+                                            "holderId": "h2", "parentHolderId": "h1", "kind": "Person",
+                                            "name": "Damon King", "badge": null,
+                                            "person": { "endpointUserId": 2, "name": "Damon King", "initials": "DK", "designation": "Product Innovator" },
+                                            "app": { "name": "MS Teams", "badge": "T", "isDevice": false },
+                                            "how": "Got it from Jordyn",
+                                            "occurredAt": "2025-10-12T05:32:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [ { "label": "File", "value": "Q3_Patient_Billing.xlsx" }, { "label": "Device", "value": "PRD-LT-221" } ]
+                                        },
+                                        {
+                                            "holderId": "h3", "parentHolderId": "h1", "kind": "Person",
+                                            "name": "Talia Greene", "badge": null,
+                                            "person": { "endpointUserId": 3, "name": "Talia Greene", "initials": "TG", "designation": "Incident Response" },
+                                            "app": { "name": "MS Teams", "badge": "T", "isDevice": false },
+                                            "how": "Got it from Jordyn",
+                                            "occurredAt": "2025-10-13T02:37:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [ { "label": "File", "value": "Q3_Patient_Billing.xlsx" } ]
+                                        },
+                                        {
+                                            "holderId": "h4", "parentHolderId": "h3", "kind": "Place",
+                                            "name": "Talia's OneDrive", "badge": "1D",
+                                            "person": null,
+                                            "app": { "name": "OneDrive", "badge": "1D", "category": "Cloud storage", "isDevice": false },
+                                            "how": "Saved by Talia",
+                                            "occurredAt": "2025-10-13T03:22:00Z",
+                                            "verdict": "Warned",
+                                            "facts": [
+                                                { "label": "File", "value": "billing_backup_q3.xlsx" },
+                                                { "label": "Where", "value": "https://acme-my.sharepoint.com/personal/tgreene" },
+                                                { "label": "Policy", "value": "PHI outside finance" }
+                                            ]
+                                        },
+                                        {
+                                            "holderId": "h5", "parentHolderId": "h4", "kind": "Person",
+                                            "name": "Sam Ortiz", "badge": null,
+                                            "person": { "endpointUserId": 4, "name": "Sam Ortiz", "initials": "SO", "designation": "Operations" },
+                                            "app": { "name": "OneDrive", "badge": "1D", "isDevice": false },
+                                            "how": "Downloaded",
+                                            "occurredAt": "2025-10-13T08:10:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [ { "label": "File", "value": "billing_backup_q3.xlsx" } ]
+                                        },
+                                        {
+                                            "holderId": "h6", "parentHolderId": "h5", "kind": "Person",
+                                            "name": "Jonah Reed", "badge": null,
+                                            "person": { "endpointUserId": 5, "name": "Jonah Reed", "initials": "JR", "designation": "Finance Ops" },
+                                            "app": { "name": "MS Teams", "badge": "T", "isDevice": false },
+                                            "how": "Got it from Sam",
+                                            "occurredAt": "2025-10-13T09:00:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [ { "label": "File", "value": "billing_backup_q3.xlsx" } ]
+                                        },
+                                        {
+                                            "holderId": "h7", "parentHolderId": "h2", "kind": "Person",
+                                            "name": "Eli Brooks", "badge": null,
+                                            "person": { "endpointUserId": 6, "name": "Eli Brooks", "initials": "EB", "designation": "Support" },
+                                            "app": { "name": "MS Teams", "badge": "T", "isDevice": false },
+                                            "how": "Got it from Damon",
+                                            "occurredAt": "2025-10-12T10:40:00Z",
+                                            "verdict": "Allowed",
+                                            "facts": [ { "label": "File", "value": "Q3_Patient_Billing.xlsx" }, { "label": "Seen", "value": "3 transfers" } ]
+                                        }
+                                    ],
+                                    "moves": [
+                                        {
+                                            "moveId": "m1", "fromHolderId": "h2", "result": "GotOut",
+                                            "destination": "k.mehra@vendorpartners.io",
+                                            "actor": "Emailed by Damon King",
+                                            "occurredAt": "2025-10-12T09:15:00Z",
+                                            "count": 1,
+                                            "firstOccurredAt": "2025-10-12T09:15:00Z",
+                                            "lastOccurredAt": "2025-10-12T09:15:00Z",
+                                            "verdict": "Warned",
+                                            "facts": [
+                                                { "label": "File", "value": "budget_notes_final.xlsx" },
+                                                { "label": "Sent to", "value": "k.mehra@vendorpartners.io" },
+                                                { "label": "Policy", "value": "External PHI" },
+                                                { "label": "Result", "value": "Warned, transfer completed" }
+                                            ]
+                                        },
+                                        {
+                                            "moveId": "m2", "fromHolderId": "h3", "result": "BlockedInside",
+                                            "destination": "OneDrive",
+                                            "actor": "Attempted by Talia Greene",
+                                            "occurredAt": "2025-10-13T03:40:00Z",
+                                            "count": 1,
+                                            "firstOccurredAt": "2025-10-13T03:40:00Z",
+                                            "lastOccurredAt": "2025-10-13T03:40:00Z",
+                                            "verdict": "Blocked",
+                                            "facts": [
+                                                { "label": "File", "value": "billing_backup_q3.xlsx" },
+                                                { "label": "Policy", "value": "Org-wide links" },
+                                                { "label": "Result", "value": "Transfer prevented" }
+                                            ]
+                                        },
+                                        {
+                                            "moveId": "m3", "fromHolderId": "h5", "result": "SharedInside",
+                                            "destination": "MS Teams",
+                                            "actor": "Shared by Sam Ortiz",
+                                            "occurredAt": "2025-10-13T08:52:00Z",
+                                            "count": 1,
+                                            "firstOccurredAt": "2025-10-13T08:52:00Z",
+                                            "lastOccurredAt": "2025-10-13T08:52:00Z",
+                                            "verdict": "Warned",
+                                            "facts": [
+                                                { "label": "File", "value": "billing_backup_q3.xlsx" },
+                                                { "label": "Where", "value": "https://teams.microsoft.com/l/channel/finance-ops" },
+                                                { "label": "Result", "value": "Warned, transfer completed" }
+                                            ]
+                                        },
+                                        {
+                                            "moveId": "m4", "fromHolderId": "h7", "result": "BlockedAtBoundary",
+                                            "destination": "USB",
+                                            "actor": "Attempted by Eli Brooks",
+                                            "occurredAt": "2025-10-13T14:01:00Z",
+                                            "count": 3,
+                                            "firstOccurredAt": "2025-10-13T13:52:00Z",
+                                            "lastOccurredAt": "2025-10-13T14:01:00Z",
+                                            "verdict": "Blocked",
+                                            "facts": [
+                                                { "label": "File", "value": "Q3_Patient_Billing.xlsx" },
+                                                { "label": "Device", "value": "USB" },
+                                                { "label": "Result", "value": "Transfer prevented" },
+                                                { "label": "Seen", "value": "3 attempts" }
+                                            ]
+                                        },
+                                        {
+                                            "moveId": "m5", "fromHolderId": "h6", "result": "BlockedAtBoundary",
+                                            "destination": "Gmail",
+                                            "actor": "Attempted by Jonah Reed",
+                                            "occurredAt": "2025-10-14T06:48:00Z",
+                                            "count": 1,
+                                            "firstOccurredAt": "2025-10-14T06:48:00Z",
+                                            "lastOccurredAt": "2025-10-14T06:48:00Z",
+                                            "verdict": "Blocked",
+                                            "facts": [
+                                                { "label": "File", "value": "billing_backup_q3.xlsx" },
+                                                { "label": "Policy", "value": "Personal webmail" },
+                                                { "label": "Result", "value": "Transfer prevented" }
+                                            ]
+                                        }
+                                    ]
+                                } }
+                        } } },
+                        "400": { "description": "None of fileName / traceKey / hashId / metaId was sent.", "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                            "example": { "success": false, "message": "Invalid request.", "data": null, "errors": ["Send one of fileName, traceKey, hashId or metaId."] }
+                        } } },
+                        "404": { "description": "No chain matched that identifier.", "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                            "example": { "success": false, "message": "No trace found for that file.", "data": null, "errors": null }
+                        } } },
+                        "499": { "description": "Client aborted the request. No body." },
+                        "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+                    "description": "The standard SFM application JWT, as on every DLP endpoint." }
+            },
+            "schemas": {
+                "FileTraceDetailRequest": {
+                    "type": "object",
+                    "description": "Names one chain. **At least one of the four identifiers is required** or the call returns 400.",
+                    "properties": {
+                        "traceKey": { "type": "string", "nullable": true, "description": "Chain key from a grid row — the file's content hash (HashID), lower-cased. Same identifier as `hashId`." },
+                        "metaId": { "type": "string", "nullable": true, "description": "Agent correlation id (`dlp.\"LandingLogs\".MetaID`). **Not** the chain identity — resolved to the hash of the newest hop carrying it." },
+                        "hashId": { "type": "string", "nullable": true, "description": "Content hash (`dlp.\"LandingLogs\".HashID`), any casing. This **is** the chain identity." },
+                        "fileName": { "type": "string", "nullable": true, "description": "File name **with its extension**, e.g. `\"Q3_Patient_Billing.xlsx\"`. A full path is accepted and reduced to the name. Case-insensitive; resolves to the hash of the newest hop wearing that name." },
+                        "fromDate": { "type": "string", "format": "date-time", "nullable": true, "description": "Normally omitted. A chain is worth seeing whole, and clipping it to the grid's window hides the exit that matters." },
+                        "toDate": { "type": "string", "format": "date-time", "nullable": true, "description": "Normally omitted." }
+                    }
+                },
+                "TracePerson": {
+                    "type": "object",
+                    "description": "A person on the chain. `name` falls back to `Endpoint user 42` and `designation` to `null` when the crunch row does not exist yet.",
+                    "properties": {
+                        "userId": { "type": "integer", "nullable": true },
+                        "endpointUserId": { "type": "integer" },
+                        "name": { "type": "string", "example": "Jordyn Rosser" },
+                        "initials": { "type": "string", "example": "JR", "description": "Two letters for the avatar." },
+                        "designation": { "type": "string", "nullable": true, "example": "Finance Analyst" },
+                        "emailId": { "type": "string", "nullable": true },
+                        "machineName": { "type": "string", "nullable": true }
+                    }
+                },
+                "TraceApp": {
+                    "type": "object",
+                    "description": "An application or device the copy moved through.",
+                    "properties": {
+                        "name": { "type": "string", "example": "OneDrive" },
+                        "badge": { "type": "string", "example": "1D", "description": "Short badge for the square icon — `\"T\"`, `\"O\"`, `\"1D\"`, `\"SP\"`, `\"U\"`. Unknown apps fall back to their own initials." },
+                        "category": { "type": "string", "nullable": true },
+                        "applicationDeviceMasterId": { "type": "integer", "nullable": true },
+                        "isDevice": { "type": "boolean", "description": "True for removable-media destinations." }
+                    }
+                },
+                "TraceFact": {
+                    "type": "object",
+                    "description": "One label/value pair in a detail panel. Sent **in display order**; a fact whose value is unknown is left out, never sent as `null` or `\"—\"`.",
+                    "properties": {
+                        "label": { "type": "string", "example": "Sent to" },
+                        "value": { "type": "string", "example": "k.mehra@vendorpartners.io" }
+                    }
+                },
+                "BoundaryStats": {
+                    "type": "object",
+                    "description": "The three header counts. **Always equal to the arrays**: re-counting client-side is safe but unnecessary.",
+                    "properties": {
+                        "holders": { "type": "integer", "example": 16, "description": "`holders.length`, origin included — people **and** places." },
+                        "blocked": { "type": "integer", "example": 7, "description": "`BlockedAtBoundary` + `BlockedInside` moves." },
+                        "gotOut": { "type": "integer", "example": 2, "description": "`GotOut` moves." }
+                    }
+                },
+                "BoundaryHolder": {
+                    "type": "object",
+                    "description": "A person or place that held a copy. One tree rooted at the origin; each holder is sent **after its parent**, siblings in `occurredAt` order. A holder's `verdict` is **never** `Blocked` — a holder exists only if the copy arrived.",
+                    "properties": {
+                        "holderId": { "type": "string", "example": "h4" },
+                        "parentHolderId": { "type": "string", "nullable": true, "example": "h3", "description": "`null` only for the origin. Always a `holderId` in the same response." },
+                        "kind": { "type": "string", "enum": ["Person", "Place"] },
+                        "name": { "type": "string", "example": "Talia's OneDrive" },
+                        "badge": { "type": "string", "nullable": true, "example": "1D", "description": "Places only — 1–2 characters for the square icon. `null` on people." },
+                        "person": { "allOf": [ { "$ref": "#/components/schemas/TracePerson" } ], "nullable": true, "description": "Set when `kind` is `Person`; `null` on places." },
+                        "app": { "allOf": [ { "$ref": "#/components/schemas/TraceApp" } ], "nullable": true, "description": "The app this copy arrived through, or the app a Place lives in." },
+                        "how": { "type": "string", "example": "Saved by Talia", "description": "Short phrase for how the copy got here — `\"Got it from Damon\"`, `\"Downloaded\"`, `\"Uploaded to MS Teams\"`." },
+                        "occurredAt": { "type": "string", "format": "date-time", "nullable": true },
+                        "verdict": { "type": "string", "enum": ["Allowed", "Warned", "Uncovered"], "description": "Outcome of the action that put the copy here. Never `Blocked`." },
+                        "facts": { "type": "array", "items": { "$ref": "#/components/schemas/TraceFact" } }
+                    }
+                },
+                "BoundaryMove": {
+                    "type": "object",
+                    "description": "An attempt that did not create a holder: it got out, was stopped at the boundary, was blocked inside, or was an internal share policy flagged. A `SharedInside` move is a tag on the sender — recipients still appear in `holders` as children of that sender.\n\n**Collapsed**: one move per (`fromHolderId`, `result`, `destination`), however many times it was attempted. `count`, `firstOccurredAt` and `lastOccurredAt` carry what the collapse absorbed; the facts and actor are the **latest** attempt's.",
+                    "properties": {
+                        "moveId": { "type": "string", "example": "m1" },
+                        "fromHolderId": { "type": "string", "example": "h2", "description": "The holder the attempt was made from. Always a `holderId` in the same response." },
+                        "result": { "type": "string", "enum": ["GotOut", "BlockedAtBoundary", "BlockedInside", "SharedInside"], "description": "Explicit outcome — see the table in the API description. Never derive this from `verdict`." },
+                        "destination": { "type": "string", "example": "k.mehra@vendorpartners.io", "description": "Where it was headed — a recipient address, `\"USB\"`, an app name." },
+                        "actor": { "type": "string", "example": "Emailed by Damon King", "description": "`\"Attempted by …\"` on blocked moves." },
+                        "occurredAt": { "type": "string", "format": "date-time", "nullable": true, "description": "The **latest** attempt — equals `lastOccurredAt`." },
+                        "count": { "type": "integer", "example": 545, "description": "How many attempts this move stands for. Render \"×N\" or lean on the `Seen` fact above 1." },
+                        "firstOccurredAt": { "type": "string", "format": "date-time", "nullable": true, "description": "The first of those attempts." },
+                        "lastOccurredAt": { "type": "string", "format": "date-time", "nullable": true, "description": "The most recent; equals `firstOccurredAt` when `count` is 1." },
+                        "verdict": { "type": "string", "enum": ["Allowed", "Warned", "Blocked", "Uncovered"], "description": "`Blocked` for the two blocked results; `Allowed` / `Warned` / `Uncovered` on `GotOut` and `SharedInside`. A collapsed move reports the **harshest** verdict of its attempts." },
+                        "facts": { "type": "array", "items": { "$ref": "#/components/schemas/TraceFact" }, "description": "The latest attempt's facts, plus `Seen` when `count > 1`." }
+                    }
+                },
+                "TraceHeader": {
+                    "type": "object",
+                    "description": "The title block. Carries a few fields beyond the boundary draft (`sha256`, `sha256Display`, `metaId`, `isReadOnly`) because it is the same header the old views used — ignore what you don't draw.",
+                    "properties": {
+                        "traceKey": { "type": "string", "description": "The chain key — the content hash, lower-cased." },
+                        "fileName": { "type": "string", "description": "The name at the origin." },
+                        "typeBadge": { "type": "string", "example": "XLS" },
+                        "sha256": { "type": "string", "nullable": true },
+                        "sha256Display": { "type": "string", "nullable": true, "example": "a3f9c1d4…d5e6" },
+                        "metaId": { "type": "string", "nullable": true },
+                        "contentTags": { "type": "array", "items": { "type": "string" }, "example": ["PHI", "PII"] },
+                        "isReadOnly": { "type": "boolean", "example": true }
+                    }
+                },
+                "TraceBoundary": {
+                    "type": "object",
+                    "description": "The boundary view: header, the three counts, the chain's span, the holder tree and the move list.",
+                    "properties": {
+                        "header": { "$ref": "#/components/schemas/TraceHeader" },
+                        "stats": { "$ref": "#/components/schemas/BoundaryStats" },
+                        "spanStart": { "type": "string", "format": "date-time", "nullable": true, "description": "First event on the chain, UTC." },
+                        "spanEnd": { "type": "string", "format": "date-time", "nullable": true, "description": "Last event on the chain, UTC." },
+                        "holders": { "type": "array", "items": { "$ref": "#/components/schemas/BoundaryHolder" } },
+                        "moves": { "type": "array", "items": { "$ref": "#/components/schemas/BoundaryMove" }, "description": "In time order." }
+                    }
+                },
+                "TraceBoundaryResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "$ref": "#/components/schemas/TraceBoundary" },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "ApiResponseString": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": false },
+                        "message": { "type": "string", "example": "No trace found for that file." },
+                        "data": { "type": "string", "nullable": true, "example": null },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" }, "example": null }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        SwaggerUIBundle({
+            spec,
+            dom_id: '#swagger',
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: 'BaseLayout',
+            docExpansion: 'list',
+            defaultModelsExpandDepth: 1,
+            tryItOutEnabled: true
+        });
+    };
+    </script>
+</body>
+</html>

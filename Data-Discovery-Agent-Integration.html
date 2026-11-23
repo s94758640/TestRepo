@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Discovery - EXE Agent Integration Guide</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Data Discovery &amp; Classification — EXE Agent Integration Guide</h1>
+<p><strong>Audience:</strong> EXE agent team <strong>Server side:</strong> live in code (SFM.DLP.ExeApi, same function app as your existing <code>V1/...</code> routes); reachable in QA after deploy + APIM registration <strong>Contracts in code:</strong> <code>SFM.DLP.ExeApi/DTO/DiscoveryDTO.cs</code> · design: <code>DATA-DISCOVERY-IMPLEMENTATION-PLAN.md</code></p>
+<hr>
+<h2>1. What the agent has to do (new capability)</h2>
+<p>Data-at-rest discovery: on request, walk the machine's disks, classify file contents with the <strong>same DLP content engine you already run for transfers</strong>, and report results in batches. You do <strong>not</strong> upload file content, matched keywords, or samples — metadata + class labels only.</p>
+<p>The whole flow rides your existing patterns: you already poll <code>V1/GetEndPointCommand</code>; discovery adds one more poll target and three upload calls, same base URL, same agent auth (bearer token via the existing auth middleware).</p>
+<h2>2. The four endpoints (flow order)</h2>
+<h3>2.1 <code>GET V1/GetDiscoveryScanJob?serialNumber=&lt;serial&gt;</code> — or <code>?endpointId=&lt;id&gt;</code></h3>
+<p>Poll on your normal command cadence. <strong>One identity is enough</strong>:</p>
+<ul>
+<li><code>serialNumber</code> — preferred; the hardware serial you already send on every other call.</li>
+<li><code>endpointId</code> — fallback for machines without a usable BIOS serial (VMs, clones, "To be filled by O.E.M."); you know it after registration and from every previous poll response.</li>
+<li>Sending both is allowed (serial is tried first); sending neither is a <strong>400</strong>.</li>
+</ul>
+<p>Responses:</p>
+<ul>
+<li><strong>204</strong> — nothing to do (the common case).</li>
+<li><strong>200</strong> — a scan to run:</li>
+</ul>
+<pre><code>
+{
+  "success": true,
+  "data": {
+    "endpointScanId": 5012,
+    "scanJobId": 12,
+    "endpointId": 37,
+    "scanType": "Incremental",
+    "volumes": ["C", "D", "E", "Mapped"],
+    "includeMapped": true,
+    "includeExternal": true,
+    "volumeCursors": [
+      { "driveLetter": "C", "usnCursor": 1000003, "snapshotVersion": null },
+      { "driveLetter": "D", "usnCursor": null,    "snapshotVersion": null }
+    ],
+    "batchSize": 500,
+    "heartbeatSeconds": 300
+  }
+}
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>The first read of a Queued scan <strong>claims it</strong> (server marks it Running). If you poll again — e.g. after a reboot — you get the <strong>same</strong> <code>endpointScanId</code> back: resume it, don't restart from zero.</li>
+<li><code>scanType</code> is what was requested. Per volume, if <code>usnCursor</code>/<code>snapshotVersion</code> is null (or your USN journal wrapped / the volume isn't NTFS), <strong>upgrade that volume to full</strong> and later report <code>executedType</code> accordingly.</li>
+<li><code>volumes</code> is the list of <strong>fixed drive letters</strong>, and may list letters the machine doesn't have — skip them silently.</li>
+<li><strong><code>includeMapped</code> / <code>includeExternal</code> are how the non-fixed volumes are requested.</strong> A mapped share or a USB stick has no letter anybody can name when the job is queued — it depends on who is signed in and what is plugged in — so these are flags you resolve <strong>on the machine at scan time</strong>, not entries in <code>volumes</code>:
+<ul>
+<li><code>includeMapped: true</code> → also enumerate and scan <strong>mapped network drives</strong> (<code>DriveType</code> 4), whatever letters they have, and report each one in <code>DiscoveryScanComplete</code> with <code>"kind": "Mapped"</code>.</li>
+<li><code>includeExternal: true</code> → also enumerate and scan <strong>removable / external volumes</strong> (<code>DriveType</code> 2 and external fixed disks — USB sticks, portable drives), reported with <code>"kind": "External"</code>.</li>
+<li>Either flag false → leave that whole class of volume alone, even if one is mounted on a letter that appears in <code>volumes</code>.</li>
+<li>These flags are what fill the console's <strong>Mapped</strong> and <strong>External</strong> columns. They read 0 for as long as the agent ignores them.</li>
+</ul></li>
+<li>For backward compatibility <code>volumes</code> still also carries the tokens <code>"Mapped"</code> / <code>"External"</code> whenever the matching flag is set. Read the <strong>flags</strong>; treat any entry in <code>volumes</code> that is not a drive letter as noise.</li>
+</ul>
+<h3>2.2 <code>POST V1/DiscoveryScanProgress</code> — the heartbeat</h3>
+<p>At least every <code>heartbeatSeconds</code> (300 s) while scanning:</p>
+<pre><code>
+{ "endpointScanId": 5012, "endpointId": 37, "filesScanned": 18230, "sensitiveFound": 411, "currentVolume": "C" }
+</code></pre>
+<p>Miss it for 15 minutes and the server marks the scan <strong>Interrupted</strong>. That is not fatal: your next <code>GetDiscoveryScanJob</code> poll returns the <strong>same scan again</strong> (flipped back to Running) — resume from your last acked batch. An Interrupted scan only stops being resumable when a newer scheduled job supersedes it.</p>
+<p><strong><code>endpointId</code> is REQUIRED on all three POST bodies</strong> (progress, batch, complete) — use the value from <code>GetDiscoveryScanJob</code>. It is how the auth layer scopes your agent token to your own machine: the middleware compares it to the token, and the server verifies it matches the scan. Omitting it = <strong>400</strong>; a wrong value = <strong>404/403</strong>.</p>
+<h3>2.3 <code>POST V1/DiscoveryFilesBatch</code> — results, ≤500 per call</h3>
+<p>Send <strong>only sensitive and unclassified</strong> files (decision 8.1). Clean files are never sent as rows — they ride the counters.</p>
+<pre><code>
+{
+  "endpointScanId": 5012,
+  "endpointId": 37,
+  "batchSeq": 1,
+  "files": [
+    {
+      "volume": "D",
+      "directory": "D:\\Finance\\Payroll\\2026",
+      "fileName": "Payroll_Master_2026.xlsx",
+      "extension": "xlsx",
+      "sizeBytes": 50537240,
+      "lastModified": "2026-09-02T10:11:00Z",
+      "classifications": ["PFI", "PII"],
+      "confidence": 87.5,
+      "changeKind": "New"
+    },
+    {
+      "volume": "C",
+      "directory": "C:\\Users\\x\\Documents",
+      "fileName": "Scan_Corrupt.tmp",
+      "extension": "tmp",
+      "sizeBytes": 120400,
+      "classifications": [],
+      "changeKind": "New"
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>classifications</code>: your engine's DlpType labels (PHI/PII/PFI/PCI/CODE/CREDS…). <strong>Empty array = unclassified</strong> (file was scanned but unreadable/unsupported) — send those too.</li>
+<li><code>changeKind</code>: <code>New</code> | <code>Modified</code> | <code>Deleted</code>. Incremental scans send <code>Deleted</code> for files that disappeared; full scans send New/Modified only.</li>
+<li><code>batchSeq</code>: 1-based, strictly increasing per scan. Keep a local journal of acked batches; after a crash, resume from the first un-acked one. (Server-side replay dedup is not enforced yet — re-sending an acked batch is harmless because writes are upserts, but don't rely on it for counting.)</li>
+<li>Response echoes <code>{ endpointScanId, batchSeq, processed }</code>.</li>
+</ul>
+<h3>2.4 <code>POST V1/DiscoveryScanComplete</code> — always the last call</h3>
+<pre><code>
+{
+  "endpointScanId": 5012,
+  "endpointId": 37,
+  "executedType": "Incremental",
+  "filesScanned": 96410,
+  "sensitiveFound": 2418,
+  "errorDetail": null,
+  "volumes": [
+    {
+      "driveLetter": "C", "kind": "Local", "fileSystem": "NTFS", "sizeGb": 512,
+      "encryptionStatus": "Encrypted", "encryptionMethod": "XTS-AES 256",
+      "suspendedSince": null,
+      "usnCursor": 1000451, "snapshotVersion": null,
+      "filesScanned": 48220, "sensitiveCount": 911, "unclassifiedCount": 610
+    },
+    {
+      "driveLetter": "E", "kind": "External", "fileSystem": "NTFS", "sizeGb": 2048,
+      "encryptionStatus": "Unencrypted",
+      "usnCursor": null,
+      "filesScanned": 13384, "sensitiveCount": 303, "unclassifiedCount": 94
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>executedType</code> = what actually ran (Full when you upgraded).</li>
+<li><strong><code>usnCursor</code></strong> = the new journal position after this scan — the server hands it back on the next poll; it is your incremental state. Volumes scanned by inventory-diff report <code>snapshotVersion</code> instead.</li>
+<li><strong>Encryption</strong>: read BitLocker per volume via WMI <code>Win32_EncryptableVolume</code> at scan end. <code>encryptionStatus</code>: <code>Encrypted</code> | <code>Partial</code> | <code>Suspended</code> | <code>Unencrypted</code>; include <code>encryptionMethod</code> (e.g. <code>XTS-AES 256</code>) when protected and <code>suspendedSince</code> when protection is paused.</li>
+<li>A volume you scanned last time but that is now absent (unplugged external, unmapped share): just omit it — the server deactivates it.</li>
+<li>Fatal failure: still call complete, with <code>errorDetail</code> set — the scan is recorded Failed instead of hanging until the Interrupted sweep.</li>
+<li><code>filesScanned</code> counts <strong>everything</strong> you enumerated, clean files included — this is where clean files are accounted for.</li>
+</ul>
+<h3>2.5 Error handling</h3>
+<ul>
+<li><strong>404</strong> on progress/batch/complete = the scan is not Running right now (superseded by a newer job, or swept Interrupted while you were away). Abandon the call and re-poll <code>GetDiscoveryScanJob</code>: if the scan was merely Interrupted you get the <strong>same</strong> <code>endpointScanId</code> back and resume; if it was superseded you get the newer job (or 204).</li>
+<li><strong>400</strong> = contract violation (missing id, &gt;500 files) — a bug to fix, not to retry.</li>
+</ul>
+<h2>3. Behaviour rules (agreed product decisions)</h2>
+<table><thead><tr>
+<th>Rule</th>
+<th>Decision</th>
+</tr></thead><tbody>
+<tr>
+<td>Files to classify</td>
+<td><strong>Identical to the transfer engine</strong> — same file-type list, same zip handling, same max-size guard. Everything else counts as clean without content reading (8.7)</td>
+</tr>
+<tr>
+<td>Rows to send</td>
+<td>Sensitive + unclassified only; clean = counters (8.1)</td>
+</tr>
+<tr>
+<td>Throttling</td>
+<td>Low-priority I/O + configurable CPU / files-per-second cap; scan runs while the user works — the machine must stay responsive (8.8)</td>
+</tr>
+<tr>
+<td>Offline at scan time</td>
+<td>Nothing special to do: the job stays claimable until the next scheduled run supersedes it — you pick it up on the next poll after boot (8.6)</td>
+</tr>
+<tr>
+<td>First scan of a volume</td>
+<td>Always full (nothing to be incremental against)</td>
+</tr>
+<tr>
+<td>One scan at a time</td>
+<td>Never run two discovery scans concurrently on a machine</td>
+</tr>
+</tbody></table>
+<h2>4. Suggested rollout</h2>
+<ol>
+<li>Build against QA (after APIM ops are registered — a gateway <code>404 {"statusCode":404}</code> means the operation isn't registered yet, not a wrong URL).</li>
+<li>Pilot on 2–3 endpoints: full scan → verify rows in the dashboard's endpoint detail → immediate incremental with no changes → expect 0 new/modified.</li>
+<li>Change-detection test: modify 3 files, delete 1 → incremental sends exactly 3 upserts + 1 Deleted.</li>
+<li>Kill the agent mid-scan → server shows Interrupted after 15 min → restart agent → poll returns the same scan → resume from last acked batch.</li>
+<li>We then run the P4 load test together before rolling to all endpoints.</li>
+</ol>
+<p><strong>Note:</strong> the QA database currently holds mock discovery data (marker <code>RequestedBy = -1</code>) so the dashboard works before your integration. We'll clean it out when your pilot starts.</p>
+
+<div class="doc-foot">Defensely DLP &middot; Data Discovery - EXE Agent Integration Guide &middot; generated 2026-09-11</div>
+</body></html>

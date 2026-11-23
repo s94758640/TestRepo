@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Code Repository Scanner API — Documentation</title>
+<style>
+  /* Every colour is a token so the dark theme is a redefinition, not a
+     second stylesheet. Components below reference tokens only. */
+  :root{
+    --page:#f1f5f9; --panel:#ffffff; --panel-2:#fafbfc; --ink:#0f172a;
+    --ink-2:#334155; --muted:#64748b; --line:#e2e8f0; --inlay:#f1f5f9;
+    --get:#16a34a; --post:#2563eb; --patch:#d97706; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5; --newline:#a7f3d0;
+    --warnbg:#fffbeb; --warnline:#fde68a;
+    --okbg:#ecfdf5; --okline:#a7f3d0;
+    --crit:#b91c1c; --critbg:#fef2f2; --critline:#fecaca;
+    --type:#9333ea; --req:#dc2626;
+    --header:linear-gradient(135deg,#1e293b,#0f172a); --header-fg:#ffffff; --header-sub:#cbd5e1;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0b1120; --panel:#131c2e; --panel-2:#18223a; --ink:#e8eefc;
+      --ink-2:#c3cee3; --muted:#93a1bd; --line:#27324b; --inlay:#1d2740;
+      --get:#34d399; --post:#60a5fa; --patch:#fbbf24; --code:#060a14; --code-fg:#e6edf3;
+      --accent:#60a5fa; --chip:#23305a; --chip-fg:#c7d6ff;
+      --new:#34d399; --newbg:#112a24; --newline:#1f5e4c;
+      --warnbg:#2a2312; --warnline:#5e4a1f;
+      --okbg:#112a24; --okline:#1f5e4c;
+      --crit:#f87171; --critbg:#2a1414; --critline:#5e1f1f;
+      --type:#c084fc; --req:#f87171;
+      --header:linear-gradient(135deg,#1b2742,#0b1120); --header-fg:#f1f5f9; --header-sub:#9fb0d0;
+    }
+  }
+  /* The viewer's own toggle has to win over the OS preference, both ways. */
+  :root[data-theme="dark"]{
+    --page:#0b1120; --panel:#131c2e; --panel-2:#18223a; --ink:#e8eefc;
+    --ink-2:#c3cee3; --muted:#93a1bd; --line:#27324b; --inlay:#1d2740;
+    --get:#34d399; --post:#60a5fa; --patch:#fbbf24; --code:#060a14; --code-fg:#e6edf3;
+    --accent:#60a5fa; --chip:#23305a; --chip-fg:#c7d6ff;
+    --new:#34d399; --newbg:#112a24; --newline:#1f5e4c;
+    --warnbg:#2a2312; --warnline:#5e4a1f;
+    --okbg:#112a24; --okline:#1f5e4c;
+    --crit:#f87171; --critbg:#2a1414; --critline:#5e1f1f;
+    --type:#c084fc; --req:#f87171;
+    --header:linear-gradient(135deg,#1b2742,#0b1120); --header-fg:#f1f5f9; --header-sub:#9fb0d0;
+  }
+  :root[data-theme="light"]{
+    --page:#f1f5f9; --panel:#ffffff; --panel-2:#fafbfc; --ink:#0f172a;
+    --ink-2:#334155; --muted:#64748b; --line:#e2e8f0; --inlay:#f1f5f9;
+    --get:#16a34a; --post:#2563eb; --patch:#d97706; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5; --newline:#a7f3d0;
+    --warnbg:#fffbeb; --warnline:#fde68a;
+    --okbg:#ecfdf5; --okline:#a7f3d0;
+    --crit:#b91c1c; --critbg:#fef2f2; --critline:#fecaca;
+    --type:#9333ea; --req:#dc2626;
+    --header:linear-gradient(135deg,#1e293b,#0f172a); --header-fg:#ffffff; --header-sub:#cbd5e1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--page);line-height:1.5}
+  header.top{background:var(--header);color:var(--header-fg);padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:var(--header-sub);font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:280px;flex:0 0 280px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;font-size:13px}
+  nav.side a:hover{background:var(--inlay)}
+  nav.side a:focus-visible,main a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  main{flex:1;padding:24px 32px;min-width:0}
+  .intro{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:24px}
+  .intro h2{margin-top:0}
+  .kv{font-size:14px}
+  .kv code{background:var(--inlay);padding:2px 6px;border-radius:4px;font-size:13px}
+  .endpoint{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+  .endpoint > .head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel-2);flex-wrap:wrap}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:4px 10px;border-radius:6px;letter-spacing:.04em}
+  .method.post{background:var(--post)} .method.get{background:var(--get)} .method.patch{background:var(--patch)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600}
+  .body{padding:18px 22px}
+  .desc{color:var(--ink-2);margin:0 0 14px}
+  h5.section{margin:18px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  /* Reference tables scroll inside themselves rather than pushing the page. */
+  .intro > table,.body > table{display:block;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  td code{background:var(--inlay);padding:1px 5px;border-radius:4px}
+  .type{color:var(--type);font-family:ui-monospace,monospace;font-size:12px}
+  .req{color:var(--req);font-size:11px;font-weight:700}
+  .opt{color:var(--muted);font-size:11px;font-weight:600}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .note{background:var(--warnbg);border:1px solid var(--warnline);border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .ok{background:var(--okbg);border:1px solid var(--okline);border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .crit{background:var(--critbg);border:1px solid var(--critline);border-radius:8px;padding:10px 14px;font-size:13px;margin:10px 0}
+  .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;margin-right:8px}
+  @media(max-width:1000px){nav.side{display:none}}
+  .tag{font-size:11px;color:var(--muted)}
+  h3.group{margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent);font-size:16px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Code Repository Scanner API — Documentation</h1>
+  <p>Connect a Git host · crawl its repositories · find committed credentials · for the UI team</p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Getting started</h4>
+  <a href="#overview">What this is</a>
+  <a href="#vs-cloud">Code vs cloud storage</a>
+  <a href="#conventions">Conventions &amp; headers</a>
+  <h4>Connecting</h4>
+  <a href="#connect1">1. List providers</a>
+  <a href="#connect2">2. Create the connector</a>
+  <a href="#connect3">3. Test it</a>
+  <h4>Scanning</h4>
+  <a href="#scan1">4. Start a scan</a>
+  <a href="#scan2">5. Watch it</a>
+  <a href="#scan3">6. Cancel</a>
+  <h4>Results</h4>
+  <a href="#res0">Rule catalog</a>
+  <a href="#res1">Repositories grid</a>
+  <a href="#res2">Findings grid</a>
+  <a href="#res3">Summary tiles</a>
+  <a href="#res4">Resolve a finding</a>
+  <h4>Reference</h4>
+  <a href="#states">States &amp; vocabulary</a>
+  <a href="#gotchas">Gotchas</a>
+</nav>
+
+<main>
+
+<section class="intro" id="overview">
+  <h2>What this is</h2>
+  <p class="kv">Connect a Git host — Azure Repos, GitHub, GitLab or Bitbucket — and the crawler reads every repository it can see, scans the files for committed credentials, and records what it finds with the path and line. The console shows two grids: <strong>Repositories</strong> (what is connected and what each holds) and <strong>Findings</strong> (one row per credential).</p>
+  <p class="kv">A code connector is created, tested, scanned and cancelled through <strong>the same endpoints as a cloud storage connector</strong>. Only the results live elsewhere. That split is the single most important thing on this page — see below.</p>
+  <div class="note"><strong>Credential values are never stored.</strong> A finding carries a <code>maskedValue</code>, the rule that matched, and the path and line. The secret itself is not persisted anywhere.</div>
+</section>
+
+<section class="intro" id="vs-cloud">
+  <h2>Code vs cloud storage — what is shared, what is not</h2>
+  <p class="kv">One connector table and one scan queue serve both. Nothing below them is shared.</p>
+  <table>
+    <tr><th></th><th>Cloud storage (OneDrive, SharePoint, Box…)</th><th>Code repositories (Azure Repos, GitHub…)</th></tr>
+    <tr><td><strong>Create / test</strong></td><td colspan="2"><code>cloud/connectors</code>, <code>cloud/connectors/test</code> — <em>same for both</em></td></tr>
+    <tr><td><strong>Start / cancel a scan</strong></td><td colspan="2"><code>cloud/scans</code>, <code>cloud/scans/cancel</code> — <em>same for both</em></td></tr>
+    <tr><td><strong>Connector kind</strong></td><td><code>CloudStorage</code></td><td><code>Code</code></td></tr>
+    <tr><td><strong>Results live in</strong></td><td><code>cloud/containers</code>, <code>cloud/files</code></td><td><code>code/repositories</code>, <code>code/findings</code></td></tr>
+    <tr><td><strong>Unit of scope</strong></td><td>container (drive, site, library)</td><td>repository</td></tr>
+    <tr><td><strong>Incremental cursor</strong></td><td>delta token per container</td><td>last scanned commit (HEAD SHA) per repository</td></tr>
+  </table>
+  <div class="crit"><strong>Do not judge a code connector from the cloud grid.</strong> On <code>cloud/connectors</code>, a code connector permanently reports <code>containerCount: 0</code>, <code>fileCount: 0</code>, <code>sensitiveFiles: 0</code> and <code>totalSize: "0 Bytes"</code> — those count cloud containers and cloud files, which a repository never becomes. A connector scanning forty repositories still shows zeroes there. Read <code>code/repositories</code> and <code>code/findings</code> instead.</div>
+</section>
+
+<section class="intro" id="conventions">
+  <h2>Conventions &amp; headers</h2>
+  <table>
+    <tr><th>Header</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>ClientGUID</code></td><td><span class="req">required</span></td><td>Tenant identifier — routes to the correct tenant database.</td></tr>
+    <tr><td><code>Authorization</code></td><td><span class="req">required</span></td><td><code>Bearer &lt;jwt&gt;</code>. Every endpoint on this page needs a token.</td></tr>
+    <tr><td><code>Content-Type</code></td><td><span class="req">required</span></td><td><code>application/json</code>.</td></tr>
+  </table>
+  <div class="note">
+    <strong>Envelope.</strong> Every response is <code>{ "success", "message", "data", "errors" }</code>. The samples below show the <code>data</code> contents only.<br/>
+    <strong>Casing.</strong> Responses are camelCase. Grid filter keys inside <code>exactFilters</code> / <code>likeFilters</code> are column names and keep their PascalCase spelling.<br/>
+    <strong>Dates.</strong> ISO-8601 UTC on the wire.
+  </div>
+</section>
+
+<h3 class="group">Connecting a Git host</h3>
+
+<div class="endpoint" id="connect1">
+  <div class="head"><span class="step">1</span><span class="method get">GET</span><span class="path">/cloud/providers</span></div>
+  <div class="body">
+    <p class="desc">Every provider the wizard can offer, with the field labels that provider's own console uses. Filter to the code ones by <code>kind: "Code"</code>.</p>
+    <table>
+      <tr><th>Provider</th><th>Tenant field is called</th><th>Auth method recorded</th></tr>
+      <tr><td><code>AzureRepos</code></td><td>Organisation</td><td><code>AppKey</code></td></tr>
+      <tr><td><code>GitHub</code></td><td>Organisation</td><td><code>AppKey</code></td></tr>
+      <tr><td><code>GitLab</code></td><td>Group</td><td><code>AppKey</code></td></tr>
+      <tr><td><code>Bitbucket</code></td><td>Workspace</td><td><code>AppKey</code></td></tr>
+    </table>
+    <p class="kv">Use the labels from this response in the form. "Organisation" for Azure Repos and "Workspace" for Bitbucket are the words the admin is reading off the other screen; <code>externalTenantId</code> means nothing to them.</p>
+  </div>
+</div>
+
+<div class="endpoint" id="connect2">
+  <div class="head"><span class="step">2</span><span class="method post">POST</span><span class="path">/cloud/connectors</span></div>
+  <div class="body">
+    <p class="desc">Creates the connector. Same endpoint and same body as a cloud storage connector; the provider decides the rest.</p>
+<pre>{
+  "provider": "AzureRepos",
+  "displayName": "Defensely repos",
+  "externalTenantId": "ManageEndPoints",
+  "clientId": "8b0513cd-f620-4394-9e59-49fa95ac557e",
+  "clientSecret": "&lt;service principal secret or PAT&gt;",
+  "credentials": { "project": "Defensely" }
+}</pre>
+    <p class="kv">The connector is created with <code>status: "Pending"</code> and <code>authMethod: "AppKey"</code>. It is not usable until it has been tested or has completed a scan.</p>
+    <div class="note"><strong>One connector per account.</strong> Creating a second connector for a provider account that is already connected returns <code>400</code> naming the existing one. Update that connector's credentials, or remove it first — re-running the wizard after a rejected credential used to leave a duplicate behind each time.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="connect3">
+  <div class="head"><span class="step">3</span><span class="method post">POST</span><span class="path">/cloud/connectors/test</span></div>
+  <div class="body">
+    <p class="desc">Proves the credential and reports the scope it can see. Run it before the first scan.</p>
+<pre>{ "cloudConnectorId": 7 }</pre>
+    <h5 class="section">Response — data</h5>
+<pre>{
+  "success": true,
+  "error": null,
+  "containers": [
+    { "name": "Defensely / Defensely-WebAPI",  "cloudContainerId": 0, "externalId": "" },
+    { "name": "Defensely / Defensely-WebSite", "cloudContainerId": 0, "externalId": "" }
+  ]
+}</pre>
+    <div class="ok"><strong><code>cloudContainerId: 0</code> and an empty <code>externalId</code> are correct here</strong>, not a half-finished connection. The scope is reported through the same <code>containers</code> field the storage providers use so the wizard needs no second shape; a repository gets no id on our side until the first crawl writes one. Render <code>name</code> — it carries <code>project / repo</code>.</div>
+    <p class="kv">On success the connector moves to <code>Connected</code> and <code>lastValidatedAt</code> is stamped. On failure it moves to <code>Failed</code> with the reason in <code>lastError</code>, and <code>data.error</code> carries the same text — show it as-is, it names what to fix at the provider.</p>
+  </div>
+</div>
+
+<h3 class="group">Scanning</h3>
+
+<div class="endpoint" id="scan1">
+  <div class="head"><span class="step">4</span><span class="method post">POST</span><span class="path">/cloud/scans</span></div>
+  <div class="body">
+    <p class="desc">Queues a crawl. A worker picks it up on its next poll — this returns as soon as the job is queued, it does not wait for the scan.</p>
+<pre>{ "cloudConnectorId": 7, "scanType": "Full" }</pre>
+    <table>
+      <tr><th>scanType</th><th>Does</th><th>Use when</th></tr>
+      <tr><td><code>Full</code></td><td>Forgets every repository's last scanned commit and reads them all again.</td><td>First run, after changing rules, or when you want a clean re-read.</td></tr>
+      <tr><td><code>Incremental</code></td><td>Skips any repository whose HEAD has not moved since its last successful scan.</td><td>Routine and scheduled runs. This is what makes a daily scan across hundreds of repositories affordable.</td></tr>
+    </table>
+    <div class="note"><strong>An Incremental scan finishing in seconds with <code>filesSeen: 0</code> is correct</strong> when nothing has been committed since the last run. Every repository took the skip. If a <em>Full</em> scan does that, something is wrong — tell the API team.</div>
+    <div class="note"><strong>One active scan per connector.</strong> Queueing while one is already <code>Queued</code>, <code>Running</code> or <code>Cancelling</code> returns <code>400</code> naming the job. Cancel it first. A job whose worker has died does not block a new one.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="scan2">
+  <div class="head"><span class="step">5</span><span class="method post">POST</span><span class="path">/cloud/scans/list</span></div>
+  <div class="body">
+    <p class="desc">Scan history and live progress. <code>cloud/connectors</code> also carries the latest job per connector, which is what the grid's status chip reads.</p>
+    <h5 class="section">The fields that matter on a code scan</h5>
+    <table>
+      <tr><th>Field</th><th>Means</th></tr>
+      <tr><td><code>status</code></td><td><span class="pill">Queued</span><span class="pill">Running</span><span class="pill">Cancelling</span><span class="pill">Stalled</span><span class="pill">Completed</span><span class="pill">Failed</span><span class="pill">Cancelled</span><span class="pill">Stopped</span></td></tr>
+      <tr><td><code>startedAt</code></td><td>Null means no worker has claimed it yet. The first thing to check when a scan "does nothing".</td></tr>
+      <tr><td><code>filesSeen</code></td><td><strong>Files</strong> read across all repositories. Moves during the crawl.</td></tr>
+      <tr><td><code>filesExtracted</code></td><td><strong>Repositories</strong> scanned — not files. The column means something different here than on a cloud scan.</td></tr>
+      <tr><td><code>filesFailed</code></td><td><strong>Repositories that could not be scanned.</strong> Check this even when the status is <code>Completed</code>.</td></tr>
+      <tr><td><code>lastHeartbeatAt</code></td><td>Last sign of life. A <code>Running</code> job with a stale heartbeat is reported as <code>Stalled</code>.</td></tr>
+    </table>
+    <div class="crit"><strong><code>Completed</code> alone is not success.</strong> A scan reports <code>Completed</code> even when every repository failed — the failures are counted in <code>filesFailed</code> and the crawl continues past them on purpose, so one unreadable repository cannot end a scan of three hundred. Treat <code>Completed</code> with <code>filesFailed &gt; 0</code> as a partial result and read <code>lastError</code> on the affected rows in <a href="#res1">the repositories grid</a>.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="scan3">
+  <div class="head"><span class="step">6</span><span class="method post">POST</span><span class="path">/cloud/scans/cancel</span></div>
+  <div class="body">
+    <p class="desc">Asks a scan to stop.</p>
+<pre>{ "cloudScanJobId": 66 }</pre>
+    <table>
+      <tr><th>Job was</th><th>Becomes</th><th>Why</th></tr>
+      <tr><td><code>Queued</code></td><td><code>Cancelled</code> immediately</td><td>Never started; no worker to notify.</td></tr>
+      <tr><td><code>Running</code>, worker alive</td><td><code>Cancelling</code>, then <code>Cancelled</code></td><td>The worker stops at its next batch boundary, where everything is saved.</td></tr>
+      <tr><td><code>Running</code>, worker gone</td><td><code>Cancelled</code> immediately</td><td>Nobody is listening, so there is nothing to wait for.</td></tr>
+      <tr><td>Already finished</td><td>unchanged</td><td>The caller wanted it stopped, and it is.</td></tr>
+    </table>
+    <div class="note"><strong><code>Cancelling</code> still counts as scanning</strong> — <code>isScanning</code> stays true until it settles. Show it as a distinct state rather than as "Running", so a user who pressed Cancel can see that it registered.</div>
+  </div>
+</div>
+
+<h3 class="group">Results</h3>
+
+<div class="endpoint" id="res1">
+  <div class="head"><span class="method post">POST</span><span class="path">/code/repositories</span></div>
+  <div class="body">
+    <p class="desc">The Repositories grid — what is connected and what each holds. Standard grid contract: <code>page</code>, <code>pageSize</code>, <code>sortBy</code>, <code>sortDescending</code>, <code>exactFilters</code>, <code>likeFilters</code>.</p>
+    <p class="kv">Sort and filter on the row's own fields: <code>Name</code>, <code>Provider</code>, <code>Visibility</code>, <code>FindingCount</code>, <code>CriticalCount</code>, <code>LastScanAt</code>.</p>
+<pre>{ "page": 1, "pageSize": 25, "sortBy": "FindingCount", "sortDescending": true }</pre>
+    <h5 class="section">Response — data</h5>
+<pre>{
+  "totalCount": 42,
+  "data": [
+    {
+      "codeRepositoryId": 118,
+      "cloudConnectorId": 7,
+      "provider": "AzureRepos",
+      "name": "Defensely-WebAPI",
+      "namespace": "Defensely",
+      "webUrl": "https://dev.azure.com/…/_git/Defensely-WebAPI",
+      "visibility": "Private",
+      "defaultBranch": "main",
+      "findingCount": 12,
+      "criticalCount": 2,
+      "filesScanned": 1877,
+      "lastScanAt": "2026-11-04T02:41:03Z",
+      "lastAttemptAt": "2026-11-04T02:41:03Z",
+      "isScanned": true,
+      "scanFailed": false,
+      "lastError": null,
+      "isExcluded": false,
+      "isDeleted": false
+    }
+  ]
+}</pre>
+    <div class="ok"><strong>Three states, not two.</strong> <code>isScanned: false</code> means never reached. <code>scanFailed: true</code> with <code>lastError</code> means it was tried and could not be read. <code>isScanned: true</code> with <code>findingCount: 0</code> means scanned and clean. The grid must not show the first two as a clean result — "no findings" and "no answer" are opposite things.</div>
+    <p class="kv"><code>isDeleted</code> marks a repository that is gone at the provider. It is kept because its findings outlive it.</p>
+  </div>
+</div>
+
+<div class="endpoint" id="res0">
+  <div class="head"><span class="method get">GET</span><span class="path">/code/rules</span></div>
+  <div class="body">
+    <p class="desc">The scanner's rule catalog — what it looks for. Feeds the findings grid's Rule filter, and gives <code>ruleName</code> on a finding somewhere to be explained from.</p>
+    <h5 class="section">Response — data</h5>
+<pre>[
+  { "ruleId": "private-key",             "name": "Private key block",                "confidence": 99, "severity": "Critical" },
+  { "ruleId": "aws-access-key",          "name": "AWS access key id",                "confidence": 95, "severity": "Critical" },
+  { "ruleId": "azure-storage-key",       "name": "Azure storage connection string",  "confidence": 95, "severity": "Critical" },
+  { "ruleId": "github-token",            "name": "GitHub token",                     "confidence": 95, "severity": "Critical" },
+  { "ruleId": "stripe-key",              "name": "Stripe secret key",                "confidence": 95, "severity": "Critical" },
+  { "ruleId": "slack-token",             "name": "Slack token",                      "confidence": 90, "severity": "High"     },
+  { "ruleId": "db-connection-password",  "name": "Password in a connection string",  "confidence": 55, "severity": "High"     },
+  { "ruleId": "google-api-key",          "name": "Google API key — check its restrictions", "confidence": 90, "severity": "Medium" },
+  { "ruleId": "jwt",                     "name": "JSON web token",                   "confidence": 60, "severity": "Medium"   },
+  { "ruleId": "generic-assigned-secret", "name": "Secret assigned to a variable",    "confidence": 40, "severity": "Medium"   }
+]</pre>
+    <p class="kv">Worst first, then most confident — a legend reads top-down. Pass <code>ruleId</code> values back in <a href="#res2"><code>code/findings</code></a>'s <code>ruleIds</code>.</p>
+    <div class="note"><strong>Severity here is the floor, not the value on the row.</strong> It is the rule's severity <em>before</em> the repository's visibility is considered: the same key found in a public repository is reported at a higher severity on the finding itself. A legend built from this list will not always match the chips in the grid, and that is correct.</div>
+    <div class="note"><strong>The default <code>minConfidence: 50</code> hides exactly one rule</strong> — <code>generic-assigned-secret</code> at 40. Everything else is above the line. Lower the threshold to see it; it catches real leaks and most of the noise.</div>
+    <div class="ok">The matching <strong>pattern is deliberately not returned</strong>. It is detection logic, and publishing it tells anyone who can open the console precisely what the scanner does and does not catch. No database is touched by this call — the list is the same one the crawl runs.</div>
+  </div>
+</div>
+
+<div class="endpoint" id="res2">
+  <div class="head"><span class="method post">POST</span><span class="path">/code/findings</span></div>
+  <div class="body">
+    <p class="desc">The Findings grid — one row per credential, with its path and line.</p>
+    <h5 class="section">Request</h5>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr>
+      <tr><td><code>cloudConnectorId</code></td><td class="type">long?</td><td>all</td><td>Narrow to one connector.</td></tr>
+      <tr><td><code>codeRepositoryId</code></td><td class="type">long?</td><td>all</td><td>Narrow to one repository.</td></tr>
+      <tr><td><code>severities</code></td><td class="type">string[]</td><td>all</td><td><code>Critical</code> | <code>High</code> | <code>Medium</code> | <code>Low</code>. Any match.</td></tr>
+      <tr><td><code>ruleIds</code></td><td class="type">string[]</td><td>all</td><td>Rule ids from <a href="#res0"><code>code/rules</code></a> — <code>aws-access-key</code>, <code>github-token</code>. Any match. Matched on the <strong>id</strong>, which never changes, not the display name.</td></tr>
+      <tr><td><code>visibilities</code></td><td class="type">string[]</td><td>all</td><td><code>Public</code> | <code>Internal</code> | <code>Private</code>.</td></tr>
+      <tr><td><code>minConfidence</code></td><td class="type">int</td><td><strong>50</strong></td><td>Hides the generic rules. Lower it to see everything.</td></tr>
+      <tr><td><code>includeResolved</code></td><td class="type">bool</td><td><strong>false</strong></td><td>The grid is a work list by default.</td></tr>
+      <tr><td><code>includeAbsent</code></td><td class="type">bool</td><td><strong>true</strong></td><td>Findings no longer at HEAD are shown — see below.</td></tr>
+      <tr><td><code>search</code></td><td class="type">string</td><td>—</td><td>Matches the file path, the rule name or the repository.</td></tr>
+    </table>
+<pre>{ "page": 1, "pageSize": 25, "severities": ["Critical","High"], "visibilities": ["Public"] }</pre>
+    <h5 class="section">Response — data</h5>
+<pre>{
+  "totalCount": 37,
+  "data": [
+    {
+      "repoFindingId": 9041,
+      "codeRepositoryId": 118,
+      "repositoryName": "Defensely-WebAPI",
+      "namespace": "Defensely",
+      "provider": "AzureRepos",
+      "visibility": "Private",
+      "filePath": "src/appsettings.json",
+      "lineNumber": 42,
+      "ruleId": "aws-access-key",
+      "ruleName": "AWS access key",
+      "findingType": "Secret",
+      "maskedValue": "AKIA••••••••••••7Q4D",
+      "confidence": 95,
+      "severity": "Critical",
+      "isPresent": true,
+      "isResolved": false,
+      "resolutionReason": null,
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "firstSeenAt": "2026-03-11T09:14:00Z",
+      "lastSeenAt": "2026-11-04T02:41:03Z",
+      "ageDays": 238,
+      "sourceUrl": "https://dev.azure.com/…/_git/Defensely-WebAPI?path=/src/appsettings.json&amp;line=42"
+    }
+  ]
+}</pre>
+    <div class="crit"><strong><code>isPresent: false</code> does not mean fixed, and the UI must not say it does.</strong> It means the line is gone from HEAD. The secret is still in git history and the key is still live until somebody rotates it. These are the findings most often wrongly believed closed, which is why they are included by default — label them something like "removed from code, not rotated", never "resolved".</div>
+    <p class="kv"><code>ageDays</code> is from <code>firstSeenAt</code>, and it is the number that matters in an incident: a key exposed for eight months is a different conversation from one exposed this morning.</p>
+    <p class="kv"><code>sourceUrl</code> is a deep link to the line at the provider, or null when the repository URL is unknown. Hide the action rather than offering a link that goes nowhere.</p>
+  </div>
+</div>
+
+<div class="endpoint" id="res3">
+  <div class="head"><span class="method get">GET</span><span class="path">/code/findings/summary</span></div>
+  <div class="body">
+    <p class="desc">The tiles above the findings grid. Describes the whole population, not the current page. Optional <code>?cloudConnectorId=7</code> narrows it.</p>
+<pre>{
+  "totalFindings": 184,
+  "critical": 12,
+  "high": 41,
+  "medium": 88,
+  "low": 43,
+  "inPublicRepositories": 7,
+  "removedButNotRotated": 23,
+  "repositoriesScanned": 42,
+  "repositoriesWithFindings": 19
+}</pre>
+    <table>
+      <tr><th>Tile</th><th>What it counts</th></tr>
+      <tr><td><code>inPublicRepositories</code></td><td>Findings in repositories anyone on the internet can read. The tile to act on today.</td></tr>
+      <tr><td><code>removedButNotRotated</code></td><td>No longer at HEAD but never resolved — somebody deleted the line and moved on. The key is still live.</td></tr>
+      <tr><td><code>repositoriesScanned</code> / <code>repositoriesWithFindings</code></td><td>Coverage, so "12 criticals" can be read against how much was actually looked at.</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="endpoint" id="res4">
+  <div class="head"><span class="method post">POST</span><span class="path">/code/findings/resolve</span></div>
+  <div class="body">
+    <p class="desc">Records that a person dealt with a finding. Only a person can do this — a scan can see whether the line is still there, which is a different question.</p>
+<pre>{ "repoFindingId": 9041, "reason": "Key rotated in AWS and the old one revoked." }</pre>
+    <table>
+      <tr><th>Field</th><th>Type</th><th></th><th>Notes</th></tr>
+      <tr><td><code>repoFindingId</code></td><td class="type">long</td><td><span class="req">required</span></td><td>—</td></tr>
+      <tr><td><code>reason</code></td><td class="type">string</td><td><span class="req">required</span></td><td>Rejected with <code>400</code> if blank.</td></tr>
+    </table>
+    <p class="kv">Returns the updated finding row. The caller is recorded from the token in <code>resolvedBy</code>, with <code>resolvedAt</code>.</p>
+    <div class="note"><strong>The reason is required on purpose.</strong> The three outcomes — rotated, false positive, risk accepted — need telling apart afterwards, and that is the first question in any incident review. A resolution with no reason is a row nobody can audit. Offer the three as presets in the UI rather than a free-text box alone.</div>
+  </div>
+</div>
+
+<section class="intro" id="states">
+  <h2>States &amp; vocabulary</h2>
+  <h5 class="section">Connector status</h5>
+  <table>
+    <tr><td><code>Pending</code></td><td>Created, never proven. Neither a test nor a completed scan has succeeded yet.</td></tr>
+    <tr><td><code>Connected</code></td><td>A test or a completed crawl has proven the credential.</td></tr>
+    <tr><td><code>Failed</code></td><td>The last test failed; <code>lastError</code> says why.</td></tr>
+    <tr><td><code>Disabled</code></td><td>Removed by an admin. Soft delete — the findings already discovered stay queryable.</td></tr>
+  </table>
+  <h5 class="section">Finding severity</h5>
+  <p class="kv">Derived from the rule <em>and</em> the repository's visibility, so the same leaked key is a worse problem in a public repository than a private one. A repository made public turns every finding in it into a higher severity on the next scan.</p>
+  <h5 class="section">Two flags that are often confused</h5>
+  <table>
+    <tr><th></th><th><code>isPresent</code></th><th><code>isResolved</code></th></tr>
+    <tr><td>Set by</td><td>the scanner</td><td>a person</td></tr>
+    <tr><td>Means</td><td>still at HEAD</td><td>somebody dealt with it</td></tr>
+    <tr><td>False means</td><td>the line is gone — <strong>not</strong> that the key is safe</td><td>still outstanding</td></tr>
+  </table>
+</section>
+
+<section class="intro" id="gotchas">
+  <h2>Gotchas</h2>
+  <table>
+    <tr><th>You see</th><th>It means</th></tr>
+    <tr><td>Connector shows 0 containers, 0 files on <code>cloud/connectors</code></td><td>Normal for a code connector. Those count cloud containers and files. Read <code>code/repositories</code>.</td></tr>
+    <tr><td>Scan <code>Completed</code> in seconds, <code>filesSeen: 0</code></td><td>Incremental scan, nothing committed since the last run — every repository took the skip. Expected. Run a <code>Full</code> scan to force a re-read.</td></tr>
+    <tr><td>Scan <code>Completed</code> but no findings appeared</td><td>Check <code>filesFailed</code>. A scan completes even when every repository failed.</td></tr>
+    <tr><td>Scan sits at <code>Queued</code>, <code>startedAt</code> null</td><td>No worker has claimed it. The crawl runs in a separate service from the API.</td></tr>
+    <tr><td><code>Running</code> but nothing moving</td><td>Compare <code>filesSeen</code> a minute apart. Frozen means it is heading for <code>Stalled</code>.</td></tr>
+    <tr><td>Test succeeds but connector still <code>Pending</code></td><td>Should not happen — report it. A successful test writes <code>Connected</code> and <code>lastValidatedAt</code>.</td></tr>
+    <tr><td><code>filesExtracted</code> looks far too small</td><td>It counts repositories, not files, on a code scan. <code>filesSeen</code> is the file count.</td></tr>
+  </table>
+</section>
+
+<p class="tag" style="margin:30px 0 10px">Code repository scanner · one connector table and one scan queue shared with cloud discovery, separate results.</p>
+
+</main>
+</div>
+</body>
+</html>

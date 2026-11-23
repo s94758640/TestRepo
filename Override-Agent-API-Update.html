@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Override API Update</title>
+<style>
+  /* Layout: a single reading column, one card per endpoint, code samples full width.
+     Tokens: slate neutrals with a blue accent, mirrored for dark. */
+  :root{
+    --bg:#f1f5f9; --panel:#ffffff; --fg:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --accent:#2563eb; --accent-soft:#eef2ff; --accent-fg:#3730a3;
+    --get:#16a34a; --post:#2563eb;
+    --code:#0b1020; --code-fg:#e6edf3;
+    --new:#059669; --new-bg:#ecfdf5; --new-line:#a7f3d0;
+    --warn-bg:#fffbeb; --warn-line:#fde68a;
+    --ok-bg:#ecfdf5; --ok-line:#a7f3d0;
+    --head-from:#1e293b; --head-to:#0f172a; --head-fg:#ffffff; --head-sub:#cbd5e1;
+    --chip:#f1f5f9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b1220; --panel:#111a2b; --fg:#e8eefc; --muted:#94a3b8; --line:#1f2b41;
+      --accent:#60a5fa; --accent-soft:#17233b; --accent-fg:#bfdbfe;
+      --get:#4ade80; --post:#60a5fa;
+      --code:#060b16; --code-fg:#dbe6f6;
+      --new:#34d399; --new-bg:#0f2a22; --new-line:#1f5f4a;
+      --warn-bg:#2a2410; --warn-line:#5c4a12;
+      --ok-bg:#0f2a22; --ok-line:#1f5f4a;
+      --head-from:#16233a; --head-to:#0b1220; --head-fg:#f8fafc; --head-sub:#9fb3d1;
+      --chip:#17233b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1220; --panel:#111a2b; --fg:#e8eefc; --muted:#94a3b8; --line:#1f2b41;
+    --accent:#60a5fa; --accent-soft:#17233b; --accent-fg:#bfdbfe;
+    --get:#4ade80; --post:#60a5fa;
+    --code:#060b16; --code-fg:#dbe6f6;
+    --new:#34d399; --new-bg:#0f2a22; --new-line:#1f5f4a;
+    --warn-bg:#2a2410; --warn-line:#5c4a12;
+    --ok-bg:#0f2a22; --ok-line:#1f5f4a;
+    --head-from:#16233a; --head-to:#0b1220; --head-fg:#f8fafc; --head-sub:#9fb3d1;
+    --chip:#17233b;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);line-height:1.55;
+       font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px}
+  header.top{background:linear-gradient(135deg,var(--head-from),var(--head-to));color:var(--head-fg)}
+  header.top .inner{max-width:900px;margin:0 auto;padding-block:26px;
+       padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  header.top h1{margin:0 0 6px;font-size:23px;text-wrap:balance}
+  header.top p{margin:0;color:var(--head-sub);font-size:13.5px}
+  main{max-width:900px;margin:0 auto;padding-block:24px 48px;
+       padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:20px;overflow:hidden}
+  section > .head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+       padding:13px 18px;border-bottom:1px solid var(--line);background:var(--chip)}
+  section > .body{padding:16px 18px}
+  section.plain{padding:18px}
+  h2{margin:0 0 10px;font-size:17px;text-wrap:balance}
+  h3{margin:18px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  h3:first-child{margin-top:0}
+  p{margin:0 0 10px}
+  p:last-child{margin-bottom:0}
+  a{color:var(--accent)}
+  .method{font-weight:700;font-size:11.5px;color:#fff;padding:3px 9px;border-radius:6px;letter-spacing:.04em}
+  .method.post{background:var(--post);color:#04142e} .method.get{background:var(--get);color:#04240f}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;font-weight:600;min-width:0;word-break:break-word}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+  pre{background:var(--code);color:var(--code-fg);padding:13px 15px;border-radius:8px;overflow-x:auto;
+      font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  pre code{background:none;padding:0;color:inherit;font-size:inherit}
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  .type{color:var(--accent);font-family:ui-monospace,monospace;font-size:12px}
+  .new{display:inline-block;background:var(--new-bg);color:var(--new);border:1px solid var(--new-line);
+       padding:0 7px;border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.04em}
+  .pill{display:inline-block;background:var(--accent-soft);color:var(--accent-fg);
+        padding:2px 9px;border-radius:20px;font-size:11.5px;margin:2px 3px 2px 0}
+  .note{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:10px 13px;margin:10px 0}
+  .ok{background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:8px;padding:10px 13px;margin:10px 0}
+  .muted{color:var(--muted);font-size:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid2 > *{min-width:0}
+  @media(max-width:620px){.grid2{grid-template-columns:1fr}}
+  ol,ul{margin:0 0 10px;padding-left:20px}
+  li{margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <h1>Agent Override API Update</h1>
+    <p>For the EXE / agent team · 28 Oct 2026 · two additive changes to the override endpoints</p>
+  </div>
+</header>
+
+<main>
+
+<section class="plain">
+  <h2>What changed</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Change</th><th>Where</th><th>Agent impact</th></tr>
+    <tr>
+      <td><strong>Expiry is now reported</strong> — <code>isExpired</code> and <code>validUntil</code></td>
+      <td><code>CheckOverrideStatus</code>, <code>CheckMetaStatus</code></td>
+      <td>The agent can tell a live grant from a lapsed one without doing its own clock arithmetic.</td>
+    </tr>
+    <tr>
+      <td><strong>Channel is now recorded</strong> — <code>channelType</code> + <code>channelName</code></td>
+      <td><code>SubmitOverrideRequest</code> (in), status endpoints (out)</td>
+      <td>An override says <em>where</em> it applies: App/Teams, Site/OneDrive. Optional to send; always returned.</td>
+    </tr>
+  </table>
+  </div>
+  <div class="ok"><strong>Both are additive.</strong> No request field became required, no existing field changed meaning, and no status code moved. An agent build that ignores all of this keeps working exactly as it does today.</div>
+</section>
+
+<section class="plain">
+  <h2>The one behaviour to adopt</h2>
+  <p><code>isOverrideApproved</code> has <strong>not</strong> changed: it still reports the stored decision alone, so an approved override whose window closed three days ago still comes back <code>true</code>. That was left alone on purpose, because agents read that flag today and flipping it would have silently changed what gets released.</p>
+  <p>So the release check gains one condition:</p>
+<pre><code>// before
+if (status.IsOverrideApproved) Release();
+
+// now
+if (status.IsOverrideApproved &amp;&amp; !status.IsExpired) Release();</code></pre>
+  <div class="note"><strong>Do not add a channel condition unless you need one.</strong> <code>channelType</code> / <code>channelName</code> are informational for the agent — they describe the transfer the override was raised on. A null pair means "every channel", so treating null as a mismatch would hold transfers that should go through.</div>
+</section>
+
+<section>
+  <div class="head"><span class="method get">GET</span><span class="path">V1/CheckOverrideStatus?metaId={metaId}</span></div>
+  <div class="body">
+    <p class="muted">Container API equivalent: <code>GET /CheckOverrideStatus?metaId=</code> · unchanged request, four new response fields.</p>
+    <h3>Response <span class="muted">(inside the usual <code>{ success, message, data, errors }</code> envelope)</span></h3>
+<pre><code>{
+  "isOverrideApproved": true,
+  "message": "Override request is approved",
+  "metaId": "a19f…",
+  "hashId": null,
+  "enrichedId": 884213,
+  "overrideRequestId": "0f0c…",
+  "approvedAt": "2026-10-27T11:02:00Z",
+  "approvedBy": "admin@contoso.com",
+
+  "validUntil":  "2026-10-27T18:30:00Z",   // NEW
+  "isExpired":   false,                    // NEW
+  "channelType": "Site",                   // NEW
+  "channelName": "OneDrive",               // NEW
+
+  "landingLog": { … unchanged … }
+}</code></pre>
+    <h3>The new fields</h3>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Meaning</th></tr>
+      <tr>
+        <td><code>isExpired</code> <span class="new">NEW</span></td>
+        <td class="type">bool</td>
+        <td><code>true</code> once <code>validUntil</code> has passed, to the minute. <code>false</code> while the window is open <strong>and</strong> when there is no window at all — a pending, rejected or cancelled request was never open, so it is not expired.</td>
+      </tr>
+      <tr>
+        <td><code>validUntil</code> <span class="new">NEW</span></td>
+        <td class="type">DateTime?</td>
+        <td>When the granted window closes, UTC, <strong>server clock</strong>. Null while pending, on a rejected or cancelled request, and on an approval that was given no end. Never compute expiry from the endpoint's own clock — it can be wrong or deliberately set.</td>
+      </tr>
+      <tr>
+        <td><code>channelType</code> <span class="new">NEW</span></td>
+        <td class="type">string?</td>
+        <td><code>"App"</code> or <code>"Site"</code>. Null = every channel.</td>
+      </tr>
+      <tr>
+        <td><code>channelName</code> <span class="new">NEW</span></td>
+        <td class="type">string?</td>
+        <td><code>"Teams"</code>, <code>"OneDrive"</code>, or a bare host. Null = every channel.</td>
+      </tr>
+    </table>
+    </div>
+    <h3>Message text</h3>
+    <p>When a grant has lapsed, <code>message</code> now reads <em>"Override request is approved but expired at 2026-10-27 18:30:00Z"</em> instead of <em>"Override request is approved"</em>. Branch on <code>isExpired</code>, not on the sentence.</p>
+    <h3>Worked cases</h3>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Row state</th><th>isOverrideApproved</th><th>isExpired</th><th>validUntil</th><th>Release?</th></tr>
+      <tr><td>Approved, window open</td><td>true</td><td>false</td><td>future</td><td>yes</td></tr>
+      <tr><td>Approved, window closed</td><td>true</td><td><strong>true</strong></td><td>past</td><td><strong>no</strong></td></tr>
+      <tr><td>Pending admin approval</td><td>false</td><td>false</td><td>null</td><td>no</td></tr>
+      <tr><td>Rejected / cancelled</td><td>false</td><td>false</td><td>null</td><td>no</td></tr>
+      <tr><td>No request for this MetaId</td><td>false</td><td>false</td><td>null</td><td>no</td></tr>
+    </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><span class="method get">GET</span><span class="path">V1/CheckMetaStatus?metaId={metaId}</span></div>
+  <div class="body">
+    <p>Override status plus the MetaId's rename history. Carries the <strong>same four new fields</strong> at the same level — one shared mapper builds both responses, so the two endpoints and the two hosts cannot disagree. The <code>extensionChange</code> block is untouched.</p>
+  </div>
+</section>
+
+<section>
+  <div class="head"><span class="method post">POST</span><span class="path">V1/SubmitOverrideRequest</span></div>
+  <div class="body">
+    <p class="muted"><code>V1/SubmitPolicyOverrideRequest</code> is an alias with identical behaviour · container API: <code>POST /SubmitOverrideRequest</code>.</p>
+    <h3>Two optional request fields</h3>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>channelType</code> <span class="new">NEW</span></td><td class="type">string?</td><td><code>"App"</code> or <code>"Site"</code>.</td></tr>
+      <tr><td><code>channelName</code> <span class="new">NEW</span></td><td class="type">string?</td><td><code>"Teams"</code>, <code>"OneDrive"</code>, …</td></tr>
+    </table>
+    </div>
+<pre><code>{
+  "enrichedId": 884213,
+  "userId": 412,
+  "overrideType": "SelfOverride",
+  "businessJustification": "Vendor needs the signed Q3 statement before 5pm.",
+  "requestedDuration": 4,
+  "durationUnit": "Hours",
+
+  "channelType": "Site",      // NEW — optional
+  "channelName": "OneDrive"   // NEW — optional
+}</code></pre>
+    <h3>If you send nothing</h3>
+    <p>The server derives the pair from the activity's own application and URL, so an agent build that never heard of these fields still produces a usable channel. Sending them is worth it only when the agent knows something the log does not.</p>
+    <div class="tablewrap">
+    <table>
+      <tr><th>What you send</th><th>What is stored</th></tr>
+      <tr><td>Both fields</td><td>Exactly that.</td></tr>
+      <tr><td><code>channelName</code> only</td><td>Your name, plus the derived type when both describe the same channel, <code>"App"</code> otherwise. A named channel is never left untyped.</td></tr>
+      <tr><td>Neither</td><td>Both derived from the activity.</td></tr>
+    </table>
+    </div>
+    <p class="muted">Response shape is unchanged: <code>{ success, message, errorCode, overridesRemaining, accessExpiresAt }</code>. The refusal codes (<code>NOT_ALLOWED</code>, <code>LIMIT_EXCEEDED</code>, <code>DUPLICATE_REQUEST</code>) are unchanged, and no new one was added for channels — a channel never causes a refusal.</p>
+  </div>
+</section>
+
+<section class="plain">
+  <h2>Channel vocabulary</h2>
+  <div class="grid2">
+    <div>
+      <h3>App</h3>
+      <p>The application the user was working in.</p>
+      <p><span class="pill">Teams</span><span class="pill">Outlook</span><span class="pill">Slack</span><span class="pill">OneDrive</span><span class="pill">Dropbox</span><span class="pill">Skype</span><span class="pill">WhatsApp</span><span class="pill">Telegram</span><span class="pill">Zoom</span><span class="pill">WinSCP</span><span class="pill">FileZilla</span><span class="pill">File Explorer</span></p>
+      <p class="muted">An unrecognised application keeps its own name, minus the <code>.exe</code>: <code>acmesync.exe</code> → <code>Acmesync</code>.</p>
+    </div>
+    <div>
+      <h3>Site</h3>
+      <p>The web destination the file was going to.</p>
+      <p><span class="pill">OneDrive</span><span class="pill">SharePoint</span><span class="pill">Google Drive</span><span class="pill">Gmail</span><span class="pill">Outlook Web</span><span class="pill">Teams</span><span class="pill">Slack</span><span class="pill">Dropbox</span><span class="pill">Box</span><span class="pill">WeTransfer</span><span class="pill">GitHub</span><span class="pill">GitLab</span><span class="pill">ChatGPT</span><span class="pill">Claude</span><span class="pill">Gemini</span><span class="pill">LinkedIn</span><span class="pill">Facebook</span></p>
+      <p class="muted">An unrecognised host is used as-is, without <code>www.</code>: <code>vendor-portal.com</code>.</p>
+    </div>
+  </div>
+  <div class="ok"><strong>A browser is never the channel.</strong> Chrome uploading to OneDrive is a <em>OneDrive</em> transfer, so the rule is: a known non-browser application wins first, then the site, then whatever application was left.
+    <br/><code>chrome.exe</code> + <code>onedrive.live.com</code> → <code>Site</code> / <code>OneDrive</code>
+    <br/><code>teams.exe</code>, no URL → <code>App</code> / <code>Teams</code></div>
+  <div class="note"><strong>Null and empty are valid and mean "every channel"</strong> — which is how every override behaved before this existed. Rows written before the change, and any activity naming neither an application nor a URL, stay null. Treat null as "no channel restriction", never as a miss. Values are cut at 20 characters (type) and 100 (name) rather than rejected.</div>
+</section>
+
+<section class="plain">
+  <h2>Not changed</h2>
+  <ul>
+    <li><code>V1/SubmitPromptOverrideRequest</code>, <code>V1/CheckPromptOverrideStatus</code>, <code>V1/CancelPromptOverrideRequest</code> — prompt overrides store no channel (null = every channel), and <code>CheckPromptOverrideStatus</code> already took the window into account when answering <code>isOverrideApproved</code>.</li>
+    <li><code>V1/CancelOverrideRequest</code> — same body, same rules.</li>
+    <li>Allowances, duration ceilings, the policy override matrix, approver roles and every refusal code.</li>
+    <li>Auth: these routes stay anonymous until the agent credential scheme lands. <code>ClientGUID</code> is still required on every call.</li>
+  </ul>
+</section>
+
+<section class="plain">
+  <h2>Rollout order</h2>
+  <ol>
+    <li><strong>Database first.</strong> <code>AddChannelToOverrideRequest.sql</code> adds two nullable columns to <code>dlp."OverrideRequest"</code> and backfills a narrow set from the data already on each row. It runs per client database and is safe to re-run.</li>
+    <li><strong>Then the API</strong> — both hosts, together: the container API and ExeApi read and write the same table.</li>
+    <li><strong>Agent whenever.</strong> Nothing in the agent has to ship with it. Pick up <code>isExpired</code> when convenient; send the channel fields only if you want to override the server's derivation.</li>
+  </ol>
+  <div class="note">Until the API deploys, the four new fields are simply absent from the response — deserialise them as optional. Until the SQL runs, the API must not be deployed at all: every <code>OverrideRequest</code> query selects the two new columns.</div>
+</section>
+
+<section class="plain">
+  <h2>Route reference</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>ExeApi (destination)</th><th>Container API (what the agent calls today)</th><th>Touched</th></tr>
+    <tr><td><code>GET V1/CheckOverrideStatus</code></td><td><code>GET /CheckOverrideStatus</code></td><td>4 new response fields</td></tr>
+    <tr><td><code>GET V1/CheckMetaStatus</code></td><td><code>GET /CheckMetaStatus</code></td><td>4 new response fields</td></tr>
+    <tr><td><code>POST V1/SubmitOverrideRequest</code></td><td><code>POST /SubmitOverrideRequest</code></td><td>2 new optional request fields</td></tr>
+    <tr><td><code>POST V1/SubmitPolicyOverrideRequest</code></td><td><code>POST /SubmitPolicyOverrideRequest</code></td><td>alias of the above</td></tr>
+    <tr><td><code>POST V1/CancelOverrideRequest</code></td><td><code>POST /CancelOverrideRequest</code></td><td>—</td></tr>
+    <tr><td><code>POST V1/SubmitPromptOverrideRequest</code></td><td><code>POST /SubmitPromptOverrideRequest</code></td><td>—</td></tr>
+    <tr><td><code>GET V1/CheckPromptOverrideStatus</code></td><td><code>GET /CheckPromptOverrideStatus</code></td><td>—</td></tr>
+    <tr><td><code>POST V1/CancelPromptOverrideRequest</code></td><td><code>POST /CancelPromptOverrideRequest</code></td><td>—</td></tr>
+  </table>
+  </div>
+  <p class="muted">Dates are ISO-8601 UTC · JSON is camelCase · every response uses <code>{ success, message, data, errors }</code> · the full override surface, including the admin and approval endpoints, is in <code>Override-API-Documentation.html</code>.</p>
+</section>
+
+</main>
+
+</body>
+</html>

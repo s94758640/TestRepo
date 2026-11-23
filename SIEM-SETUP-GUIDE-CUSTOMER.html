@@ -1,0 +1,217 @@
+<title>Defensely — SIEM setup guide</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#1a1f27; --muted:#5a626f; --faint:#8a929e;
+    --line:#e6e9ef; --line2:#eef1f5; --accent:#2f6e70; --accent-soft:#e3f3f2;
+    --code-bg:#1b2130; --code-ink:#e9edf5; --code-com:#8b93a3; --code-str:#b6e3a8; --code-key:#9fc4ff;
+    --warn:#9a6a1a; --warn-bg:#faf0dd;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;--line:#282d36;--line2:#22262e;
+    --accent:#5bb8ba;--accent-soft:#16302f;--code-bg:#0f131a;--code-ink:#e4e9f2;--warn:#d7a24a;--warn-bg:#2a2112;}}
+  :root[data-theme="dark"]{--bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;--line:#282d36;--line2:#22262e;--accent:#5bb8ba;--accent-soft:#16302f;--code-bg:#0f131a;--code-ink:#e4e9f2;--warn:#d7a24a;--warn-bg:#2a2112;}
+  :root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--ink:#1a1f27;--muted:#5a626f;--faint:#8a929e;--line:#e6e9ef;--line2:#eef1f5;--accent:#2f6e70;--accent-soft:#e3f3f2;--code-bg:#1b2130;--code-ink:#e9edf5;--warn:#9a6a1a;--warn-bg:#faf0dd;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;font-size:14.5px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 24px 80px}
+  .eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.14;margin:.35em 0 .2em;letter-spacing:-.01em;text-wrap:balance}
+  .sub{color:var(--muted);font-size:14.5px;max-width:68ch}
+  h2{font-family:var(--serif);font-weight:600;font-size:21px;margin:42px 0 6px;letter-spacing:-.01em;scroll-margin-top:16px}
+  h3{font-size:15px;font-weight:700;margin:24px 0 6px}
+  p{margin:.55em 0}
+  .lede{color:var(--muted);font-size:13.5px;max-width:72ch;margin:2px 0 14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:14px 0}
+  code{font-family:var(--mono);font-size:.87em;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:5px}
+  pre{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12.5px;line-height:1.6;border-radius:10px;padding:14px 16px;overflow-x:auto;margin:10px 0}
+  pre code{background:none;color:inherit;padding:0;white-space:pre}
+  .toc{columns:2;gap:24px;font-size:13.5px;margin:6px 0 0}
+  .toc a{color:var(--accent);text-decoration:none;display:block;padding:2px 0}
+  ol,ul{margin:.5em 0;padding-left:1.3em} li{margin:.3em 0}
+  .warn{background:var(--warn-bg);border-left:3px solid var(--warn);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13.5px;color:var(--ink)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
+  @media(min-width:680px){table{display:table}}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  .foot{margin-top:42px;padding-top:14px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+  b,strong{font-weight:600}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Defensely DLP · SIEM integration</div>
+  <h1>Connecting Defensely to your SIEM</h1>
+  <p class="sub">A guide for the engineer who runs your SIEM. There are two ways to connect, and you only need one. Set it up once; it runs by itself.</p>
+
+  <div class="card">
+    <b>Two directions — pick one</b>
+    <table>
+      <thead><tr><th>Option</th><th>Direction</th><th>Use when</th></tr></thead>
+      <tbody>
+        <tr><td><b>A · We push</b> (Destinations)</td><td>Defensely → your SIEM</td><td>Your SIEM accepts inbound HTTPS (Splunk HEC, Sentinel, QRadar, a webhook). ~2–20 min.</td></tr>
+        <tr><td><b>B · You pull</b> (API access)</td><td>Your SIEM → Defensely</td><td>Your collector sits behind a firewall and polls out. Works for Splunk, Elastic, Sumo Logic, Google SecOps, anything.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <nav class="toc">
+    <a href="#push">A · We push to your SIEM</a>
+    <a href="#pull">B · You pull from our API</a>
+    <a href="#oauth">B.1 · Authenticate (OAuth)</a>
+    <a href="#feed">B.2 · Pull the event feed</a>
+    <a href="#splunk">B.3 · Splunk (paste-ready)</a>
+    <a href="#elastic">B.4 · Elastic (paste-ready)</a>
+    <a href="#sentinel">B.5 · Sentinel</a>
+    <a href="#schema">Event schema</a>
+    <a href="#rules">Delivery guarantees &amp; dedupe</a>
+    <a href="#rotate">Rotating the secret</a>
+  </nav>
+
+  <h2 id="push">A · We push to your SIEM (Destinations)</h2>
+  <p class="lede">In Defensely: <b>Settings → Connectors → SIEM → Connect a SIEM</b>. Pick your vendor, paste the credentials below, choose which events and which format, send a test, then switch it on. Nothing you pick here is irreversible — a destination is Paused until you enable it, and only enables after a test passes.</p>
+
+  <h3>Splunk — HTTP Event Collector (~5 min)</h3>
+  <ol>
+    <li><b>Settings → Data Inputs → HTTP Event Collector</b>. Global Settings: <b>All Tokens = Enabled</b>, keep SSL on.</li>
+    <li><b>New Token</b> → name it <code>Defensely DLP</code> → choose an index → Submit → copy the <b>Token Value</b>.</li>
+    <li>In Defensely paste the <b>Collector URL</b> (public host; port 443 / 8088 / 9243) and the <b>HEC Token</b>. Splunk Cloud uses <code>https://http-inputs-&lt;stack&gt;.splunkcloud.com:443</code> — the wrong host is the usual mistake.</li>
+  </ol>
+
+  <h3>Microsoft Sentinel — Logs Ingestion API (~20 min)</h3>
+  <ol>
+    <li>Create a <b>Data Collection Endpoint (DCE)</b> and a <b>Data Collection Rule (DCR)</b> with a custom stream (e.g. <code>Custom-Defensely_CL</code>).</li>
+    <li>Register an app; grant it <b>Monitoring Metrics Publisher</b> on the DCR.</li>
+    <li>In Defensely enter the <b>DCE URL</b>, the app's <b>Tenant ID / Client ID / Client Secret</b>, the <b>DCR Immutable ID</b> (DCR → JSON view → <code>immutableId</code>) and the <b>Stream Name</b>.</li>
+  </ol>
+
+  <h3>IBM QRadar — syslog over TLS (~10 min)</h3>
+  <ol>
+    <li>Add a log source of type <b>Universal LEEF</b> with the <b>TLS Syslog</b> protocol on port <code>6514</code>.</li>
+    <li>In Defensely enter the host as <code>qradar.acme.com:6514</code>. No secret — TLS authenticates the server to us. Paste your private CA certificate only if QRadar uses one.</li>
+  </ol>
+
+  <h3>Generic HTTPS webhook (~2 min)</h3>
+  <p>Any endpoint that accepts an HTTPS <code>POST</code> with a JSON body. Paste the URL and a bearer token (sent as <code>Authorization: Bearer …</code>, or a custom header name you choose).</p>
+
+  <h3>What to send (same for every destination)</h3>
+  <ul>
+    <li><b>Filter</b> — severity (Critical / High / Medium / Low) and event types. Splunk and Sentinel bill by data ingested, so send only what your team acts on.</li>
+    <li><b>Format</b> — <code>JSON</code> (works with most tools) or <code>CEF</code> (ArcSight-style parsers). QRadar uses LEEF automatically.</li>
+    <li><b>Sensitive content</b> — matched values (actual card/ID numbers) <b>never leave Defensely</b>. You choose between sending <b>nothing about what matched</b> (default) or a category summary; the raw value is never an option.</li>
+  </ul>
+
+  <h2 id="pull">B · You pull from our API (API access)</h2>
+  <p class="lede">In Defensely: <b>Settings → Connectors → SIEM → Create API access</b>. Name it, optionally restrict it to your collector's egress IPs, then copy the four values it shows (the secret is shown once). The feed works behind a firewall — your collector makes only outbound HTTPS.</p>
+
+  <div class="card">
+    <b>What you get</b>
+    <table><tbody>
+      <tr><td>Client ID</td><td><code>siem_…</code></td></tr>
+      <tr><td>Client secret</td><td>shown once — store it in your secrets manager</td></tr>
+      <tr><td>Token URL</td><td><code>https://api.defensely.ai/dlp/oauth/token</code></td></tr>
+      <tr><td>Events URL</td><td><code>https://api.defensely.ai/dlp/siem/events</code></td></tr>
+    </tbody></table>
+    <p class="note" style="margin-bottom:0">If you set <b>Allowed IP ranges</b>, a token is only issued to those addresses — make sure your collector's egress IP is in the list.</p>
+  </div>
+
+  <h3 id="oauth">B.1 · Authenticate — OAuth 2.0 client credentials</h3>
+  <pre><code>curl -s https://api.defensely.ai/dlp/oauth/token \
+  -d grant_type=client_credentials \
+  -d client_id=$CLIENT_ID \
+  -d client_secret=$CLIENT_SECRET \
+  -d scope=siem:events.read
+
+# → { "access_token": "…", "token_type": "Bearer", "expires_in": 3600, "scope": "siem:events.read" }</code></pre>
+  <p class="note">Cache the token until it expires; re-request on <code>401</code>.</p>
+
+  <h3 id="feed">B.2 · Pull the event feed</h3>
+  <pre><code>curl -s "https://api.defensely.ai/dlp/siem/events?limit=500&format=json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# → { "events": [ … ], "next_cursor": "…", "has_more": true, "schema_version": 1 }</code></pre>
+  <ul>
+    <li><b>Page forward</b> with <code>cursor=&lt;next_cursor&gt;</code> until <code>has_more</code> is <code>false</code>; persist the last <code>next_cursor</code> and resume from it next poll.</li>
+    <li><b>First run</b> may use <code>from=</code> (UTC ISO-8601) to backfill; after that, use the cursor.</li>
+    <li><b>format</b> = <code>json</code> (default), <code>ecs</code> (Elastic Common Schema), <code>cef</code> or <code>leef</code> (returned as <code>text/plain</code>, one event per line, cursor in <code>X-Next-Cursor</code>).</li>
+    <li><code>limit</code> up to the server max; poll every 30–60 s.</li>
+  </ul>
+
+  <h3 id="splunk">B.3 · Splunk — REST API Modular Input (paste-ready)</h3>
+  <pre><code>[rest://defensely_dlp]
+endpoint = https://api.defensely.ai/dlp/siem/events
+auth_type = oauth2_client_credentials
+oauth2_token_url = https://api.defensely.ai/dlp/oauth/token
+oauth2_client_id = &lt;CLIENT_ID&gt;
+oauth2_client_secret = &lt;CLIENT_SECRET&gt;
+oauth2_scope = siem:events.read
+http_method = GET
+url_args = format=json&limit=500
+response_type = json
+json_response_array_path = events
+pagination_cursor_path = next_cursor
+pagination_request_arg = cursor
+index = dlp
+sourcetype = defensely:dlp
+polling_interval = 60</code></pre>
+
+  <h3 id="elastic">B.4 · Elastic — Filebeat httpjson (paste-ready)</h3>
+  <pre><code>filebeat.inputs:
+  - type: httpjson
+    request.url: https://api.defensely.ai/dlp/siem/events?format=ecs&limit=500
+    request.method: GET
+    auth.oauth2:
+      client.id: "${CLIENT_ID}"
+      client.secret: "${CLIENT_SECRET}"
+      token_url: https://api.defensely.ai/dlp/oauth/token
+      scopes: ["siem:events.read"]
+    response.split:
+      target: body.events
+    response.pagination:
+      - set:
+          target: url.params.cursor
+          value: "[[.last_response.body.next_cursor]]"
+          fail_on_template_error: true
+    interval: 60s</code></pre>
+  <p class="note">Use <code>format=ecs</code> for Elastic so fields land on ECS names with no ingest pipeline.</p>
+
+  <h3 id="sentinel">B.5 · Microsoft Sentinel</h3>
+  <p>Easiest is <b>Option A (we push)</b> via the Logs Ingestion API above. To pull instead, use a <b>Codeless Connector / Logic App</b> on a timer: OAuth to the token URL, <code>GET</code> the events URL, page on <code>next_cursor</code>, and post the <code>events</code> array to your DCR.</p>
+
+  <h2 id="schema">Event schema</h2>
+  <p class="lede">One JSON object per event (<code>format=json</code>). The authoritative, versioned field list — including severity numbers and the deliberately excluded fields — is served live at <code>GET /dlp/siem/field-map</code>.</p>
+  <pre><code>{
+  "schema_version": 1,
+  "event_id": "a1b2c3d4-…",              // stable — DEDUPE ON THIS
+  "event_class": "BlockedTransfer",
+  "time": "2026-11-21T09:14:03.511Z",
+  "tenant_id": "…",
+  "vendor": "Defensely", "product": "DLP",
+  "user": { "name": "jsmith", "id": "…" },
+  "host": { "name": "LAPTOP-01", "id": "…", "os": "Windows" },
+  "file": { "name": "Payroll.xlsx", "extension": ".xlsx", "size": 82400 },
+  "destination": { "app": "Dropbox", "domain": "dropbox.com" },
+  "dlp": {
+    "transfer_type": "Upload", "content_type": "PFI",
+    "policy": "Finance Upload", "action": "Block",
+    "override_applied": false, "risk_score": 87
+  },
+  "event": { "severity": "High", "severity_num": 3 },
+  "incident_url": "https://app.defensely.ai/incidents/…"
+}</code></pre>
+  <div class="warn"><b>Matched values never leave Defensely.</b> There is no field anywhere in this schema that carries the actual card number, ID or secret that was detected — only the file, user, policy, action and category.</div>
+
+  <h2 id="rules">Delivery guarantees &amp; dedupe</h2>
+  <ul>
+    <li><b>The feed lags real time by ~30 seconds, on purpose.</b> It guarantees an event is never skipped because it arrived while you were paging. Tell your SOC this, so the lag doesn't read as a fault.</li>
+    <li><b>At-least-once.</b> An event can arrive twice (a retried poll, an overlap). <b>Deduplicate on <code>event_id</code></b> — it is stable across redeliveries.</li>
+    <li><b>Ordering</b> is by the cursor; always resume from the last <code>next_cursor</code> you stored.</li>
+  </ul>
+
+  <h2 id="rotate">Rotating the secret</h2>
+  <p>Rotate an API-access secret from the console at any time. The <b>old secret keeps working for 24 hours</b> after rotation, so you can update your collector without an outage — then "End overlap now" once the new one is in place. A lost secret can't be recovered (not even by Defensely support); the only fix is to rotate.</p>
+
+  <div class="foot">Defensely DLP · SIEM setup guide for customer SIEM engineers · base URL <code>https://api.defensely.ai/dlp</code>. The live field map is at <code>/dlp/siem/field-map</code>.</div>
+</div>

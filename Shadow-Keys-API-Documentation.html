@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM DLP — Shadow Keys API</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { background:#1b1b1b; padding:14px 28px; display:flex; gap:12px; align-items:baseline; border-bottom:1px solid #000; }
+        .topbar h1 { color:#fff; font-size:18px; font-weight:700; margin:0; }
+        .topbar span { color:#89bf04; font-size:13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM DLP</h1>
+        <span>Shadow Keys — key service for encrypted shadow copies: proxy + console integration guide</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM DLP — Shadow Keys",
+            "version": "1.0.0",
+            "description": "The key service behind encrypted shadow copies. Three endpoints: the proxy **fetches the tenant's keys**, a security admin **rotates** them, and the monitoring screen **downloads a decrypted file**.\n\nEvery response uses the standard envelope `{ success, message, data, errors }`, except the download, which returns the file itself.\n\n### The key model, in one paragraph\n\nEvery shadow file is encrypted on the endpoint under its own random **data key (DEK)**. That DEK travels inside the file's header, wrapped under the tenant's **key-encryption key (KEK)** — which is what this API manages. KEKs are stored in the database wrapped under a **master key** that exists only in host configuration, so a stolen database holds wrapped keys with nothing to unwrap them, a stolen blob store holds ciphertext, and a stolen host config holds a master key with no rows. An attacker needs all three.\n\n```\nshadow file  =  [ public header: KekId + DEK wrapped under KEK ]  +  [ chunks under DEK ]\ndatabase     =  KEK wrapped under master key        (dlp.\"ShadowKeys\", one row per generation)\nhost config  =  master key                          (ShadowCopy:MasterKey — never in any DB)\n```\n\n### Who calls what\n\n| Route | Auth | Caller | When |\n|---|---|---|---|\n| `GET /storage/shadow-keys` | `ClientGUID` header only | Proxy | At start-up, once a day, and on meeting an unknown `kekId` |\n| `POST /storage/shadow-keys/rotate` | Bearer JWT | Admin screen | On demand |\n| `GET /incidents/{metaId}/shadow-file` | Bearer JWT | Monitoring screen | Admin opens a shadow copy |\n\n### Proxy guidance — read this before wiring the fetch\n\n- **Refresh cadence:** start-up, then daily, then once more if a file names a `kekId` you do not hold. Nothing else. The route is **rate limited to 20 requests per 10-minute window per caller**, with no queue — a 21st request gets `429` immediately. A legitimate proxy needs the list a few times a day; the limit exists because anything past that is a scripted pull of key material.\n- **On `429`:** back off to the next scheduled refresh. Do not retry in a loop — the window is fixed, so hammering it just keeps you locked out.\n- **Keep keys in memory only.** Never write key bytes to disk, a log, or a crash dump. The response also sends `Cache-Control: no-store` — honour it.\n- **Wrap new files under `activeKekId`.** The list includes **retired keys** too, deliberately: a file you staged just before a rotation still carries the old `kekId`, and you need that key to finish writing it. Treat retired keys as read/write-complete-only; never start a new file under one.\n- **First call wins a key into existence.** A brand-new tenant has no key until something asks; the first `GET` issues one. Two concurrent first calls can each issue a key — both are valid, the newer becomes active, nothing is lost. Do not special-case an empty tenant.\n\n### Rotation semantics\n\nRotation retires the active key and issues a new one **in a single transaction**. Files already written stay readable forever — every file names the KEK it was wrapped under, and rows are never deleted. Proxies pick the new key up on their next refresh, so for up to a day new files may still be wrapped under the just-retired key. That is expected and harmless: retired keys still open them.\n\nThe rotate response carries **only the new `kekId`**, never key bytes. The admin screen has no reason to hold a key, so it is not given one.\n\n### The file format\n\nThe container layout (magic `DLPSHDW1`, public header, encrypted private header, chunked AES-256-GCM body) is specified by the shared code in `SFM.Platform.Storage/Shadow/ShadowContainer.cs` — **that file is the format's source of truth**; the proxy takes it verbatim rather than re-implementing it. The reader verifies every chunk's tag as it streams and fails closed on reorder, truncation, or a single altered byte.\n\n### Legacy plaintext files\n\nObjects uploaded before encryption was switched on have no container magic. The download endpoint detects that and streams them unchanged — the console needs no flag, no version check, no migration. Every download, encrypted or not, writes one audit row (tenant, caller, object, `encrypted: true|false`) **before any byte is sent**. Key bytes are never logged anywhere.\n\n### Operational prerequisites (host, not caller)\n\nThe API host must have the `ShadowCopy` configuration section: `MasterKeyId` (a label like `mk-2026-10`) and either `MasterKey` (base64, 32 bytes — App Service setting / Key Vault / env var) or `MasterKeyProtected` (DPAPI-wrapped, on-prem Windows; produced by `scripts/ShadowCopy-MasterKey.ps1`). Without it the shadow endpoints answer `500` with the configuration instructions; the rest of the API is unaffected. **The master key cannot be regenerated — back it up offline, separately from database backups.** Each client DLP database needs `SFM.DLP.Infrastructure/Data/Migrations/CreateShadowKeysTable.sql` run once."
+        },
+        "servers": [
+            { "url": "https://localhost:5001", "description": "Local dev" },
+            { "url": "https://qa-email.azure-api.net/qadlp", "description": "QA DLP (APIM)" },
+            { "url": "https://sfm-prod.azure-api.net/dlp", "description": "Production (APIM)" }
+        ],
+        "tags": [
+            { "name": "Keys", "description": "Fetch and rotate the tenant's shadow-copy KEKs." },
+            { "name": "Download", "description": "Decrypted shadow file for the monitoring screen." }
+        ],
+        "paths": {
+            "/storage/shadow-keys": {
+                "get": {
+                    "tags": ["Keys"],
+                    "summary": "Every KEK the tenant has, plus which one is active",
+                    "description": "Returns `activeKekId` and the full key list, **newest first, retired keys included** — a retired key still opens (and finishes) every file written under it.\n\nIssues the tenant's first key on demand, so there is no provisioning step and no empty-tenant case to handle.\n\n### No authentication — but not unobserved\n\nSame posture as `POST /storage/upload-url`: the proxy has no token to present, so the `ClientGUID` header selects the tenant and that is the whole gate. In exchange this is the **only rate-limited route in the API** (20 per 10-minute fixed window per caller, no queue), the response is sent `no-store`, and every fetch writes an audit row naming the tenant, the caller and the key count. Key bytes never appear in any log.\n\n### Handling the response\n\n```csharp\nvar res = await http.GetFromJsonAsync<Envelope<ShadowKeysData>>(\"storage/shadow-keys\");\n\n// Index every key by kekId — old files name retired keys.\n_keys = res.Data.Keys.ToDictionary(k => k.KekId, k => Convert.FromBase64String(k.Key));\n\n// Wrap NEW files under this one only.\n_activeKekId = res.Data.ActiveKekId;\n```\n\nKeys are 32 bytes after base64 decode. Hold them in memory; refresh at start-up, daily, and on meeting an unknown `kekId`.",
+                    "security": [],
+                    "parameters": [
+                        { "name": "ClientGUID", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" },
+                          "description": "Tenant selector, as on every DLP endpoint. Also bound into the key wrapping itself — a wrong value is not another tenant's keys, it is a different (probably empty) key list." }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "The tenant's keys. Never cached (`Cache-Control: no-store`).",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ShadowKeysResponse" },
+                                "examples": {
+                                    "afterOneRotation": {
+                                        "summary": "A tenant that has rotated once — the retired key is still served",
+                                        "value": {
+                                            "success": true,
+                                            "message": null,
+                                            "errors": null,
+                                            "data": {
+                                                "activeKekId": "7c1f4a9e-2b3d-4e5f-8a90-1b2c3d4e5f60",
+                                                "keys": [
+                                                    {
+                                                        "kekId": "7c1f4a9e-2b3d-4e5f-8a90-1b2c3d4e5f60",
+                                                        "key": "mJ2vXK4T8Qq1rZwR0mS4o9cBx2aFh7Jk3LpNdY6eUvA=",
+                                                        "activeFromUtc": "2026-10-19T10:30:00Z",
+                                                        "retiredUtc": null
+                                                    },
+                                                    {
+                                                        "kekId": "0f9e8d7c-6b5a-4938-2716-05f4e3d2c1b0",
+                                                        "key": "T3hGk9mN2pQ5sV8yB1dF4gH7jK0lZ6xC3vM8nR5tW2o=",
+                                                        "activeFromUtc": "2026-07-01T08:00:00Z",
+                                                        "retiredUtc": "2026-10-19T10:30:00Z"
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "firstEverCall": {
+                                        "summary": "A new tenant — the call itself issued the key",
+                                        "value": {
+                                            "success": true,
+                                            "message": null,
+                                            "errors": null,
+                                            "data": {
+                                                "activeKekId": "3a2b1c0d-9e8f-4a5b-8c7d-6e5f4a3b2c1d",
+                                                "keys": [
+                                                    {
+                                                        "kekId": "3a2b1c0d-9e8f-4a5b-8c7d-6e5f4a3b2c1d",
+                                                        "key": "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789AbCdEfG=",
+                                                        "activeFromUtc": "2026-10-20T06:12:41Z",
+                                                        "retiredUtc": null
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            } }
+                        },
+                        "400": {
+                            "description": "No ClientGUID header (or claim) — the tenant cannot be resolved, so no key is issued or returned.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "Invalid request.", "data": null, "errors": ["A ClientGUID header (or claim) is required to resolve the tenant."] }
+                            } }
+                        },
+                        "429": {
+                            "description": "More than 20 requests in the current 10-minute window from this caller. No queue — back off to the next scheduled refresh; retrying inside the same window stays locked out."
+                        },
+                        "500": {
+                            "description": "Most likely: the host has no `ShadowCopy` master key configured. The error text carries the configuration instructions.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "An error occurred while retrieving shadow keys.", "data": null, "errors": ["The shadow-copy master key is not configured on this host. Set ShadowCopy:MasterKeyId and either ShadowCopy:MasterKey (base64, 32 random bytes) or, on an on-prem Windows host, ShadowCopy:MasterKeyProtected (the DPAPI-wrapped form from scripts/ShadowCopy-MasterKey.ps1). Back the plain key up offline first — it cannot be regenerated, and losing it loses every shadow file."] }
+                            } }
+                        }
+                    }
+                }
+            },
+            "/storage/shadow-keys/rotate": {
+                "post": {
+                    "tags": ["Keys"],
+                    "summary": "Retire the active key and issue a new one",
+                    "description": "One transaction: every unretired key gets `retiredUtc` stamped and a fresh key becomes active. **Files already written stay readable** — their keys are retired, not deleted — and proxies pick the new key up on their next refresh.\n\nReturns the new key's **id only, never its bytes**. The admin screen has no reason to hold a key.\n\nNo request body. The acting admin is read from the JWT and recorded on the new row and in the action log.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "name": "ClientGUID", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" },
+                          "description": "Tenant selector — which tenant's key is rotated." }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Rotated. The returned kekId is what the proxy's next refresh will report as activeKekId.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/RotateResponse" },
+                                "example": {
+                                    "success": true,
+                                    "message": "Shadow key rotated. Files already written stay readable under the retired key.",
+                                    "errors": null,
+                                    "data": {
+                                        "kekId": "b4e2d9f1-8c7a-4b6d-9e0f-1a2b3c4d5e6f",
+                                        "activeFromUtc": "2026-10-20T09:00:00Z"
+                                    }
+                                }
+                            } }
+                        },
+                        "400": {
+                            "description": "No ClientGUID header (or claim).",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "Invalid request.", "data": null, "errors": ["A ClientGUID header (or claim) is required to resolve the tenant."] }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid bearer token. Unlike the GET, this route is for the console, which has one." },
+                        "500": {
+                            "description": "Master key missing on the host, or the database write failed. Nothing is half-rotated — the retire and the issue share one transaction.",
+                            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } }
+                        }
+                    }
+                }
+            },
+            "/incidents/{metaId}/shadow-file": {
+                "get": {
+                    "tags": ["Download"],
+                    "summary": "The shadow copy for an incident, decrypted, as an attachment",
+                    "description": "Resolves the object recorded for the MetaID (the `correlationId` sent to `POST /storage/upload-url` with purpose `ShadowFile`), decrypts it server-side, and streams the plaintext with `Content-Disposition: attachment`. The browser can point a download link straight at it.\n\n### What the caller sees\n\n- **Encrypted object** → the plaintext, with the real file name and exact `Content-Length` from the sealed header.\n- **Legacy plaintext object** (uploaded before encryption went live) → streamed unchanged. No flag needed; the server detects the missing container magic.\n- Either way, **one audit row** (who, which object, encrypted or not) is written before the first byte is sent.\n\n### Failure modes worth distinguishing\n\n| Status | Meaning | What to tell the admin |\n|---|---|---|\n| `404` | No shadow object was ever recorded for this MetaID, or it is gone from storage | \"No shadow copy for this incident\" |\n| `500` with *key not available* | The object is intact but names a KEK this console has no row for (wrong tenant database, or rows lost) | Escalate — this is an operations problem, not a retry |\n| **Connection aborted mid-download** | A chunk failed integrity verification after headers were already sent. The server kills the connection rather than serving altered bytes | Treat a torn download as suspect; retry once, then escalate |\n\nThe mid-stream abort is deliberate: by then `200` and the headers are gone, so a dead connection is the only honest answer left.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "name": "metaId", "in": "path", "required": true, "schema": { "type": "string" },
+                          "description": "The agent's MetaID for the transfer — the same value the agent sent as correlationId when the upload URL was minted." },
+                        { "name": "ClientGUID", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" },
+                          "description": "Tenant selector. The decryption keys are bound to it, so a mismatched value cannot open another tenant's file — it just fails to find the key." }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "The file. `Content-Disposition: attachment; filename*=...` carries the real name (the original name recorded at upload, falling back to the name sealed inside the container). `Content-Length` is the exact plaintext size.",
+                            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+                        },
+                        "400": {
+                            "description": "Empty metaId.",
+                            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } }
+                        },
+                        "401": { "description": "Missing or invalid bearer token." },
+                        "404": {
+                            "description": "No shadow object recorded for the MetaID, or the object is no longer in storage. The two messages differ so the admin knows which.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "examples": {
+                                    "neverRecorded": { "value": { "success": false, "message": "No shadow copy is recorded for MetaID META-123.", "data": null, "errors": null } },
+                                    "goneFromStorage": { "value": { "success": false, "message": "The shadow object for MetaID META-123 is no longer in storage.", "data": null, "errors": null } }
+                                }
+                            } }
+                        },
+                        "500": {
+                            "description": "The object names a KEK this console has no row for. The file is intact — the key is the problem.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "The key for this file is not available on this console.", "data": null, "errors": ["The object names KEK 0f9e8d7c-6b5a-4938-2716-05f4e3d2c1b0, which has no row in this tenant's ShadowKeys table."] }
+                            } }
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+                    "description": "The normal SFM console JWT. The key-fetch GET is the only route here that does not take one." }
+            },
+            "schemas": {
+                "ShadowKey": {
+                    "type": "object",
+                    "properties": {
+                        "kekId": { "type": "string", "format": "uuid",
+                            "description": "Names this key generation. Every encrypted file carries the kekId it was wrapped under in its public header." },
+                        "key": { "type": "string", "format": "byte", "example": "mJ2vXK4T8Qq1rZwR0mS4o9cBx2aFh7Jk3LpNdY6eUvA=",
+                            "description": "Base64 of the 32-byte KEK. **Memory only — never disk, never logs.**" },
+                        "activeFromUtc": { "type": "string", "format": "date-time" },
+                        "retiredUtc": { "type": "string", "format": "date-time", "nullable": true,
+                            "description": "Null while this is the key new files are wrapped under. A retired key still opens old files — keep it." }
+                    }
+                },
+                "ShadowKeysResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "activeKekId": { "type": "string", "format": "uuid",
+                                    "description": "Wrap new files under this one only." },
+                                "keys": { "type": "array", "items": { "$ref": "#/components/schemas/ShadowKey" },
+                                    "description": "Newest first. Includes retired keys, deliberately." }
+                            }
+                        },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "RotateResponse": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "kekId": { "type": "string", "format": "uuid", "description": "The new active key's id. Its bytes are never returned here." },
+                                "activeFromUtc": { "type": "string", "format": "date-time" }
+                            }
+                        },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "ApiResponseString": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": false },
+                        "message": { "type": "string", "example": "Invalid request." },
+                        "data": { "type": "string", "nullable": true, "example": null },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        SwaggerUIBundle({
+            spec,
+            dom_id: '#swagger',
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: 'BaseLayout',
+            docExpansion: 'list',
+            defaultModelsExpandDepth: 1,
+            tryItOutEnabled: true
+        });
+    };
+    </script>
+</body>
+</html>

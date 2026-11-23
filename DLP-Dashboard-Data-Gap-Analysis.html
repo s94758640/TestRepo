@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DLP Dashboard — Data Gap Analysis</title>
+<style>
+  :root{
+    --muted:#64748b; --line:#e2e8f0; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb;
+    --red:#dc2626; --redbg:#fef2f2; --redline:#fecaca;
+    --amber:#b45309; --amberbg:#fffbeb; --amberline:#fde68a;
+    --green:#047857; --greenbg:#ecfdf5; --greenline:#a7f3d0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.55}
+  header.top{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:#cbd5e1;font-size:14px}
+  main{max-width:1080px;margin:0 auto;padding:24px 32px}
+  section{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:22px}
+  h2{margin-top:0;font-size:18px}
+  h3{font-size:15px;margin:22px 0 6px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .score{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 2px}
+  .box{flex:1;min-width:190px;border-radius:10px;padding:14px 16px;border:1px solid}
+  .box .n{font-size:28px;font-weight:700;line-height:1.1}
+  .box .l{font-size:13px;margin-top:2px}
+  .box.r{background:var(--redbg);border-color:var(--redline);color:var(--red)}
+  .box.a{background:var(--amberbg);border-color:var(--amberline);color:var(--amber)}
+  .box.g{background:var(--greenbg);border-color:var(--greenline);color:var(--green)}
+  .item{border-left:4px solid var(--red);background:var(--redbg);border-radius:0 8px 8px 0;padding:12px 16px;margin:14px 0}
+  .item h4{margin:0 0 6px;font-size:15px;color:var(--red)}
+  .item .fix{margin-top:8px;font-size:13px;color:#334155}
+  .note{background:var(--amberbg);border:1px solid var(--amberline);border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .ok{background:var(--greenbg);border:1px solid var(--greenline);border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .tag{font-size:12px;color:var(--muted)}
+  ol li,ul li{margin:6px 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>DLP Dashboard — Data Gap Analysis</h1>
+  <p>The client's dashboard design, checked against the data we actually hold · for the product &amp; delivery team</p>
+</header>
+
+<main>
+
+<section>
+  <h2>What this is</h2>
+  <p>The client gave us a finished dashboard design as a working HTML prototype.
+  <strong>It is their design and it is not being changed.</strong></p>
+  <p>This document answers one question only: <strong>for each thing that design shows,
+  do we have the data?</strong> So we can tell the client what is not achievable
+  <em>before</em> anyone starts building it.</p>
+  <p class="tag">Four tabs checked — Overview, File Sharing, Content Sharing, Web Filtering.</p>
+
+  <div class="score">
+    <div class="box g"><div class="n">11</div><div class="l">Have the data</div></div>
+    <div class="box a"><div class="n">8</div><div class="l">Have it, with a catch</div></div>
+    <div class="box r"><div class="n">7</div><div class="l">Do <b>not</b> have the data</div></div>
+  </div>
+
+  <div class="ok"><strong>Good news first.</strong> We already have
+  <strong>25 dashboard endpoints</strong> built, including Organization Risk Score,
+  the five-bar Risk Breakdown, Data Classification, Exfiltration by channel,
+  Endpoint Coverage and Security Score. Much of this design is already served —
+  this is mostly re-shaping, not building from nothing.</div>
+</section>
+
+<section>
+  <h2>❌ The seven we cannot build</h2>
+  <p>These are the conversation to have with the client. The last two are in the
+  pop-out detail panel rather than on a tile.</p>
+
+  <div class="item">
+    <h4>1. Violations by Regulation</h4>
+    <p>The regulations themselves already exist in our system — DPDP Act, GDPR, SOX,
+    PCI DSS, HIPAA, Source Code and Credentials are all policy templates with a
+    severity against each.</p>
+    <p><strong>What is missing is the link from an event to a regulation.</strong>
+    When we record a blocked file transfer we save only the policy <em>name</em>, as
+    free text. We do not save the policy <em>id</em>. Policy names can be renamed by
+    an admin at any time, so matching on the text is unreliable — we cannot say with
+    confidence which regulation a given violation belongs to.</p>
+    <div class="fix"><strong>To make it possible:</strong> record the policy id on
+    each event going forward. This is the single most valuable change for this
+    dashboard — it unlocks the whole widget.</div>
+  </div>
+
+  <div class="item">
+    <h4>2. Insider Risk Signals — “Departing Employee”</h4>
+    <p>This one needs to know an employee has resigned. We hold no such information:
+    a user is only ever active or disabled. There is no resignation date, no last
+    working day, no notice period, and no HR system integration anywhere in the
+    product.</p>
+    <p>Worth showing the client: <strong>their own prototype fakes it</strong> — the
+    code contains a hardcoded list of two user ids rather than a real signal.</p>
+    <div class="fix"><strong>To make it possible:</strong> an HR system feed. A
+    significant piece of work in its own right, not part of a dashboard.
+    <br><em>The other three insider signals are fine</em> — see the amber list.</div>
+  </div>
+
+  <div class="item">
+    <h4>3. Warnings Bypassed</h4>
+    <p>On the Web Filtering tab this shows how often a user was warned and carried on
+    anyway. We record that a warning was <strong>shown</strong>. Nothing records that
+    the user then <strong>proceeded</strong> — and the agent does not send that
+    information at all.</p>
+    <div class="fix"><strong>To make it possible:</strong> an agent change to report
+    the outcome of a warning, plus somewhere to store it. Needs the agent team.</div>
+  </div>
+
+  <div class="item">
+    <h4>4. Top External Devices — as individual devices</h4>
+    <p>The design lists specific devices (“SanDisk Ultra 64GB”, “Kingston
+    DataTraveler”). We only know the device <strong>type</strong> — USB, Bluetooth,
+    NAS, RDP. No serial number, no manufacturer, no volume label. The serial number
+    we do store belongs to the <em>laptop</em>, not to the USB stick plugged into it.</p>
+    <div class="fix"><strong>Possible today:</strong> “Top device types”.
+    <strong>Not possible:</strong> naming individual devices, without an agent change.</div>
+  </div>
+
+  <div class="item">
+    <h4>5. Endpoint Coverage — the “Warning” slice</h4>
+    <p>The donut shows Healthy / Offline / <strong>Warning</strong>. We only ever
+    record an endpoint as Online, Offline or Locked. There is no third state, and the
+    code carries a note that this bucket was deliberately removed once before.</p>
+    <div class="fix"><strong>Closest thing we do have:</strong> an endpoint that is
+    online but whose DLP service is not running. If the client agrees that is what
+    “Warning” means, it is buildable.</div>
+  </div>
+
+  <div class="item">
+    <h4>6. “Characters” on a Content event</h4>
+    <p>When you click a Copy/Paste or Typed Content event, the detail panel shows a
+    character count. <strong>We do not store one</strong> — there is no such field
+    anywhere.</p>
+    <div class="fix"><strong>Partly possible:</strong> we could count the captured
+    text where we hold it. But when a customer has sensitive-content masking switched
+    on we do not keep the text, so the count would be missing for exactly the events
+    that matter most. Best confirmed with the client whether it is needed.</div>
+  </div>
+
+  <div class="item">
+    <h4>7. “Mark as reviewed” — on web and AI prompt events</h4>
+    <p>Every detail panel in the design offers a Mark as reviewed action. We have a
+    review status, but <strong>only on file-transfer events</strong>. AI prompt
+    events and web requests have no such field, so the button would do nothing on
+    two of the four tabs.</p>
+    <div class="fix"><strong>To make it possible:</strong> add the same review status
+    to the prompt and web-filtering records. Small change, but it must be done or the
+    action has to be hidden on those tabs.</div>
+  </div>
+</section>
+
+<section>
+  <h2>The click-through — checked field by field</h2>
+  <p>Almost everything in the design is clickable, and every click opens the same
+  right-hand panel: first a filtered list of events, then one event in detail. The
+  fields that panel shows differ per tab. Those are checked below.</p>
+
+  <table>
+    <tr><th>Tab</th><th>Fields in the detail panel</th><th>Verdict</th></tr>
+    <tr>
+      <td><b>File Sharing</b></td>
+      <td>File · Size · Device or Destination · Destination type · Data type</td>
+      <td>✅ All available</td>
+    </tr>
+    <tr>
+      <td><b>Content Sharing</b></td>
+      <td>Application · Data type · <b>Characters</b></td>
+      <td>⚠️ Characters not stored — see #6</td>
+    </tr>
+    <tr>
+      <td><b>Web Filtering</b></td>
+      <td>Domain · Category · Browser</td>
+      <td>✅ All available</td>
+    </tr>
+    <tr>
+      <td><b>Shared header</b></td>
+      <td>Severity · Action · User · Time · Policy name · Content snippet</td>
+      <td>✅ Available (snippet is masked when the customer has masking on)</td>
+    </tr>
+    <tr>
+      <td><b>Shared action</b></td>
+      <td>Mark as reviewed</td>
+      <td>❌ File events only — see #7</td>
+    </tr>
+  </table>
+
+  <div class="note"><strong>One structural point for the build.</strong> Our combined
+  activity view covers file transfers and AI prompts, but <b>not web filtering</b> —
+  those live in a separate table. So the pop-out list needs a second read whenever the
+  user is on the Web Filtering tab. Not a blocker, just something to plan for rather
+  than discover.</div>
+</section>
+
+<section>
+  <h2>⚠️ Eight that work, but need checking first</h2>
+  <p>These are not blockers — but each has something that should be confirmed against
+  live data before it is built, or it will look wrong on screen.</p>
+
+  <table>
+    <tr><th>What the design shows</th><th>The catch</th></tr>
+    <tr>
+      <td><b>Insider Risk Signals</b><br>Mass Data Exfiltration, After-Hours, High-Risk User</td>
+      <td>All three can be worked out, but nothing stores them. There is no rules engine and no configurable thresholds — they are calculated on the fly each time the screen loads.</td>
+    </tr>
+    <tr>
+      <td><b>Data Classification</b> categories</td>
+      <td>PII, PHI, Financial and Source Code are solid. <b>PCI, Credentials and Customer Data</b> exist only as categories an admin can pick when writing a policy — it is unconfirmed that our scanner actually detects and labels them. Must be checked on real data.</td>
+    </tr>
+    <tr>
+      <td><b>Device Read / Write, Copy-Paste, Typed Content</b></td>
+      <td>These activity types come from a setup script. Confirm it has run on every customer — a base install only knows Upload, Download, Send and Receive.</td>
+    </tr>
+    <tr>
+      <td><b>Exfiltration by channel</b></td>
+      <td>Our channels are Browser, Communication, Cloud, Domain and AI Tools — <b>“External Devices” is not one of them</b> and has to be worked out separately. Also <b>Gmail, WhatsApp Web, WeTransfer and GitHub are not in our app catalogue</b>; Gmail and WhatsApp arrive simply as web addresses.</td>
+    </tr>
+    <tr>
+      <td><b>Top Incidents by Apps</b></td>
+      <td>Same issue — Gmail is shown in the design as an app, but reaches us as a web address.</td>
+    </tr>
+    <tr>
+      <td><b>Top AI Tools by Prompts</b></td>
+      <td>ChatGPT, Gemini, Claude, Copilot and Perplexity are all recognised. <b>DeepSeek is not</b> in our catalogue — confirm whether it appears in real data.</td>
+    </tr>
+    <tr>
+      <td><b>Severity</b> (Critical / High / Medium / Low)</td>
+      <td>The design shows four levels. Our scanner also produces <b>“None”</b> when it could not assess a file — so expect a fifth bucket, and probably a large one. The client needs to decide how it is shown.</td>
+    </tr>
+    <tr>
+      <td><b>Department</b> (“Engineering”, “Finance”)</td>
+      <td>We know each user's department, but we do not copy it onto the event. We can look it up, but that gives their department <em>today</em> rather than at the time of the incident. Cheap to fix properly.</td>
+    </tr>
+  </table>
+</section>
+
+<section>
+  <h2>✅ What we do have</h2>
+  <p>Organization Risk Score · Risk Score Breakdown (all five bars map exactly onto
+  values we already store) · Total Incidents · Off-Hour Activity · High-Risk Users ·
+  Policy Compliance · Data Classification volumes · Exfiltration totals · Top
+  Incidents by App · Largest Transfers · Severity mixes · Activity Heatmap · Web
+  categories, blocked domains and top users by blocks.</p>
+</section>
+
+<section>
+  <h2>The full click list — and what we found in it</h2>
+  <p>The design has <strong>62 clickable targets</strong>. Checking all of them, rather
+  than the ones visible in the screenshots, turned up widget groups we had not seen —
+  Custom Word &amp; Regex Matches, Lists &amp; Exceptions, Large File Rule, Top Policies
+  Triggered, and the Recent Events lists — plus drill-downs for video recordings,
+  shadow file copies, override requests and large files.</p>
+
+  <div class="ok"><strong>The good news:</strong> almost all of the newly-found ones
+  are things we already hold — video recordings, shadow copies, override requests,
+  regex and custom-word matches, large-file handling, allow/block lists and policy
+  exceptions. <strong>No new gaps came out of them.</strong></div>
+
+  <h3>But several predicates in the prototype are placeholders</h3>
+  <p>Reading the prototype's own code, a number of tiles are not computing anything
+  real — they use a hash of the record id to produce a plausible-looking spread. This
+  matters because it tells us what the client has <em>specified</em> versus what they
+  have merely <em>sketched</em>.</p>
+
+  <table>
+    <tr><th>Tile</th><th>What the prototype actually does</th><th>What we would really use</th></tr>
+    <tr>
+      <td><b>False positives / negatives reported</b></td>
+      <td>A hash of the event id, split by whether it was allowed</td>
+      <td>Our <b>Feedback module</b> — False positive and False negative are two of its seven feedback types. Real data, and newer than this design.</td>
+    </tr>
+    <tr>
+      <td><b>Shadow file copies</b> — “Licensed users only”</td>
+      <td><code>licensed = userId % 10 &lt; 7</code> — arithmetic on the id</td>
+      <td>Real shadow-copy records and real licence assignment.</td>
+    </tr>
+    <tr>
+      <td><b>Override requests</b></td>
+      <td>Blocked events, filtered by the same hash</td>
+      <td><code>dlp."OverrideRequest"</code> — actual requests, with status, justification and validity window.</td>
+    </tr>
+    <tr>
+      <td><b>Video recordings</b></td>
+      <td>Critical severity and not allowed</td>
+      <td>The real video flags on the event, which say whether a recording exists.</td>
+    </tr>
+  </table>
+
+  <p class="tag">In each case our data is <em>better</em> than the prototype's stand-in.
+  Worth confirming with the client that these tiles should use the real source, because
+  the numbers will not match their mock-up — and that is the correct outcome.</p>
+
+  <div class="note"><strong>The design contradicts itself on off-hours.</strong> The
+  Off-Hour Activity tile is captioned “Before 07:00 or after 21:00”, while the
+  After-Hours Transfer insider signal on the same screen says “Outside 08–20 local
+  time”. Two different definitions of the same idea, on one dashboard. We also store a
+  third — each customer's real business hours, defaulting to 09:30–18:30. <b>The client
+  needs to pick one</b>, and our recommendation is their own configured business hours.</div>
+</section>
+
+<section>
+  <h2>What needs the EXE / agent team</h2>
+  <p>Three of the seven gaps cannot be closed from the server at all — the agent
+  does not capture or send the information today. These are <strong>a separate
+  piece of planning</strong>, to be agreed with the agent team before any of them
+  is committed to the client.</p>
+
+  <table>
+    <tr><th>Gap</th><th>What the agent would have to send</th><th>Note</th></tr>
+    <tr>
+      <td><b>Warnings Bypassed</b></td>
+      <td>The outcome of a warning — did the user stop, or continue?</td>
+      <td>We already do this for file transfers through the override flow. Web filtering has no equivalent.</td>
+    </tr>
+    <tr>
+      <td><b>Top External Devices</b><br>(individual devices)</td>
+      <td>Device identity — serial number, manufacturer or volume label</td>
+      <td>Today we only receive the device <em>type</em>. Decide with the agent team which identifier is reliable across Windows versions.</td>
+    </tr>
+    <tr>
+      <td><b>“Characters” on content events</b></td>
+      <td>A character count for copy-paste and typed content</td>
+      <td>Relevant because we already block copy-paste — the detection exists, only the measurement is missing.</td>
+    </tr>
+  </table>
+
+  <div class="note"><strong>Worth deciding together:</strong> several of these turn on
+  <em>which type of detection</em> the agent performs, not just what it reports. That
+  conversation should happen before we answer the client on these three, so we commit
+  to something the agent can actually deliver.</div>
+
+  <p class="tag">The remaining gaps — Violations by Regulation, Departing Employee,
+  the Endpoint “Warning” bucket and “Mark as reviewed” on web/prompt events — are
+  server-side or integration work and do not need the agent team.</p>
+</section>
+
+<section>
+  <h2>Four problems we will hit on the way</h2>
+  <p>These are existing faults the new dashboard will put on screen. Worth raising now
+  rather than discovering them in testing.</p>
+
+  <ol>
+    <li><strong>Off-hour activity is currently calculated wrongly.</strong> The code
+    assumes 9am–6pm <em>UTC</em> and ignores the business hours we already store for
+    each customer (default 09:30–18:30 India time). For an Indian customer this is out
+    by five and a half hours and wrongly labels most of the normal working day as
+    out-of-hours. The business <em>end</em> time we store is currently read by nothing
+    at all.</li>
+
+    <li><strong>“Total Active Policies 24/26” would show the wrong number.</strong>
+    The current code counts how many distinct policy names appear in the logs, not how
+    many policies are actually active.</li>
+
+    <li><strong>Three different risk scales are in use</strong> and they disagree with
+    each other. The new Overview puts the organisation score and the per-user risk
+    bands on the same screen, so they will visibly contradict unless we settle on one.</li>
+
+    <li><strong>The dashboard will be slow.</strong> Almost every existing tile loads
+    full event records into memory and adds them up in code rather than in the
+    database. There is an unused table in our schema whose columns read like a
+    specification for exactly this dashboard — it is either the answer or it should be
+    deleted.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Next step — four checks on a live customer database</h2>
+  <p>These four queries settle every amber item above.</p>
+
+<pre>SELECT DISTINCT "TransferTypeName" FROM crunch."LandingLogsCrunched";
+SELECT DISTINCT "AiProvider"        FROM dlp."AIPromptLog";
+SELECT "BusinessStartTime","BusinessEndTime","TimeZone" FROM sfm."Client";
+
+SELECT DISTINCT jsonb_array_elements_text(
+         ("FileContent"::jsonb -&gt; 'classificationSummary' -&gt; 'DlpType'))
+  FROM crunch."LandingLogsCrunched"
+ WHERE "FileContent" IS NOT NULL
+ LIMIT 100;</pre>
+
+  <p>They answer, in order: do we really capture Device Read/Write and Copy-Paste;
+  does DeepSeek appear; are business hours set correctly; and does the scanner
+  actually produce PCI, Credentials and Customer Data.</p>
+</section>
+
+<p class="tag" style="margin:26px 0 10px">Checked against the DLP API codebase and database schema. The client's design is unchanged.</p>
+
+</main>
+</body>
+</html>

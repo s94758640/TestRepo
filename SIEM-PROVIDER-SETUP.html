@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIEM Provider Setup - End to End</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>SIEM provider setup — end to end</h1>
+<p><strong>For:</strong> sales engineering, support, and the customer's own SIEM administrator. <strong>Covers:</strong> every provider we support, what the customer does on their side, and the exact values to bring back to Defensely.</p>
+<blockquote>Vendor consoles change. Where a menu path here no longer matches, the value</blockquote>
+<blockquote>being collected is still the right one — find it by name rather than by path.</blockquote>
+<hr>
+<h2>What we support</h2>
+<table><thead><tr>
+<th></th>
+<th>Direction</th>
+<th>Transport</th>
+<th>Format</th>
+<th>Status</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Splunk</strong></td>
+<td>Push</td>
+<td>HTTP Event Collector</td>
+<td>JSON</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Microsoft Sentinel</strong></td>
+<td>Push</td>
+<td>Logs Ingestion API</td>
+<td>JSON</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>IBM QRadar</strong></td>
+<td>Push</td>
+<td>Syslog over TLS</td>
+<td>LEEF</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Generic HTTPS webhook</strong></td>
+<td>Push</td>
+<td>POST, JSON body</td>
+<td>JSON</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Any SIEM at all</strong></td>
+<td><strong>Pull</strong></td>
+<td>They call us</td>
+<td>JSON · ECS · CEF · LEEF</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<p><strong>Four push destinations. Pull works with everything</strong>, including Elastic, Sumo Logic, Google SecOps and anything that can make an authenticated HTTPS request on a schedule.</p>
+<hr>
+<h2>First question: push or pull?</h2>
+<p>Ask the customer one thing:</p>
+<blockquote><em>"Can you open your SIEM's web interface from home, without a VPN?"</em></blockquote>
+<table><thead><tr>
+<th>Answer</th>
+<th>Use</th>
+<th>Why</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Yes</strong></td>
+<td>Either — <strong>push</strong> is nicer</td>
+<td>Their collector has a public address we can reach</td>
+</tr>
+<tr>
+<td><strong>No</strong></td>
+<td><strong>Pull</strong></td>
+<td>Their SIEM is inside their network. We cannot reach in; it can reach out</td>
+</tr>
+</tbody></table>
+<p>Banks and government customers are almost always the second case. <strong>Pull is not the fallback — for them it is the only option</strong>, and it is the one that needs no firewall change on their side.</p>
+<p>If unsure, start with pull. It works in both situations.</p>
+<hr>
+<h2>Pull — works with any SIEM</h2>
+<p>Nothing vendor-specific. The customer's SIEM authenticates with OAuth 2.0 client credentials and polls for events.</p>
+<p><strong>In Defensely:</strong> Settings → Integrations → SIEM → <strong>Create API access</strong></p>
+<p>Give them four values:</p>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td>Client ID</td>
+<td><code>siem_7Kp2mQx9vB4nL1wR8tZ3cF</code></td>
+</tr>
+<tr>
+<td>Client secret</td>
+<td><strong>Shown once.</strong> Lost means rotate</td>
+</tr>
+<tr>
+<td>Token URL</td>
+<td><code>…/oauth/token</code></td>
+</tr>
+<tr>
+<td>Events URL</td>
+<td><code>…/siem/events</code></td>
+</tr>
+</tbody></table>
+<p>Paste-ready configurations for Splunk, Elastic and Sentinel are in <strong><code>SIEM-API-Integration.md</code></strong> — hand that document to their engineer.</p>
+<p><strong>Tell them two things up front</strong>, or they will raise a ticket:</p>
+<ul>
+<li>The feed is <strong>30 seconds behind real time</strong>, deliberately. It is a correctness guarantee, not lag.</li>
+<li>Delivery is <strong>at-least-once</strong>. Deduplicate on <code>event_id</code>.</li>
+</ul>
+<hr>
+<h2>Push 1 — Splunk</h2>
+<h3>What they do in Splunk</h3>
+<ol>
+<li><strong>Settings → Data Inputs → HTTP Event Collector</strong></li>
+<li><strong>Global Settings</strong> → set <em>All Tokens</em> to <strong>Enabled</strong>. Note the HTTP Port Number (default <strong>8088</strong>) and whether SSL is enabled — <strong>it must be</strong></li>
+<li><strong>New Token</strong> → name it <code>Defensely DLP</code> → Next</li>
+<li>Choose the destination <strong>index</strong> (or create one, e.g. <code>dlp</code>)</li>
+<li><strong>Review → Submit</strong>, then copy the <strong>Token Value</strong></li>
+</ol>
+<h3>What to collect</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Example</th>
+<th>Where</th>
+</tr></thead><tbody>
+<tr>
+<td>Collector URL</td>
+<td><code>https://acme.splunkcloud.com:8088/services/collector/event</code></td>
+<td>Their Splunk host + the HEC port</td>
+</tr>
+<tr>
+<td>HEC Token</td>
+<td><code>8f3b2c1a-5d9e-4a7b-91c3-7f2e8d4a6b10</code></td>
+<td>Step 5</td>
+</tr>
+<tr>
+<td>Index</td>
+<td><code>dlp</code></td>
+<td>Optional — blank uses the token's default</td>
+</tr>
+<tr>
+<td>Sourcetype</td>
+<td><code>defensely:dlp</code></td>
+<td>Optional — this is our default</td>
+</tr>
+</tbody></table>
+<blockquote><strong>Splunk Cloud uses a different host and port.</strong> It is</blockquote>
+<blockquote><code>https://http-inputs-&lt;stack&gt;.splunkcloud.com:443/services/collector/event</code> —</blockquote>
+<blockquote>port <strong>443</strong>, not 8088, and the host has an <code>http-inputs-</code> prefix. Both ports</blockquote>
+<blockquote>are permitted; the wrong <em>host</em> is the usual mistake.</blockquote>
+<h3>Common failures</h3>
+<table><thead><tr>
+<th>Error</th>
+<th>Fix</th>
+</tr></thead><tbody>
+<tr>
+<td>The HEC token was rejected</td>
+<td>Token wrong, or <em>All Tokens</em> still Disabled in Global Settings</td>
+</tr>
+<tr>
+<td>No collector at that path</td>
+<td>URL must end <code>/services/collector/event</code></td>
+</tr>
+<tr>
+<td>Only https:// addresses are accepted</td>
+<td>SSL is off in HEC Global Settings — enable it</td>
+</tr>
+<tr>
+<td>Accepted the request but rejected the data</td>
+<td>The index does not exist, or the token has no permission on it</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Push 2 — Microsoft Sentinel</h2>
+<p>The longest setup of the four — <strong>five Azure objects</strong>. Budget 20 minutes.</p>
+<h3>What they do in Azure</h3>
+<ol>
+<li><strong>Create a Data Collection Endpoint (DCE)</strong> — Azure Monitor → Data Collection Endpoints → Create. Same region as their Log Analytics workspace</li>
+<li><strong>Create a custom table</strong> in the workspace — Tables → Create → New custom log (DCR-based). Name it so it ends <code>_CL</code>, e.g. <code>Defensely_CL</code></li>
+<li><strong>Create a Data Collection Rule (DCR)</strong> linked to that DCE and table. The stream name will be <code>Custom-Defensely_CL</code></li>
+<li><strong>Register an app</strong> — Entra ID → App registrations → New. Then Certificates &amp; secrets → <strong>New client secret</strong> and copy the <em>Value</em> immediately (Azure also only shows it once)</li>
+<li><strong>Grant the app access</strong> — on the <strong>DCR</strong>, Access control (IAM) → Add role assignment → <strong>Monitoring Metrics Publisher</strong> → select the app</li>
+</ol>
+<blockquote>Step 5 is the one that gets missed. The role goes on the <strong>DCR</strong>, not on the</blockquote>
+<blockquote>workspace and not on the subscription.</blockquote>
+<h3>What to collect</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Example</th>
+<th>Where</th>
+</tr></thead><tbody>
+<tr>
+<td>DCE endpoint URL</td>
+<td><code>https://defensely-dce-ab12.eastus-1.ingest.monitor.azure.com</code></td>
+<td>DCE → Logs ingestion URI</td>
+</tr>
+<tr>
+<td>Entra Tenant ID</td>
+<td><code>72f988bf-…</code></td>
+<td>App registration → Overview</td>
+</tr>
+<tr>
+<td>Application (client) ID</td>
+<td><code>a1b2c3d4-…</code></td>
+<td>App registration → Overview</td>
+</tr>
+<tr>
+<td>Client secret</td>
+<td></td>
+<td>Step 4 — <strong>the Value, not the Secret ID</strong></td>
+</tr>
+<tr>
+<td>DCR Immutable ID</td>
+<td><code>dcr-7f2e8d4a6b104c9e…</code></td>
+<td>DCR → <strong>JSON View</strong> → <code>immutableId</code></td>
+</tr>
+<tr>
+<td>Stream name</td>
+<td><code>Custom-Defensely_CL</code></td>
+<td>DCR → the declared stream</td>
+</tr>
+</tbody></table>
+<h3>Common failures</h3>
+<table><thead><tr>
+<th>Error</th>
+<th>Fix</th>
+</tr></thead><tbody>
+<tr>
+<td>The client secret is wrong</td>
+<td>The <strong>Secret ID</strong> was copied instead of the <strong>Value</strong> — the usual one</td>
+</tr>
+<tr>
+<td>The client secret has expired</td>
+<td>Azure secrets expire. Create a new one</td>
+</tr>
+<tr>
+<td>No app registration with that client ID</td>
+<td>Wrong tenant, or Object ID copied instead of Application ID</td>
+</tr>
+<tr>
+<td>Lacks permission on the Data Collection Rule</td>
+<td>Step 5 missing, or the role was added at the wrong scope</td>
+</tr>
+<tr>
+<td>The DCR immutable ID or stream name was not found</td>
+<td>Immutable ID is only in <strong>JSON View</strong> — not the overview blade</td>
+</tr>
+<tr>
+<td>Azure rejected the data</td>
+<td>The custom table's schema does not match the fields we send. Compare against <code>GET siem/field-map</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Push 3 — IBM QRadar</h2>
+<p>Syslog over TLS. The only provider with no token — <strong>TLS authenticates the server to us</strong>, not us to it.</p>
+<h3>What they do in QRadar</h3>
+<ol>
+<li><strong>Admin → Log Sources → New Log Source</strong></li>
+<li>Log Source Type: <strong>Universal LEEF</strong></li>
+<li>Protocol Configuration: <strong>TLS Syslog</strong></li>
+<li>Listen port: <strong>6514</strong> (the only syslog port we permit)</li>
+<li>Set Log Source Identifier to <code>defensely-dlp</code></li>
+<li><strong>Deploy Changes</strong></li>
+</ol>
+<h3>What to collect</h3>
+<table><thead><tr>
+<th>Field</th>
+<th>Example</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td>Host</td>
+<td><code>qradar.acme.com:6514</code></td>
+<td>Hostname, <strong>not</strong> an IP address</td>
+</tr>
+<tr>
+<td>CA certificate (PEM)</td>
+<td><code>-----BEGIN CERTIFICATE-----…</code></td>
+<td><strong>Only</strong> if they use a private CA. The CA certificate, not the server's</td>
+</tr>
+</tbody></table>
+<blockquote><strong>A hostname is required.</strong> An IP literal is refused — a genuine collector has</blockquote>
+<blockquote>a DNS name and a certificate for it, and accepting IPs is how an internal</blockquote>
+<blockquote>target gets past a name-based check.</blockquote>
+<h3>Common failures</h3>
+<table><thead><tr>
+<th>Error</th>
+<th>Fix</th>
+</tr></thead><tbody>
+<tr>
+<td>The TLS certificate could not be verified</td>
+<td>Private CA — paste its PEM into the connector</td>
+</tr>
+<tr>
+<td>Use the SIEM's host name rather than an IP address</td>
+<td>Give it a DNS name</td>
+</tr>
+<tr>
+<td>Port N is not allowed</td>
+<td>Must be 6514</td>
+</tr>
+<tr>
+<td>Resolves to an internal address</td>
+<td>QRadar is not reachable from the internet — <strong>use pull instead</strong></td>
+</tr>
+</tbody></table>
+<h3>Important: no delivery confirmation</h3>
+<p>Syslog over TCP confirms the socket accepted the bytes, <strong>not</strong> that QRadar parsed or stored them. A success here is a weaker claim than a 200 from Splunk. If events are not appearing, check QRadar's own log source status — our side will show success either way.</p>
+<hr>
+<h2>Push 4 — Generic HTTPS webhook</h2>
+<p>Any endpoint that accepts an HTTPS POST with a JSON body. Use this for a SIEM we have no dedicated transport for, or for the customer's own pipeline.</p>
+<table><thead><tr>
+<th>Field</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td>Webhook URL</td>
+<td>HTTPS only. Ports 443, 8088, 9243 or 6514</td>
+</tr>
+<tr>
+<td>Token</td>
+<td>Optional. Sent as <code>Authorization: Bearer &lt;token&gt;</code></td>
+</tr>
+<tr>
+<td>Custom header name</td>
+<td>Optional. Sends the token in that header instead</td>
+</tr>
+</tbody></table>
+<p><strong>Body:</strong> a JSON array of events. With <code>format=cef</code> or <code>leef</code> it is <code>text/plain</code>, one event per line.</p>
+<h3>Best way to prove the pipeline</h3>
+<p>Before involving any real SIEM, point a webhook connector at a free capture service such as <strong>webhook.site</strong> and press Test. The event appears in the browser immediately.</p>
+<p>If that works, everything after it is credentials and payload shape. If it fails, the problem is on our side — which is a much more useful thing to learn first.</p>
+<hr>
+<h2>Testing any provider</h2>
+<p>In Defensely: <strong>Settings → Integrations → SIEM → the destination → Test</strong>.</p>
+<ul>
+<li>Sends <strong>one synthetic event</strong>, clearly labelled (<code>connection.test@defensely.ai</code>). Never a real incident</li>
+<li><strong>Works even when delivery is switched off</strong>, so a destination can be proven before anything streams</li>
+<li>A destination <strong>cannot be switched on until a test has passed</strong></li>
+</ul>
+<h3>Rules that apply to every provider</h3>
+<table><thead><tr>
+<th>Rule</th>
+<th>Why</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>HTTPS only</strong></td>
+<td>A token in a header over http is a token on the wire</td>
+</tr>
+<tr>
+<td><strong>Public hostname, not an IP</strong></td>
+<td>A real collector has a DNS name and a certificate</td>
+</tr>
+<tr>
+<td><strong>Ports 443, 8088, 9243, 6514 only</strong></td>
+<td>Narrow by default</td>
+</tr>
+<tr>
+<td><strong>Redirects are not followed</strong></td>
+<td>A 3xx from a collector is an error, not a hop. Configure the final URL</td>
+</tr>
+<tr>
+<td><strong>Internal addresses refused</strong></td>
+<td>Including cloud metadata endpoints</td>
+</tr>
+</tbody></table>
+<p>If a customer's collector fails the last one, that is the signal to switch them to <strong>pull</strong> — not to ask them to open a firewall.</p>
+<hr>
+<h2>What we send, and what we never send</h2>
+<p>Every provider receives the same event, rendered in their format. Full field mapping: <code>GET siem/field-map</code>, or the Field Reference screen.</p>
+<p><strong>Never sent, to any provider:</strong></p>
+<table><thead><tr>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td>The matched sensitive values</td>
+<td>The data the product exists to protect</td>
+</tr>
+<tr>
+<td>Full file path</td>
+<td>Leaks project and client names</td>
+</tr>
+<tr>
+<td>Full URL</td>
+<td>Query strings carry session tokens</td>
+</tr>
+<tr>
+<td>Classification payload, AI verdict text</td>
+<td>Both quote the document</td>
+</tr>
+<tr>
+<td>Evidence video links</td>
+<td>Not a log field</td>
+</tr>
+</tbody></table>
+<p>A destination may optionally receive a <strong>summary</strong> of what matched — <code>{"PII":2,"PHI":1}</code>, categories and counts only. <strong>No matched value leaves in any form</strong>, and the database cannot store a setting that would allow it.</p>
+<hr>
+<h2>Cost — raise it before they ask</h2>
+<p>Splunk and Sentinel <strong>bill by the gigabyte ingested</strong>. Our events add to the customer's bill.</p>
+<p>Point them at the <strong>filter</strong> on the connector: they can send only Critical and High, or only blocked transfers, instead of everything. For a large tenant that is a material difference, and a SIEM bill that jumps after connecting Defensely is a bad first week.</p>
+<hr>
+<h2>Related documents</h2>
+<table><thead><tr>
+<th>Document</th>
+<th>For</th>
+</tr></thead><tbody>
+<tr>
+<td><strong><code>SIEM-API-Integration.md</code></strong></td>
+<td>The customer's engineer — pull setup, paste-ready configs</td>
+</tr>
+<tr>
+<td><strong><code>SIEM-OVERVIEW.md</code></strong></td>
+<td>Architecture, security, operations</td>
+</tr>
+<tr>
+<td><strong><code>SIEM-UI-Integration.md</code></strong></td>
+<td>UX and frontend</td>
+</tr>
+</tbody></table>
+
+<div class="doc-foot">Defensely DLP &middot; SIEM Provider Setup - End to End &middot; generated 2026-11-02</div>
+</body></html>

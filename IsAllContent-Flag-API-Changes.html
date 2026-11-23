@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM — IsAllContent Flag Changes</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar {
+            background: #1b1b1b;
+            padding: 14px 28px;
+            display: flex; align-items: center; gap: 12px;
+            border-bottom: 1px solid #000;
+        }
+        .topbar h1 { color: #fff; font-size: 18px; font-weight: 700; margin: 0; }
+        .topbar span { color: #89bf04; font-size: 13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM</h1>
+        <span>IsAllContent flag on Policy endpoints (2026-10-10)</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM — IsAllContent Flag Changes",
+            "version": "1.0.0",
+            "description": "Focused documentation for the new **`IsAllContent`** boolean shipped on 2026-10-10.\n\n### Meaning\n`IsAllContent = true` ⇔ **every active content type is selected, each with all of its active sub-content types** — i.e. the *\"All content\"* selection in the policy wizard. The value is **computed** against `ContentTypeMaster` / `SubContentTypeMaster` on every read; there is **no new DB column** and no migration.\n\n### Where it appears\n| Endpoint | Direction | Placement |\n|---|---|---|\n| `POST /GetPolicyById/{id}` | response | `PolicyDTO.IsAllContent` (common ContentTypes list) **+** per `Applications[].IsAllContent` **+** per `Devices[].IsAllContent` |\n| `POST /CreatePolicy` | request | root `IsAllContent` (common list) **+** per `Applications[].IsAllContent` **+** per `Devices[].IsAllContent` — **honoured on write** |\n| `POST /UpdatePolicyBasicDetails/{id}` | request | `UpdatePolicyBasicDetailsDTO.IsAllContent` (common list) — **honoured on write** |\n| `POST /UpdatePolicyApplications/{id}` | request | per `Applications[].IsAllContent` — **honoured on write** |\n| `POST /UpdatePolicyDevices/{id}` | request | per `Devices[].IsAllContent` — **honoured on write** |\n| `POST /SyncPolicyAppsAndDevices` | request | per `Applications[].IsAllContent` + per `Devices[].IsAllContent` — **honoured on write** |\n| `POST /GetPolicyByEndpointUser/{endpointUserId}` | response | per `Applications[].IsAllContent` **+** per `Devices[].IsAllContent` |\n| `POST /V1/GetPolicyByEndpointUser/{endpointUserId}` (ExeApi) | response | same as above — agent parity route |\n\n### Write behaviour (all write endpoints)\n* `IsAllContent: true` (root or on an app/device row) → that list's content types are expanded server-side to the **full active master set** (every `ContentTypeMaster` × all its `SubContentTypeMaster`s) before normal processing, regardless of what `ContentTypes` contains — the UI does **not** need to enumerate everything. `PolicyActionMasterId` is taken per content type from the sent list when present, else from the first sent entry. Subsequent reads therefore compute `IsAllContent = true`.\n* `IsAllContent: false` (or omitted — default) → unchanged behaviour: only the sent `ContentTypes` / `DlpSubcontentTypeMasters` rows are persisted.\n\n### Read behaviour notes\n* **GetPolicyById** — each application's / device's flag is computed from that app's/device's *own effective* content-type list. An app with an **empty** list (not customised, `IsEdited = false`, inherits the common tab) reports `IsAllContent = false`; check the policy-level flag instead.\n* **GetPolicyByEndpointUser** — the flag is computed from the rows the agent actually receives, so an app/device **inheriting a common \"all content\" selection correctly reports `true`**.\n* If a new content type (or sub-content type) is later added to the master tables, existing policies naturally report `false` until re-saved with *All*.\n\n### QA note\nThese changes are **not on QA yet** — QA still runs the previous build, which is why `GetPolicyById/290` comes back without `isAllContent`. The flag will appear once this branch is deployed; nothing extra is needed on the DB."
+        },
+        "servers": [
+            { "url": "https://localhost:5001", "description": "Local dev (DLP API)" },
+            { "url": "https://qa-email.azure-api.net/qadlp", "description": "QA DLP (APIM)" }
+        ],
+        "tags": [
+            { "name": "Admin (Console)", "description": "Policy wizard endpoints on the DLP API — common tab + per-app/per-device customisation." },
+            { "name": "Agent", "description": "Endpoint-agent policy fetch — DLP API route and its SFM.DLP.ExeApi parity function." }
+        ],
+
+        "paths": {
+
+            "/CreatePolicy": {
+                "post": {
+                    "tags": ["Admin (Console)"],
+                    "summary": "Create a policy — IsAllContent accepted at root and on each app/device row",
+                    "description": "Payload is `PolicyDTO`. **`IsAllContent`** is now honoured in three places:\n* **root** — the common content-type list is expanded to the full active master set.\n* **`applications[].isAllContent`** — that application row's content types are expanded.\n* **`devices[].isAllContent`** — that device row's content types are expanded.\n\nExpansion happens server-side before rule-map generation, so the UI does not need to enumerate every content/sub-content type when *All* is ticked.",
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PolicyDTO_CreateRequest" } } }
+                    },
+                    "responses": {
+                        "201": { "description": "Policy created.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseMessage" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/UpdatePolicyApplications/{id}": {
+                "post": {
+                    "tags": ["Admin (Console)"],
+                    "summary": "Configure — per-application update, IsAllContent honoured per row",
+                    "description": "Payload is `UpdatePolicyApplicationsDTO`. Each `applications[]` row may send **`isAllContent: true`** — that row's `contentTypes` are expanded server-side to the full active master set before its rule maps are rebuilt. Rows with `isAllContent: false` behave exactly as before.",
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdatePolicyApplicationsDTO" } } }
+                    },
+                    "responses": {
+                        "200": { "description": "Policy applications updated successfully.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseMessage" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/UpdatePolicyDevices/{id}": {
+                "post": {
+                    "tags": ["Admin (Console)"],
+                    "summary": "Configure — per-device update, IsAllContent honoured per row",
+                    "description": "Payload is `UpdatePolicyDevicesDTO`. Each `devices[]` row may send **`isAllContent: true`** — that row's `contentTypes` are expanded server-side to the full active master set before its rule maps are rebuilt. Rows with `isAllContent: false` behave exactly as before.\n\nThe same per-row behaviour also applies to `POST /SyncPolicyAppsAndDevices` (both `applications[]` and `devices[]`).",
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdatePolicyDevicesDTO" } } }
+                    },
+                    "responses": {
+                        "200": { "description": "Policy devices updated successfully.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseMessage" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/GetPolicyById/{id}": {
+                "post": {
+                    "tags": ["Admin (Console)"],
+                    "summary": "Get a policy for edit — IsAllContent on common list and on each app/device",
+                    "description": "Returns `PolicyDTO`. New fields:\n* **`IsAllContent`** (root) — computed from the common `ContentTypes` list (`PolicyRuleContentTypes` where `IsGeneral = true`).\n* **`Applications[].IsAllContent`** / **`Devices[].IsAllContent`** — computed from that app's/device's own effective content-type list (its rule-map rows merged with policy-level non-general entries).\n\nAn app/device that has **no customised content types** (empty list, `IsEdited = false`) reports `false` — the UI should fall back to the root flag, exactly as it falls back to the common list.",
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "responses": {
+                        "200": { "description": "Policy found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponsePolicyDTO" } } } },
+                        "404": { "description": "Policy not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/UpdatePolicyBasicDetails/{id}": {
+                "post": {
+                    "tags": ["Admin (Console)"],
+                    "summary": "Update basic details — IsAllContent accepted and honoured on write",
+                    "description": "Payload is `UpdatePolicyBasicDetailsDTO`, now carrying **`IsAllContent`**.\n\n* `true` → server expands and persists the **full active master set** of content types × sub-content types (`IsGeneral = true`), so the UI does **not** need to enumerate everything. Any `ContentTypes` sent alongside are only used to resolve `PolicyActionMasterId` per content type.\n* `false` / omitted → unchanged: the sent `ContentTypes` list is persisted as before.\n\nAs before, content types are deleted and recreated on every call.",
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdatePolicyBasicDetailsDTO" } } }
+                    },
+                    "responses": {
+                        "200": { "description": "Policy basic details updated successfully.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseMessage" } } } },
+                        "404": { "description": "Policy not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/GetPolicyByEndpointUser/{endpointUserId}": {
+                "post": {
+                    "tags": ["Agent"],
+                    "summary": "Agent policy fetch — IsAllContent per app and per device",
+                    "description": "Anonymous route used by the endpoint agent. Returns `PolicyResponseDto`; each **`Applications[]`** and **`Devices[]`** wrapper now carries **`IsAllContent`**.\n\nComputed from the rule rows the agent receives (own rows merged with the common fallback), so when the admin selected *All content* on the common tab, every app/device that inherits it reports `true` — the agent can skip per-content-type matching for that app/device.",
+                    "parameters": [
+                        { "name": "endpointUserId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "responses": {
+                        "200": { "description": "Policy for this endpoint user (falls back to the default policy).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponsePolicyResponseDto" } } } },
+                        "404": { "description": "Policy not found for this endpoint.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } },
+                        "500": { "description": "Unhandled exception.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            },
+
+            "/V1/GetPolicyByEndpointUser/{endpointUserId}": {
+                "post": {
+                    "tags": ["Agent"],
+                    "summary": "ExeApi parity route — identical IsAllContent behaviour",
+                    "description": "Host: **SFM.DLP.ExeApi** (Azure Functions, `GetPolicyByEndpointUserV1`). Mirrors the DLP API route above — same `PolicyResponseDto` contract, same per-app / per-device `IsAllContent` computation (implemented in the `SFM.DLP.Application` copy of `PolicyService`).",
+                    "parameters": [
+                        { "name": "endpointUserId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } }
+                    ],
+                    "responses": {
+                        "200": { "description": "Policy for this endpoint user.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponsePolicyResponseDto" } } } },
+                        "404": { "description": "Policy not found for this endpoint.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseError" } } } }
+                    }
+                }
+            }
+        },
+
+        "components": {
+            "schemas": {
+
+                "PolicyContentTypeDTO": {
+                    "type": "object",
+                    "properties": {
+                        "contentTypeMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "subContentTypeMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "contentType": { "type": "string", "nullable": true },
+                        "policyActionMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "dlpSubcontentTypeMasters": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicySubContentTypeDTO" }
+                        }
+                    }
+                },
+
+                "PolicySubContentTypeDTO": {
+                    "type": "object",
+                    "properties": {
+                        "subContentTypeMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "subContentType": { "type": "string", "nullable": true },
+                        "subContentTypeDescription": { "type": "string", "nullable": true }
+                    }
+                },
+
+                "PolicyDTO": {
+                    "type": "object",
+                    "description": "GetPolicyById response body (trimmed to the fields relevant to this change).",
+                    "properties": {
+                        "policyId": { "type": "integer", "format": "int32" },
+                        "policyName": { "type": "string" },
+                        "policyDescription": { "type": "string" },
+                        "contentTypes": {
+                            "type": "array",
+                            "description": "Common (general) content-type list.",
+                            "items": { "$ref": "#/components/schemas/PolicyContentTypeDTO" }
+                        },
+                        "isAllContent": {
+                            "type": "boolean",
+                            "description": "NEW — true when the common list covers every active content type with all of its active sub-content types."
+                        },
+                        "applications": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyApplicationDTO" }
+                        },
+                        "devices": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyDeviceDTO" }
+                        }
+                    }
+                },
+
+                "PolicyApplicationDTO": {
+                    "type": "object",
+                    "description": "Per-application customisation (trimmed).",
+                    "properties": {
+                        "application": { "type": "string", "nullable": true },
+                        "applicationCategoryId": { "type": "integer", "format": "int32" },
+                        "applicationSubCategoryId": { "type": "integer", "format": "int32", "nullable": true },
+                        "contentTypes": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyContentTypeDTO" }
+                        },
+                        "isAllContent": {
+                            "type": "boolean",
+                            "description": "NEW — on reads: computed from this application's own effective content-type list (empty list / not customised ⇒ false; use the root flag). On writes (CreatePolicy, UpdatePolicyApplications, SyncPolicyAppsAndDevices): true expands this row's contentTypes to the full master set."
+                        },
+                        "isEdited": { "type": "boolean" }
+                    }
+                },
+
+                "PolicyDeviceDTO": {
+                    "type": "object",
+                    "description": "Per-device customisation (trimmed).",
+                    "properties": {
+                        "deviceName": { "type": "string", "nullable": true },
+                        "deviceCategoryId": { "type": "integer", "format": "int32" },
+                        "deviceSubCategoryId": { "type": "integer", "format": "int32", "nullable": true },
+                        "contentTypes": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyContentTypeDTO" }
+                        },
+                        "isAllContent": {
+                            "type": "boolean",
+                            "description": "NEW — on reads: computed from this device's own effective content-type list (empty list / not customised ⇒ false; use the root flag). On writes (CreatePolicy, UpdatePolicyDevices, SyncPolicyAppsAndDevices): true expands this row's contentTypes to the full master set."
+                        },
+                        "isEdited": { "type": "boolean" }
+                    }
+                },
+
+                "PolicyDTO_CreateRequest": {
+                    "type": "object",
+                    "description": "CreatePolicy request body (trimmed to the fields relevant to this change). Same shape as the GetPolicyById response.",
+                    "required": ["policyName"],
+                    "properties": {
+                        "policyName": { "type": "string" },
+                        "policyDescription": { "type": "string" },
+                        "policyAction": { "type": "integer", "format": "int32", "nullable": true },
+                        "contentTypes": {
+                            "type": "array",
+                            "description": "Common list. Ignored for selection when isAllContent = true (only consulted for PolicyActionMasterId).",
+                            "items": { "$ref": "#/components/schemas/PolicyContentTypeDTO" }
+                        },
+                        "isAllContent": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "NEW — true expands the common list to ALL active content types × all their active sub-content types."
+                        },
+                        "applications": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyApplicationDTO" }
+                        },
+                        "devices": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/PolicyDeviceDTO" }
+                        }
+                    },
+                    "example": {
+                        "policyName": "Finance - Block All Content",
+                        "policyAction": 2,
+                        "isAllContent": true,
+                        "contentTypes": [],
+                        "applications": [
+                            { "application": "Browser Upload", "applicationCategoryId": 1, "isAllContent": true, "contentTypes": [] }
+                        ],
+                        "devices": [
+                            { "deviceName": "USB", "deviceCategoryId": 1, "isAllContent": false,
+                              "contentTypes": [ { "contentTypeMasterId": 2, "dlpSubcontentTypeMasters": [ { "subContentTypeMasterId": 7 } ] } ] }
+                        ]
+                    }
+                },
+
+                "UpdatePolicyApplicationsDTO": {
+                    "type": "object",
+                    "properties": {
+                        "policyAction": { "type": "integer", "format": "int32", "nullable": true },
+                        "applications": {
+                            "type": "array",
+                            "description": "Each row carries its own isAllContent (NEW) — see PolicyApplicationDTO.",
+                            "items": { "$ref": "#/components/schemas/PolicyApplicationDTO" }
+                        }
+                    }
+                },
+
+                "UpdatePolicyDevicesDTO": {
+                    "type": "object",
+                    "properties": {
+                        "policyAction": { "type": "integer", "format": "int32", "nullable": true },
+                        "devices": {
+                            "type": "array",
+                            "description": "Each row carries its own isAllContent (NEW) — see PolicyDeviceDTO.",
+                            "items": { "$ref": "#/components/schemas/PolicyDeviceDTO" }
+                        }
+                    }
+                },
+
+                "UpdatePolicyBasicDetailsDTO": {
+                    "type": "object",
+                    "required": ["policyName"],
+                    "properties": {
+                        "policyName": { "type": "string" },
+                        "policyDescription": { "type": "string", "nullable": true },
+                        "isDefaultAllowed": { "type": "boolean" },
+                        "policyAction": { "type": "integer", "format": "int32", "nullable": true },
+                        "contentTypes": {
+                            "type": "array",
+                            "description": "When isAllContent = true this list is only consulted for PolicyActionMasterId; when false it is persisted as-is (unchanged behaviour).",
+                            "items": { "$ref": "#/components/schemas/PolicyContentTypeDTO" }
+                        },
+                        "isAllContent": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "NEW — true makes the server persist ALL active content types × all their active sub-content types as the common list; the UI need not enumerate them."
+                        },
+                        "fileTypes": { "type": "array", "items": { "type": "object" } },
+                        "regex": { "type": "array", "items": { "type": "object" } },
+                        "domains": { "type": "array", "items": { "type": "object" }, "nullable": true },
+                        "policyUsermaps": { "type": "array", "items": { "type": "object" }, "nullable": true },
+                        "actionSettings": { "type": "object", "nullable": true },
+                        "alertMessages": { "type": "array", "items": { "type": "object" } }
+                    },
+                    "example": {
+                        "policyName": "Finance - Block All Content",
+                        "policyDescription": "All content types blocked on upload channels",
+                        "isDefaultAllowed": false,
+                        "policyAction": 2,
+                        "isAllContent": true,
+                        "contentTypes": [
+                            { "contentTypeMasterId": 1, "policyActionMasterId": 2, "dlpSubcontentTypeMasters": [] }
+                        ]
+                    }
+                },
+
+                "PolicyResponseDto": {
+                    "type": "object",
+                    "description": "GetPolicyByEndpointUser response body (trimmed).",
+                    "properties": {
+                        "policyId": { "type": "integer", "format": "int32" },
+                        "policyName": { "type": "string" },
+                        "applications": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/ApplicationResponseDto" }
+                        },
+                        "devices": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/DeviceResponseDto" }
+                        }
+                    }
+                },
+
+                "ApplicationResponseDto": {
+                    "type": "object",
+                    "properties": {
+                        "ruleDescription": { "type": "string", "nullable": true },
+                        "application": { "type": "string", "nullable": true },
+                        "applicationMasterId": {},
+                        "applicationCategoryId": {},
+                        "processName": { "type": "string", "nullable": true },
+                        "actionMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "osMasterId": {},
+                        "isAllContent": {
+                            "type": "boolean",
+                            "description": "NEW — true when this application's effective rules (own + inherited common) cover every active content type with all sub-content types; the agent may skip per-content-type matching."
+                        },
+                        "rules": { "type": "array", "items": { "$ref": "#/components/schemas/RuleResponseDto" } }
+                    }
+                },
+
+                "DeviceResponseDto": {
+                    "type": "object",
+                    "properties": {
+                        "ruleDescription": { "type": "string", "nullable": true },
+                        "device": { "type": "string", "nullable": true },
+                        "deviceMasterId": {},
+                        "deviceCategoryId": {},
+                        "actionMasterId": { "type": "integer", "format": "int32", "nullable": true },
+                        "osMasterId": {},
+                        "isAllContent": {
+                            "type": "boolean",
+                            "description": "NEW — same semantics as ApplicationResponseDto.isAllContent, for this device."
+                        },
+                        "rules": { "type": "array", "items": { "$ref": "#/components/schemas/RuleResponseDto" } }
+                    }
+                },
+
+                "RuleResponseDto": {
+                    "type": "object",
+                    "properties": {
+                        "fileTypeMasterId": { "type": "integer", "format": "int32" },
+                        "regexMasterIds": { "type": "array", "items": { "type": "integer", "nullable": true } },
+                        "domains": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "subCategory": { "type": "string" },
+                                    "fileActions": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "fileSize": { "type": "integer" },
+                                                "fileMetricsMasterId": { "type": "integer" },
+                                                "contentTypeMasterId": { "type": "integer" },
+                                                "subContentTypeMasterIds": { "type": "array", "items": { "type": "integer", "nullable": true } },
+                                                "transferTypeMasterId": { "type": "integer" },
+                                                "actionMasterId": { "type": "integer" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+
+                "ApiResponsePolicyDTO": {
+                    "type": "object",
+                    "properties": {
+                        "isSuccess": { "type": "boolean", "example": true },
+                        "message": { "type": "string" },
+                        "data": { "$ref": "#/components/schemas/PolicyDTO" },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                },
+
+                "ApiResponsePolicyResponseDto": {
+                    "type": "object",
+                    "properties": {
+                        "isSuccess": { "type": "boolean", "example": true },
+                        "message": { "type": "string" },
+                        "data": { "$ref": "#/components/schemas/PolicyResponseDto" },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                },
+
+                "ApiResponseMessage": {
+                    "type": "object",
+                    "properties": {
+                        "isSuccess": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "example": "Policy basic details updated successfully." },
+                        "data": { "type": "object", "nullable": true },
+                        "errors": { "type": "array", "items": { "type": "string" }, "nullable": true }
+                    }
+                },
+
+                "ApiResponseError": {
+                    "type": "object",
+                    "properties": {
+                        "isSuccess": { "type": "boolean", "example": false },
+                        "message": { "type": "string" },
+                        "data": { "nullable": true },
+                        "errors": { "type": "array", "items": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        SwaggerUIBundle({
+            spec,
+            dom_id: "#swagger",
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: "BaseLayout",
+            docExpansion: "list",
+            defaultModelsExpandDepth: 2,
+            defaultModelExpandDepth: 3
+        });
+    };
+    </script>
+</body>
+</html>

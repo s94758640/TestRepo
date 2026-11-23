@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Changing the database</title><style>:root { --ink:#16181d; --muted:#5a6270; --line:#e2e5ea; --accent:#1a56a8; --bg:#fff; --code:#f5f6f8; }
+* { box-sizing:border-box; }
+body { margin:0; padding:44px 56px 72px; background:var(--bg); color:var(--ink);
+       font:15px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       max-width:60em; -webkit-font-smoothing:antialiased; }
+h1 { font-size:1.9em; line-height:1.25; margin:0 0 .15em; letter-spacing:-.015em; }
+h2 { font-size:1.28em; margin:2.1em 0 .55em; padding-bottom:.28em; border-bottom:2px solid var(--line);
+     letter-spacing:-.01em; }
+h3 { font-size:1.06em; margin:1.7em 0 .45em; color:var(--accent); }
+h4 { font-size:.98em; margin:1.4em 0 .35em; }
+p { margin:.7em 0; }
+ul,ol { margin:.6em 0; padding-left:1.5em; }
+li { margin:.28em 0; }
+hr { border:0; border-top:1px solid var(--line); margin:2.4em 0; }
+a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(26,86,168,.28); }
+code { background:var(--code); padding:.1em .35em; border-radius:3px;
+       font:13px/1.5 "Cascadia Mono",Consolas,"SF Mono",Menlo,monospace; }
+pre { background:var(--code); border:1px solid var(--line); border-left:3px solid var(--accent);
+      border-radius:4px; padding:12px 15px; overflow-x:auto; margin:.9em 0; }
+pre code { background:none; padding:0; font-size:12.5px; line-height:1.55; white-space:pre; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+th,td { border:1px solid var(--line); padding:7px 11px; text-align:left; vertical-align:top; }
+th { background:#f0f2f5; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfc; }
+blockquote { margin:1em 0; padding:.7em 1.1em; border-left:3px solid var(--accent);
+             background:#f7f9fc; color:var(--muted); }
+strong { font-weight:650; }
+.doc-foot { margin-top:3.5em; padding-top:1em; border-top:1px solid var(--line);
+            color:var(--muted); font-size:12.5px; }
+@media print {
+  body { padding:0; max-width:none; font-size:10.6pt; }
+  h1,h2,h3,h4 { page-break-after:avoid; }
+  pre,table,blockquote { page-break-inside:avoid; }
+  a { color:var(--ink); border:0; }
+  @page { margin:16mm 15mm; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6e8ec; --muted:#9aa3b2; --line:#2c3038; --accent:#6aa9f0; --bg:#15171b; --code:#1d2026; }
+  th { background:#22262d; }
+  tbody tr:nth-child(even) { background:#191c21; }
+  blockquote { background:#1a1e24; }
+}</style></head><body>
+<h1>Changing the database</h1>
+<blockquote><strong>Someone asked for a database change?</strong></blockquote>
+<blockquote>It goes in <code>SFM.DLP.API/Migrations/Dlp/</code> as <code>V000n__name.sql</code>.</blockquote>
+<blockquote>Not in <code>scripts/</code>. Not as SQL pasted into a chat. Not "I'll run it on QA".</blockquote>
+<blockquote></blockquote>
+<blockquote><strong>New here?</strong> That one line is the whole convention. The rest of this file is</blockquote>
+<blockquote>why, and the two ways it goes wrong.</blockquote>
+<p><strong>A schema change ships as a migration. Always. That is the default and there is no second option to weigh up.</strong></p>
+<p>Writing the SQL into <code>scripts/</code> and telling someone to run it reaches exactly the one database that person remembers to point at. We are database-per-tenant — every customer has their own DLP database — so a hand-run script is a change that landed on one tenant and silently did not land on the others. The runner exists to make that impossible.</p>
+<hr>
+<h2>The one thing to do</h2>
+<p>Add a numbered file to <code>SFM.DLP.API/Migrations/Dlp/</code>:</p>
+<pre><code>
+V0004__cloudfile_listitemuniqueid.sql
+</code></pre>
+<ul>
+<li><code>V</code> + <strong>four digits</strong>, then <code>__</code>, then a short name. The runner matches <code>^V(\d{4})__(.+)\.sql$</code> — a file that does not match is ignored silently, so check the shape before you wonder why nothing happened.</li>
+<li>Next number after the highest already there. Never reuse or renumber: the version is recorded per database once applied, and a reused number is treated as already done.</li>
+<li>It is embedded automatically (<code>&lt;EmbeddedResource Include="Migrations\**\*.sql" /&gt;</code>). Nothing to register.</li>
+</ul>
+<p>Then after deploy:</p>
+<pre><code>
+POST /admin/migration/run
+</code></pre>
+<p>That applies every unapplied script to every tenant. <code>GET /admin/migration/status</code> shows where each database has got to.</p>
+<p>Three sets exist and they go to different databases — put the file in the right one:</p>
+<table><thead><tr>
+<th>Folder</th>
+<th>Database</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Migrations/Dlp/</code></td>
+<td>each tenant's DLP database</td>
+</tr>
+<tr>
+<td><code>Migrations/Common/</code></td>
+<td>each tenant's user database</td>
+</tr>
+<tr>
+<td><code>Migrations/Nucleus/</code></td>
+<td>the shared Nucleus database</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Never edit a migration that has already run</h2>
+<p>Got <code>V0004</code> wrong? <strong>Ship <code>V0005</code> that corrects it.</strong> Do not edit <code>V0004</code>.</p>
+<p>The runner checksums every script. Change one after it has been applied and it does not re-run — it logs this and moves on:</p>
+<pre><code>
+Migration [db/Dlp] script V0004__... checksum changed — skipping
+</code></pre>
+<p>Skipping is the safe half. The dangerous half is that it skips <strong>per database</strong>:</p>
+<table><thead><tr>
+<th>Tenant</th>
+<th>What it ends up with</th>
+</tr></thead><tbody>
+<tr>
+<td>Already applied <code>V0004</code></td>
+<td>The <strong>old</strong> content. Warned, then skipped</td>
+</tr>
+<tr>
+<td>New, or never applied it</td>
+<td>The <strong>new</strong> content</td>
+</tr>
+</tbody></table>
+<p>One file, two different schemas, and the only sign is a warning line in a deploy log nobody reads top to bottom. Six months later two customers behave differently and nothing in the repository explains why.</p>
+<p>The same applies to renaming a file: the runner keys on the name, so a rename is a brand new script to every database that already ran the old one, and the original stays applied forever under a name that no longer exists.</p>
+<h2>Write it so it can run twice</h2>
+<p>The runner records what it has applied, but a migration still gets re-run in practice — a restored database, a tenant added mid-release, a failed run retried. Use <code>IF NOT EXISTS</code> and <code>ADD COLUMN IF NOT EXISTS</code> rather than assuming a clean slate.</p>
+<h2>Guard anything a tenant might not have</h2>
+<p>Most tables exist everywhere. Some do not — <code>discovery."CloudFile"</code> only exists once a tenant has connected a cloud app.</p>
+<p>A migration that assumes such a table <strong>fails for every tenant without it</strong>, and one failing tenant stops the whole fleet receiving any LATER migration. So skip rather than fail:</p>
+<pre><code>
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'discovery' AND table_name = 'CloudFile'
+    ) THEN
+        RAISE NOTICE 'discovery."CloudFile" not present; skipping V0004.';
+        RETURN;
+    END IF;
+
+    ALTER TABLE discovery."CloudFile"
+        ADD COLUMN IF NOT EXISTS "ListItemUniqueId" text NULL;
+
+    CREATE INDEX IF NOT EXISTS "IX_discovery_CloudFile_ListItemUniqueId"
+        ON discovery."CloudFile" ("ListItemUniqueId")
+        WHERE "ListItemUniqueId" IS NOT NULL;
+END
+$$;
+</code></pre>
+<p>That is the whole of <code>V0004</code>, and it is the shape to copy.</p>
+<hr>
+<h2>What <code>scripts/</code> is still for</h2>
+<p>Not nothing, but not migrations either:</p>
+<ul>
+<li><strong>Fresh installs</strong> — <code>create_cloud_discovery.sql</code> builds the whole schema for a new tenant in one go. Keep the new column in there too, so a fresh database and a migrated one end up identical.</li>
+<li><strong>One-off data repairs</strong> — <code>migrate_promptlog_status.sql</code>, a backfill, a cleanup. Run deliberately, once, by a person who knows why.</li>
+<li><strong>Diagnostics</strong> — the verification queries at the foot of most scripts.</li>
+</ul>
+<p>If it changes the shape of the schema, it is a migration. If it changes data on purpose, once, it is a script.</p>
+<hr>
+<h2>Checklist</h2>
+<ol>
+<li><code>Migrations/Dlp|Common|Nucleus/V000n__short_name.sql</code>, next number up</li>
+<li><strong>Never edit or rename one that has already run</strong> — ship the next number</li>
+<li><code>IF NOT EXISTS</code> everywhere</li>
+<li>Guarded if the table might be absent on some tenants</li>
+<li>Same change added to the matching <code>scripts/create_*.sql</code> for fresh installs</li>
+<li>Entity + <code>QaSfmDlpContext</code> updated to match</li>
+<li><code>POST /admin/migration/run</code> after deploy, then <code>GET /admin/migration/status</code> to confirm every tenant took it</li>
+</ol>
+<hr>
+<h2>If you are reviewing someone else's change</h2>
+<p>Three things reject it on sight:</p>
+<ul>
+<li><strong>SQL in <code>scripts/</code> that changes the schema</strong> — it reaches one database, the one they remember to point at. Ask for a migration.</li>
+<li><strong>An edit to an existing <code>V000n</code> file</strong> — check <code>git log</code> on it. If it has ever been deployed, it is already applied somewhere and the edit will not reach those tenants.</li>
+<li><strong>A migration that assumes a table exists</strong> — ask whether every tenant has it. <code>discovery.*</code> tables do not; a tenant with no cloud connector will fail the run and block the whole fleet from every later migration.</li>
+</ul>
+
+<div class="doc-foot">Defensely DLP &middot; Changing the database &middot; generated 2026-10-09</div>
+</body></html>

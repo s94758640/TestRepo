@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard v2 API — Documentation</title>
+<style>
+  :root{
+    --muted:#64748b; --line:#e2e8f0; --post:#2563eb; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.55}
+  header.top{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:#cbd5e1;font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:260px;flex:0 0 260px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:#fff}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:#334155;text-decoration:none;font-size:13px}
+  nav.side a:hover{background:#f1f5f9}
+  main{flex:1;padding:24px 32px;min-width:0}
+  section{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:22px}
+  section h2{margin-top:0;font-size:18px}
+  h5.section{margin:18px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:4px 10px;border-radius:6px;background:var(--post)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .ok{background:var(--newbg);border:1px solid #a7f3d0;border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .tag{font-size:12px;color:var(--muted)}
+  @media(max-width:1000px){nav.side{display:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Dashboard v2 API — Documentation</h1>
+  <p>The redesigned DLP dashboard · for the UI team · thirteen endpoints, one drill-down contract</p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Start here</h4>
+  <a href="#idea">The one idea</a>
+  <a href="#conventions">Conventions</a>
+  <h4>Endpoints</h4>
+  <a href="#drill">1. Drill-down</a>
+  <a href="#overview">2. Overview summary</a>
+  <a href="#heatmap">3. Activity heatmap</a>
+  <a href="#file">4. File Sharing</a>
+  <a href="#content">5. Content Sharing</a>
+  <a href="#web">6. Web Filtering</a>
+  <a href="#insider">7. Insider signals</a>
+  <a href="#series">8. Time series</a>
+  <a href="#panels">9. Overview panels</a>
+  <a href="#risk">10. Organization risk score</a>
+  <a href="#exbreak">11. Exfiltration breakdown</a>
+  <a href="#clbreak">12. Classification breakdown</a>
+  <a href="#detail">13. Event detail</a>
+  <h4>Saved layout</h4>
+  <a href="#layout">Per-tab widget layout</a>
+  <h4>Reference</h4>
+  <a href="#map">Widget → endpoint map</a>
+  <a href="#clicks">Click → filter map</a>
+  <a href="#filter">Filter fields</a>
+  <a href="#gotchas">Things to know</a>
+</nav>
+
+<main>
+
+<section id="idea">
+  <h2>The one idea</h2>
+  <p>Every clickable thing in the design — tiles, bars, donut segments, legend rows,
+  heat-map cells, insider cards, user chips — opens the <strong>same panel</strong>. So
+  there is <strong>one drill-down endpoint</strong>, not one per widget. The only thing
+  that changes is the filter you send.</p>
+
+  <div class="ok"><strong>Total Incidents and Policy violations are the same call.</strong>
+  Both are <code>{"actions":["Blocked","Warned","Override"]}</code>. They are two tiles onto one set
+  of events, so their numbers must agree.</div>
+
+  <div class="note"><strong>The filter composes — this is the important part.</strong>
+  The user chips <em>inside</em> the panel are clickable. Clicking "Mac Ferrari" re-opens
+  the panel as <em>the filter you already sent, plus that user</em>. So keep the filter
+  object you used, add <code>userIds</code>, and send it again. Keep a stack of them and
+  you have the back button for free.</div>
+</section>
+
+<section id="conventions">
+  <h2>Conventions</h2>
+  <table>
+    <tr><th>Header</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>ClientGUID</code></td><td>yes</td><td>Tenant identifier.</td></tr>
+    <tr><td><code>Authorization</code></td><td>yes</td><td><code>Bearer &lt;jwt&gt;</code> — all of these need a login.</td></tr>
+    <tr><td><code>Content-Type</code></td><td>yes</td><td><code>application/json</code>. Every endpoint is POST.</td></tr>
+  </table>
+  <div class="ok"><strong>Names are trimmed; absent text is null, never "".</strong>
+  The agent pads what it sends, so names arrived as <code>"balamaruthi.n "</code> and
+  unset emails as <code>""</code>. Both are cleaned at the edge now, across every
+  endpoint — <code>userName</code>, <code>name</code>, <code>email</code>,
+  <code>app</code>. Treat <code>null</code> as "we do not have one" and render your own
+  placeholder; an empty string will not appear.</div>
+
+  <p class="tag">All responses use the standard envelope
+  <code>{ "success", "message", "data", "errors" }</code>. The samples below show
+  <code>data</code> only. Dates are ISO-8601 UTC. A date with no time means the whole of
+  that day.</p>
+
+  <div class="ok"><strong>Casing: responses are camelCase.</strong>
+  <code>success</code>, <code>totalIncidents</code>, <code>blockedPercent</code> — exactly as
+  written in the samples here. Confirmed against a raw body off Kestrel on QA, not
+  inferred.
+  <br><br>
+  One serializer serves the whole API and no endpoint configures its own, so all thirteen
+  agree. <strong>Requests are case-insensitive</strong> — <code>fromDate</code> and
+  <code>FromDate</code> both bind — so only responses were ever in question.
+  <br><br>
+  <em>An earlier revision of this page claimed PascalCase. That was wrong, and wrong for
+  a specific reason worth recording: it reasoned from Newtonsoft's own default rather
+  than from what ASP.NET Core configures on top of it. Every sample has been corrected.</em></div>
+
+  <div class="note"><strong>Every endpoint takes the same filter object.</strong>
+  All thirteen accept the full <a href="#filter">filter</a> — not just
+  <code>fromDate</code>/<code>toDate</code>. So the header's Severity, Action, Department
+  and Search controls are applied by sending the same body to every call on the page;
+  there is nothing to filter client-side.
+  <br><br>
+  <code>splitBy</code>, <code>channel</code> and <code>category</code> are
+  <strong>body fields</strong>, not query parameters. One payload object per call, always.</div>
+
+  <div class="ok"><strong>Five endpoints were ignoring all of that and no longer do.</strong>
+  <code>time-series</code>, <code>overview/risk-score</code>, <code>activity-heatmap</code>,
+  <code>exfiltration/breakdown</code> and <code>classification/breakdown</code> were reading
+  their tables with only a date range, so they returned the same numbers whatever you sent.
+  <br><br>
+  <code>time-series</code> also honours <code>areas</code> now — <code>["web"]</code> was
+  still counting every file and content event, which is where 22,041 "Blocked" came from
+  against a web tab showing 1,071 requests.
+  <br><br>
+  <strong>One exception, by necessity.</strong> <code>overview/risk-score</code> reads the
+  daily risk snapshots, and a snapshot carries a user and a date and nothing else the
+  filter speaks of — no severity, no channel, no app. It honours
+  <code>departments</code> / <code>userIds</code> and the dates; the rest cannot apply,
+  because the score was computed before those distinctions existed. That is why it no
+  longer reads 60 for a department nobody is in.</div>
+</section>
+
+<section id="drill">
+  <h2>1. Drill-down — the panel behind every click</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/drill-down</span></div>
+
+  <h5 class="section">Example — clicking "Total Incidents"</h5>
+<pre>curl -X POST "{dlp-api}/dashboard/v2/drill-down" \
+     -H "ClientGUID: …" -H "Authorization: Bearer &lt;jwt&gt;" \
+     -H "Content-Type: application/json" \
+     -d '{ "actions": ["Blocked","Warned","Override"],
+           "fromDate": "2026-10-20", "toDate": "2026-10-26" }'</pre>
+
+  <h5 class="section">Response</h5>
+<pre>{
+  "stats": [
+    { "label": "Events",  "value": "315" },
+    { "label": "Blocked", "value": "180 (57%)", "tone": "danger" },
+    { "label": "Users",   "value": "20" }
+  ],
+  "topUsers": [
+    { "userId": 11, "name": "Mac Ferrari", "initials": "MF", "count": 57 }
+  ],
+  "totalCount": 315,
+  "events": [
+    { "eventId": 48214, "area": "file",
+      "title": "Insurance_2022.Csv",
+      "subtitle": "Oliver · Upload · MS Edge",
+      "userId": 4821, "userName": "Oliver",
+      "channel": "upload", "app": "MS Edge",
+      "action": "Blocked", "severity": "High",
+      "receivedTime": "2026-10-26T12:41:00Z" }
+  ]
+}</pre>
+
+  <div class="ok"><strong>Title and Subtitle are gone.</strong> They were always empty —
+  the server cannot tell "Total Incidents" from "Policy violations", because they are the
+  same query. Set the panel heading from the tile the user clicked.</div>
+
+  <div class="ok"><strong>Events is capped at 60</strong>, newest first.
+  <code>totalCount</code> is the real total, so show "Latest 60 of 315" only when
+  <code>TotalCount &gt; 60</code>. <strong>TopUsers is capped at 4.</strong></div>
+</section>
+
+<section id="overview">
+  <h2>2. Overview summary</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/overview/summary</span></div>
+  <p>The headline row plus the three area cards.</p>
+
+<pre>{ "fromDate": "2026-10-20", "toDate": "2026-10-26" }</pre>
+
+<pre>{
+  "totalIncidents": 315,            "totalIncidentsChangePercent": 15,
+  "highRiskUsers": 4,               "highRiskUsersChangePercent": -20,
+  "offHourActivity": 28,            "offHourActivityChangePercent": null,
+  "offHourActivityPercent": 6,
+  "policyCompliancePercent": 94,    "policyComplianceChangePercent": 2,
+  "businessHours": "09:30–18:30", "timeZone": "Asia/Kolkata",
+  "areas": [
+    { "area": "file", "label": "File Sharing", "events": 112,
+      "blockedPercent": 28, "criticalCount": 7,
+      "changePercent": 9,
+      "channels": [ { "channel":"upload", "label":"Upload", "count":45,
+                      "percent":40, "blockedCount":11, "changePercent":-6 } ] }
+  ]
+}</pre>
+
+  <div class="ok"><strong>Why BusinessHours and TimeZone are in the response.</strong>
+  Off-hour activity is measured against the customer's own configured hours. When someone
+  questions the number, show them these two fields — that is what produced it.</div>
+
+  <div class="note"><strong>The change badges: what they compare against.</strong>
+  The window immediately before the one you asked for, of equal length. Ask for
+  20–26 Oct and the baseline is 13–19 Oct. <strong>Every other filter stays applied</strong>
+  — a Finance-only view is compared against Finance last week, not the whole company.
+  <br><br>
+  <code>null</code> means <strong>no comparison is possible</strong>: either the previous
+  window had nothing, or you sent no dates at all (an open-ended window has no "before").
+  Render nothing in that case — "↑ 100%" from a zero baseline is noise, so the API
+  declines to say it.</div>
+</section>
+
+<section id="heatmap">
+  <h2>3. Activity heatmap</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/activity-heatmap</span></div>
+
+<pre>{
+  "cells": [ { "dayOfWeek": 1, "hour": 9, "count": 14 } ],
+  "max": 31,
+  "timeZone": "Asia/Kolkata"
+}</pre>
+
+  <p><code>dayOfWeek</code> is <strong>0 = Sunday</strong>. <code>hour</code> is 0–23 in
+  the customer's local time, not UTC. Use <code>max</code> to scale your shading.</p>
+
+  <div class="note"><strong>Only non-empty cells are returned.</strong> A weekday/hour
+  with no events is absent from the array rather than present with zero — render your
+  7 × 24 grid and fill from what arrives.</div>
+
+  <p class="tag">Each cell is a click target: send its <code>dayOfWeek</code> and
+  <code>hour</code> to <code>drill-down</code> as <code>daysOfWeek</code> and
+  <code>hours</code>.</p>
+</section>
+
+<section id="file">
+  <h2>4. File Sharing tab</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/file-sharing</span></div>
+  <p>Returns <code>totalEvents</code>, <code>channels</code>, <code>dataClassification</code>,
+  <code>topDestinations</code>, <code>topDeviceTypes</code>, <code>riskByChannel</code> and
+  <code>largestTransfers</code>.</p>
+
+<pre>{
+  "totalEvents": 112, "totalEventsChangePercent": 9,
+  "channels": [
+    { "channel":"upload", "label":"Upload", "count":45,
+      "percent":40, "blockedCount":11, "changePercent":-6 }
+  ],
+  "dataClassification": [
+    { "code":"PII", "label":"PII", "files":34,
+      "sizeBytes": 184549376, "violatedBytes": 52428800, "percent": 31 },
+    { "code":"CODE", "label":"Source Code", "files":12,
+      "sizeBytes": 73400320, "violatedBytes": 73400320, "percent": 12 }
+  ],
+  "topDestinations": [
+    { "label": "Google Drive", "count": 31, "percent": 27,
+      "blockedCount": 8, "blockedOrWarnedPercent": 35 }
+  ],
+  "topDeviceTypes": [
+    { "label": "USB", "sublabel": "6 writes · 4 reads",
+      "writes": 6, "reads": 4, "count": 10, "percent": 42 }
+  ],
+  "riskByChannel": [
+    { "group":"upload", "label":"Upload", "events":45, "stoppedPercent":24,
+      "critical":4, "high":12, "medium":19, "low":8, "none":2 }
+  ],
+  "largestTransfers": [
+    { "eventId": 48214, "area": "file",
+      "label":"backend-src.zip", "sublabel":"Craig Dias · GitHub",
+      "sizeBytes": 554696704, "count": 1 }
+  ]
+}</pre>
+
+  <div class="ok"><strong>Largest Transfers rows open.</strong> Each carries
+  <code>eventId</code> and <code>area</code> — send both to
+  <a href="#detail">event-detail</a>. They are the only ranked rows that do: every other
+  list is a group of events, so there is no single event to open and the fields are null.
+  <br><br>
+  Rows are de-duplicated on file, size and user, because a transfer that was crunched
+  twice — a retry or a re-scan — listed as two identical incidents. Anything still
+  appearing twice is two real events, and the differing <code>eventId</code> proves it.
+  <code>label</code> is the file name. <code>sublabel</code> is "User · App", and
+  <strong>just the user when the row names no app</strong> — the channel used to stand in
+  for it, which read as an application called "Upload".
+  <br><br>
+  <code>topDeviceTypes</code> rows carry <code>writes</code> and <code>reads</code> as
+  integers for the two bars; the same split is in <code>sublabel</code> as text, so there
+  is nothing to parse out of a string.</div>
+
+  <div class="ok"><strong>Device Read and Device Write now carry their events.</strong>
+  They were reading 0 while the device card beside them listed thousands, and the Upload
+  figure was inflated by every one of them. The cause: a removable-device transfer is not
+  stored with its own activity type — the agent sends <em>Upload</em> or <em>Download</em>
+  and sets a device flag. Direction follows the same rule the policy engine uses: writing
+  <em>to</em> the device is an upload, reading <em>from</em> it is a download.
+  <br><br>
+  <strong>Upload and Download will drop by the amount Device Write and Device Read gain</strong>,
+  and <code>totalEvents</code> is unchanged — the events were always there, on the wrong
+  row. <code>channels: ["device_write"]</code> now filters correctly too, and
+  <code>["upload"]</code> no longer sweeps up USB writes.</div>
+
+  <div class="note"><strong>The design shows individual devices ("SanDisk Ultra 64GB");
+  we return device <em>types</em></strong> — USB, Bluetooth, NAS. The agent does not send
+  a serial or volume label, so individual devices are not available. Label the card
+  accordingly.</div>
+
+  <div class="ok"><strong><code>dataClassification</code> is this tab's own card.</strong>
+  File events only, so it will <em>not</em> match the Overview card of the same name, which
+  covers all three areas. Same row shape as that card, so one component renders both.
+  <code>violatedBytes</code> is the volume that tripped a policy — a blocked transfer never
+  left the building, so this is not "data exfiltrated".
+  <br><br>
+  <strong>Send <code>code</code>, not <code>label</code>, when a row is clicked</strong> —
+  <code>{"dataTypes":["CODE"]}</code>. The label is reworded freely; the code is not.
+  A file carrying both PII and PCI is counted under each, so the rows sum to more than
+  <code>totalEvents</code>.</div>
+</section>
+
+<section id="content">
+  <h2>5. Content Sharing tab</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/content-sharing</span></div>
+  <p>Returns <code>totalEvents</code>, <code>channels</code>, <code>topAiTools</code>,
+  <code>sensitiveDataDetected</code>, <code>responseOutcome</code>,
+  <code>riskByChannel</code> and <code>topUsers</code>.</p>
+
+<pre>{
+  "totalEvents": 107, "totalEventsChangePercent": -4,
+  "channels": [
+    { "channel":"copy_paste", "label":"Copy / Paste", "count":52,
+      "percent":49, "blockedCount":18, "changePercent":7 }
+  ],
+  "topAiTools": [
+    { "label":"ChatGPT", "count":8, "percent":31, "blockedCount":3 }
+  ],
+  "sensitiveDataDetected": [
+    { "code":"PFI", "label":"PFI", "count":26, "percent":24,
+      "blockedOrWarnedPercent": 62 }
+  ],
+  "responseOutcome": [
+    { "label":"Blocked",  "count":48, "percent":45,
+      "blockedCount":48, "changePercent":12 },
+    { "label":"Warned",   "count":31, "percent":29, "blockedCount":0 },
+    { "label":"Allowed",  "count":22, "percent":21, "blockedCount":0 },
+    { "label":"Override", "count":6,  "percent":5,  "blockedCount":0 }
+  ],
+  "topUsers": [
+    { "label":"Mac Ferrari", "userId":11, "count":11,
+      "email":"mac.ferrari@acme.com", "department":"Engineering",
+      "sublabel":"Engineering · mac.ferrari@acme.com", "blockedCount":5,
+      "percent": 10 }
+  ]
+}</pre>
+
+  <div class="note">The detail panel for a content event is specified to show a
+  <strong>character count</strong>. We do not store one — that field is absent. Hide it
+  until the agent change lands.</div>
+
+  <div class="ok"><strong><code>topUsers</code>: <code>count</code> is all that user's
+  content events, and the list is sorted by it.</strong> So "by content events" is the
+  right caption. <code>blockedCount</code> is the subset that was blocked — Pravin R's
+  490 events of which 468 blocked. It was sorted by blocked while showing the total,
+  which made neither number explain the order; the sort is the number on screen now.
+  <br><br>
+  Not severity: content events carry none — the scanner does not assess a paste or a
+  prompt — so the original "Critical or High" ranking matched nothing and the card was
+  empty.</div>
+
+  <div class="ok"><strong><code>responseOutcome</code> has four rows, and
+  <code>Override</code> is the fourth.</strong> This is the only tab it can appear on —
+  a file transfer has no override flow — and it is why the card's rows used to sum to
+  less than <code>totalEvents</code> with nothing accounting for the difference. See
+  <a href="#filter">Override</a> for what it means.</div>
+
+  <div class="ok"><strong><code>topAiTools</code> is restricted to the app catalogue's
+  GenAI tools</strong> — ChatGPT, Claude, Gemini, Copilot, Perplexity, DeepSeek, Grok.
+  The underlying field is "whatever application the agent saw the prompt in", which is
+  why Teams, <code>mail.google.com</code> and a browser-extension id were appearing in a
+  list captioned Top AI Tools. Prompts captured elsewhere are still counted in
+  <code>totalEvents</code>; they are just not AI tools.
+  <br><br>
+  <strong>One row per tool, not per way of reaching it.</strong> "Claude" and
+  "claude.ai" are the desktop app and the website; every alias the catalogue lists —
+  display name, domains, process names — folds into the tool's display name, so its
+  count is whole rather than split across two rows.</div>
+
+  <div class="ok"><strong><code>sensitiveDataDetected</code> resolves through the
+  sensitive catalogue, item level included.</strong> The stored column mixes category
+  codes (<code>pII</code>, <code>FIN_RECORDS</code>) with individual detector names
+  upper-cased (<code>EMAIL ADDRESS</code>), and both now land on the category:
+  "Personally Identifiable Information", counted once.
+  <br><br>
+  A trailing qualifier is stripped only if the full value matches nothing, so
+  <code>NATIONAL ID (INDIA AADHAAR)</code> resolves via "National ID" while a catalogue
+  entry that legitimately has brackets — "Tax identification (GSTIN)" — still matches
+  whole.
+  <br><br>
+  <strong>A name the catalogue has never heard of keeps its own row.</strong> It is
+  given presentable casing ("Person Name (With Label)") but is <em>not</em> assigned to
+  a category on a resemblance. If one of those should sit under PII, the fix is a row in
+  <code>policyv2."SensitiveItem"</code>, not a guess here.</div>
+
+  <div class="ok"><strong><code>department</code> is today's department, not the one at
+  the time of the event.</strong> The event does not carry a department, so it is read
+  from the user record; someone who changes team takes their whole history with them.
+  <code>sublabel</code> is the two pre-joined for the "Dept · email" line, so you can bind
+  one field or the two separately.</div>
+</section>
+
+<section id="web">
+  <h2>6. Web Filtering tab</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/web-filtering</span></div>
+
+<pre>{
+  "totalRequests": 230, "totalRequestsChangePercent": 6,
+  "domainCount": 17,
+  "outcomes": [
+    { "label":"Blocked", "count":101, "percent":44,
+      "blockedCount":101, "changePercent":-3 }
+  ],
+  "topCategories": [
+    { "code":"GENERATIVE_AI", "label":"GENERATIVE_AI", "count":65,
+      "percent":28, "blockedCount":40 }
+  ],
+  "topBlockedDomains": [
+    { "label":"you.com", "sublabel":"GENERATIVE_AI", "code":"GENERATIVE_AI",
+      "count":13, "percent":23, "blockedCount":13 }
+  ],
+  "topUsersByBlocks": [
+    { "label":"Mac Ferrari", "userId":11, "count":20, "percent":20,
+      "email":"mac.ferrari@acme.com", "department":"Engineering",
+      "sublabel":"mac.ferrari@acme.com", "blockedCount":20 }
+  ],
+  "riskByCategory": [ { "group":"GAMBLING", "label":"GAMBLING", "events":16, "stoppedPercent":100,
+                        "critical":0, "high":0, "medium":0, "low":0, "none":0 } ]
+}</pre>
+
+  <div class="ok"><strong>Categories account for every request now.</strong>
+  Rows with no category were being dropped, so the card showed 92 of 1,071 with nothing
+  explaining the other 979 — most browsing matches no category. They are grouped under a
+  single <code>Uncategorised</code> row, which sorts last however large it is so it
+  cannot push the real categories off the card. <code>TopBlockedDomains[].Sublabel</code>
+  says <code>Uncategorised</code> for the same reason, instead of being null.
+  <br><br>
+  <strong>That row is clickable like any other.</strong>
+  <code>{"areas":["web"],"categories":["Uncategorised"]}</code> returns the requests that
+  matched no category. It is not a stored code — those rows have no category at all — so
+  the value is given its meaning by the API; send it exactly as the row's
+  <code>code</code> gives it.</div>
+
+  <div class="ok"><strong><code>topBlockedDomains</code> is one row per domain.</strong>
+  It was grouped by domain <em>and</em> category, and the category is recorded per request
+  — so <code>chatgpt.com</code> appeared twice, 146 blocks as Uncategorised and 40 as
+  Computers And Technology, with its real rank split between the two rows.
+  <br><br>
+  Each domain now has a single row carrying its full block count, and
+  <code>sublabel</code> / <code>code</code> report the category <em>most</em> of those
+  blocks carried — a label on the row, not what the row counts. A domain whose requests
+  are categorised inconsistently therefore shows one category while its count includes
+  the rest; that is the trade for a rank that means something. When you send the row to
+  <code>drill-down</code>, filter on <code>domains</code>, not on its
+  <code>code</code>.</div>
+
+  <div class="note"><strong>A severity or data-type filter empties this tab.</strong>
+  Web requests carry neither, so a header set to "Critical only" returns
+  <code>TotalRequests: 0</code> here rather than ignoring the filter. The same goes for
+  <code>channels</code>, <code>devices</code> and <code>minSizeBytes</code>, which are
+  about file traffic. That is deliberate: silently ignoring a filter shows numbers that
+  contradict the control the user just set.</div>
+
+  <div class="note"><strong>Two things on this tab.</strong> The severity columns in
+  <code>riskByCategory</code> are always zero — a web request carries no severity, so only
+  Events and Stopped are meaningful; render the row without the severity bar. And
+  <strong>"Warnings Bypassed" is not here</strong>: nothing records that a user continued
+  past a warning. Leave that card out.</div>
+
+  <div class="note"><strong>These numbers will not match the Logs screen's "Web
+  Filtering" filter.</strong> That filter means sensitive data that reached a website;
+  this tab means policy-matched browsing. Two different populations, same words. Expect
+  the question.</div>
+</section>
+
+<section id="insider">
+  <h2>7. Insider risk signals</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/insider-signals</span></div>
+
+<pre>[
+  { "code":"HIGH_RISK_USER", "name":"High-Risk User", "severity":"Critical",
+    "rule":"Critical or high-severity activity by the same user.",
+    "userCount":4, "eventCount":64 },
+  { "code":"AFTER_HOURS", "name":"After-Hours Transfer", "severity":"Medium",
+    "rule":"Transfers outside 09:30–18:30 Asia/Kolkata.",
+    "userCount":2, "eventCount":2 },
+  { "code":"MASS_EXFIL", "name":"Mass Data Exfiltration", "severity":"Critical",
+    "rule":"More than 500 MB in 30 minutes, or more than 100 files in 15.",
+    "userCount":3, "eventCount":4 }
+]</pre>
+
+  <div class="note"><strong>Three cards, not four.</strong> <em>Departing Employee</em> is
+  not returned at all — it needs an HR resignation feed we do not have. It is absent
+  rather than zero, because a zero would read as "nobody is leaving" instead of "we cannot
+  tell". Render whatever the array contains.</div>
+
+  <p class="tag">Render <code>rule</code> as the card's sub-line — it states the actual
+  threshold used, including the customer's real business hours.</p>
+</section>
+
+<section id="series">
+  <h2>8. Time series — all four charts</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/time-series</span></div>
+  <p>One endpoint fills every over-time chart in the design. Only the split changes.</p>
+  <table>
+    <tr><th><code>splitBy</code></th><th>Chart</th><th>Lines</th></tr>
+    <tr><td><code>area</code> <span class="tag">default</span></td><td>Overview → <b>Incidents by Area</b></td><td>File · Content · Web</td></tr>
+    <tr><td><code>channel</code></td><td><b>File / Content Events Over Time</b></td><td>Upload, Download, Copy / Paste …</td></tr>
+    <tr><td><code>action</code></td><td>Web → <b>Requests Over Time</b></td><td>Blocked · Warned · Allowed</td></tr>
+  </table>
+<pre>{
+  "splitBy": "area",
+  "days": ["2026-10-20","2026-10-21","2026-10-22"],
+  "series": [
+    { "key": "file",    "label": "File Sharing",    "points": [12, 18, 9] },
+    { "key": "content", "label": "Content Sharing", "points": [7, 5, 11] }
+  ]
+}</pre>
+  <div class="ok"><code>points</code> lines up index-for-index with <code>days</code>.
+  Every day in the window is present, including quiet ones as <code>0</code> — so you
+  never have to infer a gap. Days are the <strong>customer's local days</strong>, not UTC.</div>
+</section>
+
+<section id="panels">
+  <h2>9. Overview panels</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/overview/panels</span></div>
+  <p>Six panels in one call, because the design paints them together.</p>
+<pre>{
+  "topApps":   [ { "label":"Teams", "count":19, "percent":15 } ],
+  "highRiskUsers": [
+    { "userId":11, "name":"Mac Ferrari", "email":"mac.f@company.com",
+      "initials":"MF", "violations":57, "criticalCount":9, "highCount":21 }
+  ],
+  "classification": {
+    "volumeScannedBytes": 6055120896, "volumeViolatedBytes": 3017682944,
+    "categories": [ { "label":"Source Code", "files":15, "sizeBytes":2415919104,
+                      "violatedBytes":818937856, "percent":40 } ]
+  },
+  "exfiltration": {
+    "violatedBytes": 1707081728,
+    "channels": [ { "channel":"Communication", "label":"Communication",
+                    "violatedBytes":1004535808, "percent":59 } ]
+  },
+  "endpointCoverage": {
+    "totalEndpoints":58, "healthy":5, "offline":44, "warning":0,
+    "notReporting":9,
+    "healthyPercent":9, "reportingPercent":84, "nonCompliantCount":53
+  },
+  "securityScore": {
+    "score":80, "compliancePercent":98, "riskLevel":"Low",
+    "activePolicies":24, "totalPolicies":26, "policiesNeedingReview":3
+  }
+}</pre>
+  <div class="note"><strong>Endpoint Coverage's "Warning" is derived</strong>, not stored —
+  it means <em>online but the DLP service is not running</em>. There is no Warning status in
+  the database; this is the closest real signal, so label it carefully.</div>
+
+  <div class="ok"><strong>The coverage buckets now add up.</strong>
+  <code>Healthy + Offline + Warning + NotReporting = TotalEndpoints</code>, always.
+  <br><br>
+  <code>notReporting</code> is new and it is why they did not before: those are active
+  endpoints that have <em>never sent a status</em> — registered, never heard from. They
+  are kept as their own figure rather than folded into Offline, which would claim we had
+  watched them go quiet, or into Healthy, which would claim they are protected. Nine
+  silent machines out of 58 is a finding worth drawing.
+  <br><br>
+  <code>healthyPercent</code> is now a share of <em>all</em> active endpoints rather than
+  of those reporting, so a fleet that is mostly silent cannot read as 100% healthy.</div>
+
+  <div class="ok"><strong>Security Score's policy ratio is coherent.</strong>
+  <code>policiesNeedingReview</code> could exceed <code>totalPolicies</code> — 28 of 26 —
+  because the two were counted from different populations: the total from the policy
+  tables, the review count from policy <em>names</em> appearing in the logs. The log
+  carries free-text <code>PolicyName</code> and no PolicyId, so it also holds names that
+  were renamed, deleted, or never matched an active policy.
+  <br><br>
+  Needing-review is now counted only among the policies <code>totalPolicies</code> counts.
+  Noise from a policy nobody can open is no longer reported as a policy to review, so this
+  figure can only go down — and it can never again exceed the total.</div>
+
+  <div class="ok"><strong>One Compliance number on the screen, not two.</strong>
+  <code>securityScore.compliancePercent</code> counted file and content only while the
+  headline <code>policyCompliancePercent</code> counted those <em>and</em> web requests, so
+  the Overview showed 15% on the card and 11% in the tile for the same window — the gap
+  being the web traffic, which is almost entirely blocked. Both are now counted over all
+  three areas and the two must agree exactly.
+  <br><br>
+  <code>policiesNeedingReview</code> moved with it: a policy's noise is counted across the
+  activity log and the web-filtering log together, so a web policy that blocked several
+  hundred requests is now named by the card that scores it. Expect this figure to rise on
+  tenants with active web policies.</div>
+</section>
+
+<section id="risk">
+  <h2>10. Organization risk score</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/overview/risk-score</span></div>
+  <p>The headline score and the five bars under it.</p>
+<pre>{
+  "score": 80, "riskLevel": "Critical",
+  "scoredUsers": 142, "contributingDays": 7,
+  "breakdown": [
+    { "key":"anomaly",     "label":"Anomaly Score",
+      "description":"Security red flags detected", "percent":42 },
+    { "key":"sensitivity", "label":"Data Sensitivity",
+      "description":"PII·PHI·PFI via Sensitive Profile", "percent":12 }
+  ]
+}</pre>
+  <div class="note"><strong>Check <code>scoredUsers</code> before you draw anything.</strong>
+  This comes from the risk-scoring pipeline, which runs outside this API. If it has not run
+  for the window you get <code>ScoredUsers: 0</code> and <code>RiskLevel: "Unknown"</code> —
+  render that as <em>unavailable</em>. Drawing a score of 0 would tell an admin the
+  organisation is safe when we simply have not measured it.</div>
+</section>
+
+<section id="exbreak">
+  <h2>11. Exfiltration breakdown — opens inside the card</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/exfiltration/breakdown</span></div>
+  <p>Clicking a channel on the Exfiltration Attempts card expands it in place. This is
+  <strong>not</strong> the drawer — the user closes it with the ✕, there is no back stack.</p>
+<pre>{
+  "selection": "Communication",
+  "caption": "Communication · by app",
+  "rows": [
+    { "label":"Outlook", "sizeBytes":439353344, "percent":44 },
+    { "label":"Slack",   "sizeBytes":275775488, "percent":28 }
+  ]
+}</pre>
+  <p class="tag">Send <code>{"channel":"External Devices"}</code> and the caption becomes
+  "· by device" — that one breaks down by device type rather than app.</p>
+</section>
+
+<section id="clbreak">
+  <h2>12. Classification breakdown — opens inside the card</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/classification/breakdown</span></div>
+  <p>"Select a category to see identifier breakdown" on the Data Classification card.</p>
+<pre>{
+  "selection": "PII",
+  "caption": "PII · identifier breakdown",
+  "rows": [
+    { "label":"Aadhaar Number", "count":24, "sizeBytes":942669824, "percent":38 },
+    { "label":"PAN",           "count":11, "sizeBytes":320864256, "percent":17 }
+  ]
+}</pre>
+  <div class="ok"><strong>Identifier names only — never the matched values.</strong>
+  The values are the sensitive data itself; a dashboard that returned them would become a
+  second copy of everything it was built to protect.</div>
+
+  <div class="note"><strong>Two categories do not look like the others.</strong>
+  <code>cODE</code> has no identifier labels at all — it stores language-tagged snippets,
+  so the rows come back as the detected <em>languages</em> ("JAVASCRIPT", "C#"), which is
+  the only identifier-shaped thing in there.
+  <br><br>
+  <strong>A category can also come back with fewer rows than it has files.</strong>
+  Entries stored as a bare value with no <code>Label=</code> are dropped rather than
+  guessed at — that is what "10.40.0.0/16" and "PROD" were, and a value must not reach
+  this card even when it costs a row.
+  <br><br>
+  Names are returned as display names throughout: <code>PII_EMAIL</code> reads "Email",
+  and it merges with rows already stored as "Email" instead of listing twice.
+  <br><br>
+  <strong>Punctuation variants merge too.</strong> "Credit/Debit Cards" and "Credit Debit
+  Cards" are one identifier written two ways by different parts of the pipeline; they are
+  now one row carrying the combined total, labelled with the punctuated spelling.</div>
+</section>
+
+<section id="detail">
+  <h2>13. Event detail — the expanded panel row</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/dashboard/v2/event-detail</span></div>
+  <p>Everything the expanded row in the right-hand panel shows, for one event.</p>
+
+<pre>{ "eventId": 48214, "area": "file" }</pre>
+
+<pre>{
+  "eventId": 48214, "area": "file",
+  "title": "Insurance_2022.Csv",
+  "userId": 4821, "userName": "Oliver",
+  "email": "oliver@acme.com", "department": "Finance",
+  "policy": "PII Block — Finance",
+  "action": "Blocked", "severity": "High",
+  "sizeBytes": 2458624,
+  "dataType": "PII,PFI",
+  "destinationType": "Browser", "destination": "MS Edge",
+  "category": null, "browser": "msedge.exe",
+  "channel": "upload", "deviceType": null,
+  "machineName": "ITH-LT-0421",
+  "receivedTime": "2026-10-26T12:41:00Z"
+}</pre>
+
+  <div class="note"><strong><code>area</code> is required.</strong> File, content and web
+  are three different tables and their ids overlap — id 48214 exists in all three and
+  means something different in each. Send the <code>area</code> from the row you are
+  expanding.</div>
+
+  <div class="ok"><strong>A separate call, not more fields on every row.</strong>
+  The panel lists 60 events and expands one. Carrying this on all of them would be 60×
+  the payload for 1× the use.
+  <br><br>
+  <strong>404 means the id is not in that population</strong> — check you sent the right
+  <code>area</code> before treating it as a server fault.</div>
+
+  <div class="note"><strong>Two fields are not what their names promise.</strong>
+  <code>browser</code> on a file event is the <em>process</em> ("msedge.exe"), because
+  crunch stores no browser name — it is empty for a device transfer, where no browser is
+  involved. <code>policy</code> is free text: the event carries no PolicyId, so it cannot
+  be linked to the policy record and must not be used as a key.</div>
+</section>
+
+<section id="layout">
+  <h2>Saved widget layout — one per tab</h2>
+  <div class="head"><span class="method">POST</span><span class="path">/UserSync/SaveUserDashboardWidget</span></div>
+  <div class="head"><span class="method">POST</span><span class="path">/UserSync/GetUserDashboard/{userId}?tab=file</span></div>
+  <p>Drag-and-drop layout now stores <strong>which tab</strong> a widget sits on.</p>
+
+<pre>{
+  "userId": 11,
+  "tab": "file",
+  "widgets": [
+    { "widgetId": 0, "widgetType": "topDestinations",
+      "x": 0, "y": 0, "w": 6, "h": 4, "orderBy": 1 }
+  ]
+}</pre>
+
+  <div class="ok"><strong>Confirmed: <code>tab</code> on each widget is enough.</strong>
+  The save reads the tab from the widget first and falls back to the request-level
+  <code>tab</code>, then to <code>"overview"</code>. Both shapes work, and you can send a
+  mixed payload — the save then covers exactly the tabs it mentions.
+  <br><br>
+  <strong>Only the tabs in the payload are touched.</strong> Rows on any other tab are
+  never read, so they cannot be deleted. Saving File Sharing leaves Overview, Content and
+  Web exactly as they were.
+  <br><br>
+  <code>tab</code> is stored and comes back on every row from
+  <code>GetUserDashboard/{userId}</code>, with or without the <code>?tab=</code> filter.</div>
+
+  <div class="note"><strong>An empty <code>widgets</code> array clears a tab</strong> —
+  and with no widgets to read the tab from, that one <em>does</em> need the request-level
+  <code>tab</code>, or it will clear Overview.</div>
+
+  <div class="ok"><strong>Reading: <code>?tab=</code> is optional.</strong> Omit it and you
+  get every tab's widgets in one call, each row carrying its own <code>tab</code>. Existing
+  layouts saved before this change come back as <code>"overview"</code>, which is the screen
+  they were saved from.
+  <br><br>
+  Tab keys are <code>overview</code> · <code>file</code> · <code>content</code> ·
+  <code>web</code> — the same keys the dashboard tabs use. They are not validated server-side,
+  so a fifth tab needs no backend release.</div>
+
+  <div class="note"><strong>Needs the V0016 migration.</strong> The <code>tab</code> column
+  does not exist until it runs. Until then these calls fail — confirm the deploy before
+  wiring the per-tab layout up.</div>
+</section>
+
+<section id="map">
+  <h2>Widget → endpoint map</h2>
+  <p>Every widget, named exactly as it appears on the screen, with the call that
+  fills it and the field to bind. Use this to match the design to the API without
+  reading any of the sections above.</p>
+
+  <h5 class="section">Overview tab</h5>
+  <table>
+    <tr><th>Label on screen</th><th>Endpoint</th><th>Field</th></tr>
+    <tr><td><b>Organization Risk Score</b> · 80 HIGH RISK</td><td><code>overview/risk-score</code></td><td><code>score</code>, <code>riskLevel</code></td></tr>
+    <tr><td><b>Risk Score Breakdown</b> (5 bars)</td><td><code>overview/risk-score</code></td><td><code>Breakdown[]</code></td></tr>
+    <tr><td><b>Total Incidents</b></td><td><code>overview/summary</code></td><td><code>totalIncidents</code></td></tr>
+    <tr><td><b>High-Risk Users</b> (tile count)</td><td><code>overview/summary</code></td><td><code>highRiskUsers</code></td></tr>
+    <tr><td><b>Off-Hour Activity</b></td><td><code>overview/summary</code></td><td><code>offHourActivity</code>, <code>offHourActivityPercent</code></td></tr>
+    <tr><td><b>Policy Compliance</b></td><td><code>overview/summary</code></td><td><code>policyCompliancePercent</code></td></tr>
+    <tr><td><b>File / Content / Web Sharing</b> cards</td><td><code>overview/summary</code></td><td><code>Areas[]</code></td></tr>
+    <tr><td><b>Incidents by Area</b> (line chart)</td><td><code>time-series</code> + <code>splitBy:"area"</code></td><td><code>Series[]</code></td></tr>
+    <tr><td><b>High Risk Users</b> (the list)</td><td><code>overview/panels</code></td><td><code>HighRiskUsers[]</code></td></tr>
+    <tr><td><b>Endpoint Coverage</b></td><td><code>overview/panels</code></td><td><code>endpointCoverage</code></td></tr>
+    <tr><td><b>Security Score</b></td><td><code>overview/panels</code></td><td><code>securityScore</code></td></tr>
+    <tr><td><b>Top Incidents by Apps</b></td><td><code>overview/panels</code></td><td><code>TopApps[]</code></td></tr>
+    <tr><td><b>Activity Heatmap</b></td><td><code>activity-heatmap</code></td><td><code>Cells[]</code>, <code>max</code></td></tr>
+    <tr><td><b>Data Classification</b></td><td><code>overview/panels</code></td><td><code>classification</code></td></tr>
+    <tr><td>↳ select a category</td><td><code>classification/breakdown</code> + <code>category</code></td><td><code>Rows[]</code></td></tr>
+    <tr><td><b>Exfiltration Attempts</b></td><td><code>overview/panels</code></td><td><code>exfiltration</code></td></tr>
+    <tr><td>↳ select a channel</td><td><code>exfiltration/breakdown</code> + <code>channel</code></td><td><code>Rows[]</code></td></tr>
+    <tr><td><b>Insider Risk Signals</b></td><td><code>insider-signals</code></td><td>array of 3</td></tr>
+    <tr><td><b>Violations by Regulation</b></td><td colspan="2">❌ <b>not served</b> — no policy id on the event</td></tr>
+  </table>
+
+  <h5 class="section">File Sharing tab</h5>
+  <table>
+    <tr><th>Label on screen</th><th>Endpoint</th><th>Field</th></tr>
+    <tr><td><b>Total File Events</b>, <b>Uploads</b>, <b>Downloads</b>, <b>Device Write</b>, <b>Device Read</b></td><td><code>file-sharing</code></td><td><code>totalEvents</code>, <code>Channels[]</code></td></tr>
+    <tr><td><b>File Activity Split</b> (donut)</td><td><code>file-sharing</code></td><td><code>Channels[]</code></td></tr>
+    <tr><td><b>File Events Over Time</b></td><td><code>time-series</code> + <code>splitBy:"channel"</code></td><td><code>Series[]</code></td></tr>
+    <tr><td><b>Top Destinations</b></td><td><code>file-sharing</code></td><td><code>TopDestinations[]</code></td></tr>
+    <tr><td><b>Top External Devices</b></td><td><code>file-sharing</code></td><td><code>TopDeviceTypes[]</code> ⚠️ types, not devices</td></tr>
+    <tr><td><b>Risk by Channel</b></td><td><code>file-sharing</code></td><td><code>RiskByChannel[]</code></td></tr>
+    <tr><td><b>Largest Transfers</b></td><td><code>file-sharing</code></td><td><code>LargestTransfers[]</code></td></tr>
+  </table>
+
+  <h5 class="section">Content Sharing tab</h5>
+  <table>
+    <tr><th>Label on screen</th><th>Endpoint</th><th>Field</th></tr>
+    <tr><td><b>Total Content Events</b>, <b>Copy / Paste</b>, <b>Typed Content</b>, <b>Prompts</b></td><td><code>content-sharing</code></td><td><code>totalEvents</code>, <code>Channels[]</code></td></tr>
+    <tr><td><b>Content Events Over Time</b></td><td><code>time-series</code> + <code>splitBy:"channel"</code></td><td><code>Series[]</code></td></tr>
+    <tr><td><b>Top AI Tools by Prompts</b></td><td><code>content-sharing</code></td><td><code>TopAiTools[]</code></td></tr>
+    <tr><td><b>Sensitive Data Detected</b></td><td><code>content-sharing</code></td><td><code>SensitiveDataDetected[]</code></td></tr>
+    <tr><td><b>Response Outcome</b></td><td><code>content-sharing</code></td><td><code>ResponseOutcome[]</code></td></tr>
+    <tr><td><b>Risk by Channel</b></td><td><code>content-sharing</code></td><td><code>RiskByChannel[]</code></td></tr>
+    <tr><td><b>Top Users Sharing Sensitive Content</b></td><td><code>content-sharing</code></td><td><code>TopUsers[]</code></td></tr>
+  </table>
+
+  <h5 class="section">Web Filtering tab</h5>
+  <table>
+    <tr><th>Label on screen</th><th>Endpoint</th><th>Field</th></tr>
+    <tr><td><b>Policy-Matched Requests</b>, <b>Blocked</b>, <b>Warned</b>, <b>Allowed</b></td><td><code>web-filtering</code></td><td><code>totalRequests</code>, <code>Outcomes[]</code></td></tr>
+    <tr><td><b>Top Categories</b></td><td><code>web-filtering</code></td><td><code>TopCategories[]</code></td></tr>
+    <tr><td><b>Requests Over Time</b></td><td><code>time-series</code> + <code>splitBy:"action"</code></td><td><code>Series[]</code></td></tr>
+    <tr><td><b>Top Blocked Domains</b></td><td><code>web-filtering</code></td><td><code>TopBlockedDomains[]</code></td></tr>
+    <tr><td><b>Top Users by Blocks</b></td><td><code>web-filtering</code></td><td><code>TopUsersByBlocks[]</code></td></tr>
+    <tr><td><b>Risk by Category</b></td><td><code>web-filtering</code></td><td><code>RiskByCategory[]</code> ⚠️ severities are 0</td></tr>
+    <tr><td><b>Warnings Bypassed</b></td><td colspan="2">❌ <b>not served</b> — nothing records the user proceeding</td></tr>
+  </table>
+</section>
+
+<section id="clicks">
+  <h2>Click → filter map</h2>
+  <p>What to send to <code>drill-down</code> when each element is clicked. The
+  filter you send is also the one you push onto your back-stack.</p>
+
+  <div class="note"><strong>The tab you are on is part of the filter. Always send it.</strong>
+  <code>drill-down</code> is one endpoint over all three populations, and the request
+  is the only thing that tells it which one you mean — there is no tab in the URL, no
+  session state, nothing to infer from. <b>A click on a File Sharing widget that omits
+  <code>areas</code> asks about file <em>and</em> content</b>, and the panel comes back
+  with AI-prompt rows in it. That is the endpoint answering the question it was asked,
+  not a server bug.
+  <br><br>
+  The rule: <b>every click that originates on a tab carries that tab's <code>areas</code></b> —
+  <code>["file"]</code>, <code>["content"]</code> or <code>["web"]</code> — on top of whatever
+  the widget itself contributes. Only Overview widgets are genuinely cross-area, and they
+  are the only ones that may leave <code>areas</code> out.
+  <br><br>
+  Where the widget's own filter already implies the area — <code>channels:["upload"]</code>
+  can only be file, <code>channels:["prompt"]</code> can only be content — sending
+  <code>areas</code> as well is redundant but harmless, and it costs less than
+  remembering which cases are which. Send it everywhere.</div>
+
+  <h5 class="section">Overview tab — cross-area by design, <code>areas</code> optional</h5>
+  <table>
+    <tr><th>Clicked</th><th>Filter</th></tr>
+    <tr><td>Total Incidents · Policy Compliance</td><td><code>{"actions":["Blocked","Warned","Override"]}</code></td></tr>
+    <tr><td>High-Risk Users <b>tile</b>, or a row's <b>Critical/High</b> figure</td><td><code>{"userIds":[11],"severities":["Critical","High"]}</code></td></tr>
+    <tr><td>High-Risk Users row's <b>violations</b> figure</td><td><code>{"areas":["file","content"],"userIds":[11],"actions":["Blocked","Warned","Override"]}</code></td></tr>
+    <tr><td>Off-Hour Activity</td><td><code>{"offHoursOnly":true}</code></td></tr>
+    <tr><td>A File / Content / Web area card</td><td><code>{"areas":["file"]}</code></td></tr>
+    <tr><td>A channel inside an area card</td><td><code>{"areas":["file"],"channels":["upload"]}</code></td></tr>
+    <tr><td>An Incidents-by-Area line</td><td><code>{"areas":["content"]}</code></td></tr>
+    <tr><td>A heat-map cell</td><td><code>{"daysOfWeek":[1],"hours":[9]}</code></td></tr>
+    <tr><td>Top Incidents by Apps row</td><td><code>{"areas":["file","content"],"apps":["Teams"],"actions":["Blocked","Warned","Override"]}</code></td></tr>
+    <tr><td>Data Classification category (Overview card)</td><td><code>{"dataTypes":["PII"]}</code></td></tr>
+  </table>
+
+  <div class="note"><strong>Two Overview rows carry two numbers, and each needs its own
+  filter.</strong>
+  <br><br>
+  A <b>High-Risk Users</b> row shows <code>violations</code> — Blocked, Warned and Override
+  file or content events for that person — beside <code>criticalCount</code> and
+  <code>highCount</code>, which count only the events the scanner graded. The severity body
+  reproduces the second pair, not the first, so sending it for a click on the headline number
+  returns a fraction of it and looks broken. Both bodies are listed above; send the one that
+  matches the figure the user clicked.
+  <br><br>
+  <b>Top Incidents by Apps</b> counts <em>incidents</em>, not events, so its filter needs the
+  three incident actions. It is also drawn from file and content only and excludes removable
+  devices, which is why it carries <code>areas</code> — without it the panel adds web requests
+  the card never counted.
+  <br><br>
+  <strong>Both cards used to count a fourth thing, and it is why they could not be
+  matched.</strong> They counted everything that was not <code>Allow</code>, and the column has
+  a fourth value — <code>UnCovered</code>, meaning <em>no policy applied to the activity at
+  all</em>. That is the absence of a verdict rather than a violation, there is no
+  <code>actions</code> value for it, and so no filter could ever reproduce a row that included
+  it: six rows summed to 2,154 against a drill-down of 2,130. Both cards now count the three
+  named outcomes, the same ones <code>totalIncidents</code> counts, and the figures agree
+  exactly. <b>Expect both to read slightly lower than in the previous build.</b></div>
+
+  <h5 class="section">File Sharing tab — every click carries <code>"areas":["file"]</code></h5>
+  <table>
+    <tr><th>Clicked</th><th>Filter</th></tr>
+    <tr><td>Total File Events / Upload / Download / Device Write / Device Read tile</td><td><code>{"areas":["file"],"channels":["upload"]}</code> — omit <code>channels</code> for the total</td></tr>
+    <tr><td>File Activity Split segment or legend row</td><td><code>{"areas":["file"],"channels":["device_write"]}</code></td></tr>
+    <tr><td>Top Destinations row</td><td><code>{"areas":["file"],"apps":["Google Chrome"]}</code></td></tr>
+    <tr><td>Data Classification category</td><td><code>{"areas":["file"],"dataTypes":["PII"]}</code></td></tr>
+    <tr><td>Top Device Types row</td><td><code>{"areas":["file"],"devices":["USB"]}</code></td></tr>
+    <tr><td>Risk by Channel — channel name</td><td><code>{"areas":["file"],"channels":["upload"]}</code></td></tr>
+    <tr><td>Risk by Channel — a severity segment</td><td><code>{"areas":["file"],"channels":["upload"],"severities":["Critical"]}</code></td></tr>
+    <tr><td>Risk by Channel — the "Stopped" %</td><td><code>{"areas":["file"],"channels":["upload"],"actions":["Blocked"]}</code></td></tr>
+    <tr><td>Largest Transfers row</td><td><code>{"areas":["file"],"userIds":[11],"search":"upload.bin"}</code></td></tr>
+  </table>
+
+  <h5 class="section">Content Sharing tab — every click carries <code>"areas":["content"]</code></h5>
+  <table>
+    <tr><th>Clicked</th><th>Filter</th></tr>
+    <tr><td>Total Content Events / Copy&nbsp;/&nbsp;Paste / Typed Content / Prompt tile</td><td><code>{"areas":["content"],"channels":["prompt"]}</code> — omit <code>channels</code> for the total</td></tr>
+    <tr><td>Blocked tile</td><td><code>{"areas":["content"],"actions":["Blocked"]}</code></td></tr>
+    <tr><td>Content Activity Split segment or legend row</td><td><code>{"areas":["content"],"channels":["copy_paste"]}</code></td></tr>
+    <tr><td>Top AI Tools by Prompts row</td><td><code>{"areas":["content"],"apps":["Claude"]}</code></td></tr>
+    <tr><td>Sensitive Data Detected tile</td><td><code>{"areas":["content"],"dataTypes":["PII"]}</code></td></tr>
+    <tr><td>Response Outcome segment</td><td><code>{"areas":["content"],"actions":["Blocked"]}</code></td></tr>
+    <tr><td>Risk by Channel — channel, severity or Stopped</td><td>as File Sharing, with <code>"areas":["content"]</code></td></tr>
+    <tr><td>Top Users Sharing Sensitive Content row</td><td><code>{"areas":["content"],"userIds":[11]}</code></td></tr>
+  </table>
+
+  <h5 class="section">Web Filtering tab — every click carries <code>"areas":["web"]</code></h5>
+  <table>
+    <tr><th>Clicked</th><th>Filter</th></tr>
+    <tr><td>Policy-Matched Requests / Blocked / Warned / Allowed tile</td><td><code>{"areas":["web"],"actions":["Blocked"]}</code> — omit <code>actions</code> for the total</td></tr>
+    <tr><td>Top Categories segment or legend row</td><td><code>{"areas":["web"],"categories":["GAMBLING"]}</code></td></tr>
+    <tr><td>Top Blocked Domains row</td><td><code>{"areas":["web"],"domains":["you.com"],"actions":["Blocked"]}</code></td></tr>
+    <tr><td>Top Users by Blocks row</td><td><code>{"areas":["web"],"userIds":[11],"actions":["Blocked"]}</code></td></tr>
+    <tr><td>Risk by Category row</td><td><code>{"areas":["web"],"categories":["GAMBLING"]}</code></td></tr>
+  </table>
+
+  <div class="note"><strong>Do not send <code>channels</code>, <code>severities</code>,
+  <code>dataTypes</code>, <code>devices</code> or <code>minSizeBytes</code> with
+  <code>"areas":["web"]</code>.</strong> A web request has no channel, no severity and no
+  scanned content, so those fields cannot match one — the endpoint skips the web read
+  entirely rather than returning rows that do not satisfy what you asked, and the panel
+  comes back empty. If a Web Filtering widget needs one of those, it is the wrong filter
+  for that widget.</div>
+
+  <h5 class="section">Anywhere</h5>
+  <table>
+    <tr><th>Clicked</th><th>Filter</th></tr>
+    <tr><td>An Insider Risk Signal card</td><td>see note below</td></tr>
+    <tr><td><b>A user chip inside the panel</b></td><td>the filter you already sent <b>+</b> <code>"userIds":[11]</code> — including its <code>areas</code></td></tr>
+  </table>
+  <div class="note"><strong>Insider signals</strong> are computed rules, not
+  stored flags, so there is no single filter that reproduces one exactly. Use the
+  closest approximation — <code>High-Risk User</code> →
+  <code>{"severities":["Critical","High"]}</code>, <code>After-Hours Transfer</code> →
+  <code>{"offHoursOnly":true,"actions":["Blocked","Warned","Override"]}</code>. Mass Data
+  Exfiltration has no filter equivalent; link it to the File Sharing tab instead.</div>
+</section>
+
+<section id="filter">
+  <h2>Filter fields — the drill-down reference</h2>
+  <p>All optional. Fields are AND'ed; values inside one field are OR'ed.</p>
+  <table>
+    <tr><th>Field</th><th>Values</th><th>Used by</th></tr>
+    <tr><td><code>fromDate</code> / <code>toDate</code></td><td>ISO date</td><td>everything</td></tr>
+    <tr><td><code>areas</code></td><td><span class="pill">file</span><span class="pill">content</span><span class="pill">web</span></td><td>tab and area-card clicks</td></tr>
+    <tr><td><code>channels</code></td><td><span class="pill">upload</span><span class="pill">download</span><span class="pill">device_read</span><span class="pill">device_write</span><span class="pill">copy_paste</span><span class="pill">typed</span><span class="pill">prompt</span></td><td>activity split, risk-by-channel</td></tr>
+    <tr><td><code>actions</code></td><td><span class="pill">Blocked</span><span class="pill">Warned</span><span class="pill">Allowed</span><span class="pill">Override</span></td><td>Total Incidents, Policy violations, Response Outcome</td></tr>
+    <tr><td colspan="3" class="tag"><strong>Override is an incident. Decided.</strong>
+    It is an AI prompt that policy <em>blocked</em>, the user raised an override request for, and an approver
+    <em>granted</em> — so the sensitive content went through anyway. Stored as
+    <code>AIPromptBlockLog."Status" = 'Override Applied'</code>. It is a policy violation that happened, and
+    arguably the one most worth looking at, so counting it as "allowed" would hide it.
+    <br><br>
+    Consequences, both sides: <code>totalIncidents</code> = Blocked + Warned + Override, so the matching
+    drill-down filter is <code>{"actions":["Blocked","Warned","Override"]}</code> — with only two values you are
+    asking a narrower question and will get a smaller number, correctly. It appears as its own row in Content
+    Sharing's <code>responseOutcome</code>. It exists on <b>content only</b>: file transfers and web requests
+    have no override flow, so you will never see it on those tabs.</td></tr>
+    <tr><td><code>severities</code></td><td>Critical · High · Medium · Low · <b>None</b></td><td>severity bars</td></tr>
+    <tr><td><code>dataTypes</code></td><td>PII, PHI, PCI, CODE …</td><td>Sensitive Data Detected, Data Classification</td></tr>
+    <tr><td><code>apps</code></td><td>Teams, Slack, ChatGPT …</td><td>Top Incidents by Apps, Top AI Tools</td></tr>
+    <tr><td colspan="3" class="tag"><strong>Send the card's own value back; the API resolves it.</strong>
+    Both of these fields are matched through the same catalogue the cards are built from, so
+    the <code>code</code> or label a row gave you is the right thing to send.
+    <br><br>
+    It did not use to be, and the symptom was a panel that disagreed with the tile above it.
+    Sensitive Data Detected reports the <em>category</em> — "EMAIL ADDRESS" counts under PII —
+    while the filter compared your value against the stored string, so a category whose code is
+    never stored literally returned nothing at all: <code>POLICY</code> read 615 on the card and
+    0 in the panel, and PII read 285 against 201. Top AI Tools had the same split: it groups
+    Claude, claude.ai, Claude.exe and a browser-extension id into one row of 48, and the filter
+    found only the 13 rows stored as "Claude". Each value is now expanded to every name the
+    column holds it under before the query is built.
+    <br><br>
+    Unrecognised values are unaffected — they match exactly as before, so an app or data type the
+    catalogue has never heard of is still filterable.</td></tr>
+    <tr><td><code>categories</code> / <code>domains</code></td><td>web category code, domain</td><td>Web Filtering tab</td></tr>
+    <tr><td><code>devices</code></td><td>USB, Bluetooth, NAS, RDP</td><td>Top device types</td></tr>
+    <tr><td><code>policies</code></td><td>policy name</td><td>Top Policies Triggered</td></tr>
+    <tr><td><code>userIds</code></td><td>int[]</td><td><b>user chips inside the panel</b></td></tr>
+    <tr><td><code>hours</code> / <code>daysOfWeek</code></td><td>0–23 / 0–6 (0 = Sunday)</td><td>heat-map cells</td></tr>
+    <tr><td><code>offHoursOnly</code></td><td>bool</td><td>Off-Hour Activity tile</td></tr>
+    <tr><td><code>minSizeBytes</code></td><td>long</td><td>"Files over 99 MB"</td></tr>
+    <tr><td><code>search</code></td><td>free text</td><td>the search box</td></tr>
+    <tr><td><code>departments</code></td><td>department <b>name</b>, e.g. "Engineering"</td><td>the header's Department dropdown</td></tr>
+    <tr><td><code>splitBy</code></td><td><span class="pill">area</span><span class="pill">channel</span><span class="pill">action</span></td><td><code>time-series</code> only</td></tr>
+    <tr><td><code>channel</code></td><td>Communication, Cloud, External Devices …</td><td><code>exfiltration/breakdown</code> only</td></tr>
+    <tr><td><code>category</code></td><td>PII, PHI, CODE …</td><td><code>classification/breakdown</code> only</td></tr>
+  </table>
+
+  <div class="ok"><strong><code>departments</code> takes names, not ids</strong> — the same
+  string the dropdown shows, matched against the user record. Combined with
+  <code>userIds</code> it is an AND: "Engineering" plus a user means that user only if they
+  are in Engineering, and <strong>a department nobody is in returns an empty result, not
+  everybody</strong>.
+  <br><br>
+  It filters on where someone works <em>now</em>. The event carries no department, so
+  someone who changes team takes their whole history with them.</div>
+  <div class="note">Some combinations are empty by definition, and that is correct rather
+  than a bug: a <code>channels</code>, <code>devices</code> or <code>minSizeBytes</code>
+  filter excludes web requests, and a <code>severities</code> or <code>dataTypes</code>
+  filter also excludes them — web requests carry neither.</div>
+</section>
+
+<section id="gotchas">
+  <h2>Things to know before you build</h2>
+  <ol>
+    <li><strong>A drill-down without <code>areas</code> is not scoped to the tab you
+    clicked from.</strong> One endpoint serves all three populations and the request is
+    the only thing that names one, so a File Sharing widget that sends
+    <code>{"dataTypes":["PII"]}</code> gets file <em>and</em> content back — the panel
+    lists AI prompts under a File Sharing heading and the Events count is larger than the
+    card that was clicked. Send <code>"areas":["file"]</code> with it. See the
+    <a href="#clicks">Click → filter map</a>, which is now split per tab for exactly this
+    reason.</li>
+
+    <li><strong>The clock filters work now — <code>offHoursOnly</code>,
+    <code>hours</code> and <code>daysOfWeek</code>.</strong> All three were on this contract
+    and read by nothing, so the Off-Hour Activity panel listed the whole window — 4,537
+    against a tile of 816 — and every heat-map cell opened the same unfiltered panel. They are
+    evaluated in the tenant's time zone now, and the Off-Hour panel matches its tile exactly.
+    <b>If you had worked around this client-side, remove the workaround</b>: the filters
+    narrow for real, and a second filter on top of them will double-count nothing but will
+    hide events. They read file and content only, the same population the tile and the heat
+    map are drawn from, so a web area sent with them returns nothing by design.</li>
+
+    <li><strong>A fifth severity exists.</strong> The design draws four; the scanner also
+    emits <code>None</code> when it could not assess a file, and it is often the largest
+    bucket. Decide how to show it — but do not assume the four add up to the total.</li>
+
+    <li><strong>Three cards the design shows are not served:</strong> Violations by
+    Regulation, Warnings Bypassed, and Departing Employee. Leave them out rather than
+    rendering them empty.</li>
+
+    <li><strong>Endpoint Coverage has no "Warning" slice</strong> — endpoints are only
+    Online, Offline or Locked.</li>
+
+    <li><strong>Keep a filter stack for the back button.</strong> The server returns no
+    back pointer; the panel's history is yours.</li>
+
+    <li><strong>The drill-down panel's heading is yours to set.</strong>
+    <code>title</code> and <code>subtitle</code> have been removed from the response —
+    they were always empty, because one query serves many labels. Use the tile you
+    clicked.</li>
+
+    <li><strong>A change badge of <code>null</code> means "do not render one".</strong>
+    Not zero, not 100%. Either the previous window had nothing or no dates were sent.</li>
+
+    <li><strong>Copy / Paste and Typed Content are Content Sharing, not File
+    Sharing.</strong> They were landing on the wrong tab because the underlying view
+    labels every transfer row "File"; the tabs now split on the transfer type instead.
+    If you compared tab totals against an earlier build, they have moved — the new
+    numbers are the right ones.</li>
+
+    <li><strong>Per-tab layout needs migration V0016.</strong> Saving a tab layout fails
+    until it has run on the tenant.</li>
+
+    <li><strong>Device events have moved off Upload.</strong> Device Write and Device
+    Read were 0 and Upload was carrying their events. Both the KPIs and the
+    <code>channels</code> filter are fixed — expect Upload to fall and the two device
+    channels to rise by the same amount.</li>
+
+    <li><strong>Only Largest Transfers rows are clickable to an event.</strong> Every
+    other ranked list is an aggregate, so <code>eventId</code> is null there by design.</li>
+
+    <li><strong>Total Incidents means Blocked + Warned + Override.</strong> It was
+    "everything that is not Allowed", which counted a handful of Override events the
+    drill-down's <code>["Blocked","Warned"]</code> then excluded — 22,185 against 22,180.
+    Both sides name the same three outcomes now, so send all three.</li>
+
+    <li><strong><code>event-detail</code> needs the right <code>area</code>.</strong> The
+    three populations have independent id sequences, so 4810 exists in all of them and
+    means a different event in each. The area now selects the population before the id
+    selects the row; sending the wrong one returns 404 rather than someone else's event.</li>
+
+    <li><strong>Risk by Channel always returns every channel</strong>, zeros included, so
+    the table keeps its shape and a 0 reads as "nothing happened" rather than "not
+    measured".</li>
+  </ol>
+</section>
+
+<p class="tag" style="margin:26px 0 10px">Dashboard v2 · twelve endpoints · the existing
+dashboard endpoints are unchanged and still serve the current screen.</p>
+
+</main>
+</div>
+</body>
+</html>

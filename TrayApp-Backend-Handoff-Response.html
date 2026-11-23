@@ -1,0 +1,380 @@
+<title>Tray App Backend — what's ready</title>
+<style>
+  /* Teal on a teal-biased near-white, carried over from the tray team's own
+     handoff — this is the reply to that document and should read as a pair.
+     No webfonts: the published page blocks font CDNs, and a silent fallback
+     to Times would be worse than a deliberate system stack. */
+  :root {
+    --bg:#F6F8F8; --surface:#fff; --fg:#12181A; --muted:#5C6A6E; --line:#DDE4E5;
+    --accent:#0E8C94; --ok:#1F7A3E; --ok-soft:#E3F4E8; --warn:#9A5B00; --warn-soft:#FBEFD9;
+    --no:#A32B2B; --no-soft:#FBE7E7;
+    color-scheme:light;
+    --sans:system-ui,-apple-system,"Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono",Menlo,Consolas,monospace;
+  }
+  /* Dark tokens three times over: the OS preference, then both explicit
+     settings, so the viewer's own toggle wins in BOTH directions. */
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0F1415; --surface:#161D1F; --fg:#E6EDEE; --muted:#93A3A7; --line:#293436;
+    --accent:#4CC6CD; --ok:#6FD18F; --ok-soft:#14301E; --warn:#F0B460; --warn-soft:#33270F;
+    --no:#F08A8A; --no-soft:#331414; color-scheme:dark}}
+  :root[data-theme="dark"]{
+    --bg:#0F1415; --surface:#161D1F; --fg:#E6EDEE; --muted:#93A3A7; --line:#293436;
+    --accent:#4CC6CD; --ok:#6FD18F; --ok-soft:#14301E; --warn:#F0B460; --warn-soft:#33270F;
+    --no:#F08A8A; --no-soft:#331414; color-scheme:dark}
+  :root[data-theme="light"]{
+    --bg:#F6F8F8; --surface:#fff; --fg:#12181A; --muted:#5C6A6E; --line:#DDE4E5;
+    --accent:#0E8C94; --ok:#1F7A3E; --ok-soft:#E3F4E8; --warn:#9A5B00; --warn-soft:#FBEFD9;
+    --no:#A32B2B; --no-soft:#FBE7E7; color-scheme:light}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.55;margin:0}
+  a:focus-visible,:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 20px 64px;display:grid;gap:32px}
+  .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:28px;line-height:1.2;margin:8px 0 0}
+  h2{font-size:19px;margin:0}
+  p{margin:0;max-width:70ch}
+  .lede{color:var(--muted)}
+  section{display:grid;gap:12px;min-width:0}
+  code{font-family:var(--mono);font-size:13px}
+  .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .table-box{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+  th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg)}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+       padding:2px 7px;border-radius:4px;white-space:nowrap}
+  .tag.ok{color:var(--ok);background:var(--ok-soft)}
+  .tag.part{color:var(--warn);background:var(--warn-soft)}
+  .tag.no{color:var(--no);background:var(--no-soft)}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:var(--surface);
+      border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;margin:0}
+  ol{margin:0;padding-left:22px;display:grid;gap:18px}
+  ol p{margin-top:4px;color:var(--muted)}
+  .note{border-left:3px solid var(--warn);padding-left:14px}
+  .note strong{color:var(--warn)}
+  footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">DLP · reply to the tray app backend handoff</div>
+    <h1>What's ready, what isn't, and the two things that now behave differently</h1>
+    <p class="lede" style="margin-top:8px">
+      Five of your six requests are built on both the DLP API and the ExeApi.
+      R6 is the exception and it is not finished. Field names differ from your
+      proposals in a few places — you said rename freely and tell you, so the
+      mapping is below.
+    </p>
+  </header>
+
+  <section>
+    <h2>1 · Status of the six requests</h2>
+    <div class="table-box"><table>
+      <thead><tr><th>Request</th><th>State</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><b>R1</b> Channel</td><td><span class="tag part">4 of 6</span></td>
+            <td>Upload, Download, AiPrompt, WebAccess work. <b>Copy Paste and Typed Content do not exist</b> — see §5.</td></tr>
+        <tr><td><b>R2</b> Allowance</td><td><span class="tag ok">Done</span></td>
+            <td>On <code>GetDashboardSummary</code>, from the policy where one is published.
+                <code>unlimited</code> always returns <code>false</code> — see §5.</td></tr>
+        <tr><td><b>R3</b> Duration</td><td><span class="tag ok">Done</span></td>
+            <td>Needs migration V0011 applied — see §7.</td></tr>
+        <tr><td><b>R4</b> Response contract</td><td><span class="tag ok">Done</span></td>
+            <td>All four codes fire, on submit, cancel, approve and reject —
+                including <code>NOT_ALLOWED</code>, which now comes from the policy.</td></tr>
+        <tr><td><b>R5</b> Approvals API</td><td><span class="tag ok">Done</span></td>
+            <td>Most of it already existed. <code>GetApprovalRequest/{id}</code> is new.</td></tr>
+        <tr><td><b>R6</b> Role flag</td><td><span class="tag no">Flag only</span></td>
+            <td>Fields returned (§4), but <b>no endpoint refuses anyone</b> — see §5.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>2 · Names: what you asked for → what we return</h2>
+    <div class="table-box"><table>
+      <thead><tr><th>Your proposal</th><th>Ours</th></tr></thead>
+      <tbody>
+        <tr><td><code>GetApprovalRequests</code></td><td><code>GetApprovalList</code></td></tr>
+        <tr><td><code>ApproveOverrideRequest</code> / <code>RejectOverrideRequest</code></td>
+            <td><code>ReviewOverrideRequest</code> — one call, <code>status: "Approved"</code> or <code>"Rejected"</code></td></tr>
+        <tr><td><code>GetApprovalRequest/{id}</code></td><td>same — new endpoint</td></tr>
+        <tr><td><code>rejectionReason</code></td>
+            <td><code>reviewComments</code> — stored, but <b>not required</b>. A reject with an
+                empty reason is accepted, so enforce it in your form if the screen needs one.</td></tr>
+        <tr><td><code>decidedAt</code></td><td><code>reviewedAt</code></td></tr>
+        <tr><td><code>requester.overridesThisPeriod</code></td><td><code>overridesThisPeriod</code> — flat, not nested</td></tr>
+        <tr><td><code>typicalApprovalResponse</code></td>
+            <td><code>typicalResponseTime</code> — <b>fixed wording, not measured</b>. You asked
+                whether it was a policy value: it is neither. One string in server config, same for
+                every policy and every user, and nothing computes it from real approval times. We
+                have moved the hardcoding from your app into our config, which is all. If an
+                approver habitually takes two days, this line still says "2 to 4 Hours".</td></tr>
+        <tr><td><code>channels[]</code> filter</td><td>not built — <code>channelCounts</code> is, keep filtering client-side</td></tr>
+      </tbody>
+    </table></div>
+    <p class="lede">Everything else keeps the name you proposed.</p>
+  </section>
+
+  <section>
+    <h2>3 · One override, start to finish</h2>
+    <p class="lede">Tray app routes shown. The DLP API has the same calls without the <code>/V1</code> prefix.</p>
+    <ol>
+      <li><b>Show the activity and the header</b>
+<pre>POST /exe/V1/GetDashboardSummary/199
+POST /exe/V1/GetActivityList/199
+
+→ summary:  "selfOverrides": { "used": 2, "remaining": 3, "total": 5,
+                               "resetPeriod": "Monthly",
+                               "nextResetAt": "2026-11-01T00:00:00Z",
+                               "unlimited": false, "canSelfOverride": true }
+
+→ row:      "activityChannel": "WebAccess",
+            "webCategory": "Photo and Video Sharing",
+            "contentLength": 1240,
+            "promptMessage": "…"
+
+→ list:     "channelCounts": { "Upload": 7, "Download": 1, "Send": 0,
+                               "Receive": 0, "AiPrompt": 0, "WebAccess": 3 }</pre>
+        <p><code>channelCounts</code> covers the whole filtered range, not the page — safe to show beside each filter checkbox.</p>
+      </li>
+
+      <li><b>Employee asks for 5 days</b>
+<pre>POST /exe/V1/SubmitOverrideRequest
+{ "enrichedId": 179354, "userId": 199,
+  "overrideType": "AdminApproval",
+  "businessJustification": "Client needs the report today",
+  "requestedDuration": 5, "durationUnit": "Days" }
+
+→ 200  { "success": true, "data": { "success": true, "errorCode": null } }</pre>
+        <p><code>durationUnit</code> is <code>"Hours"</code> or <code>"Days"</code>. Omit both fields and it behaves exactly as before.</p>
+      </li>
+
+      <li><b>Manager opens the queue</b>
+<pre>GET  /exe/V1/GetUserOverrideSettings/42
+→ "isApprover": true, "canDecide": true, "pendingApprovalCount": 4
+
+POST /exe/V1/GetApprovalList          ← the grid
+POST /exe/V1/GetApprovalRequest/a62abb3d-…   ← one request, same shape
+
+→ "requestedDuration": 5, "durationUnit": "Days",
+  "overridesThisPeriod": 4,
+  "statusCounts": { "pending": 4, "approved": 2, "rejected": 2, "all": 9 }</pre>
+        <p><code>statusCounts</code> ignores the status filter, so every chip stays accurate.</p>
+      </li>
+
+      <li><b>Manager approves — but only 3 days</b>
+<pre>POST /exe/V1/ReviewOverrideRequest
+{ "overrideRequestId": "a62abb3d-…", "reviewedByUserId": 42,
+  "status": "Approved", "reviewComments": "3 days is enough",
+  "validUntil": "2026-10-22T09:00:00Z" }        ← omit to grant what was asked</pre>
+        <p>Window resolves as: your <code>validUntil</code> → else the requested duration → else the configured default.</p>
+      </li>
+
+      <li><b>Employee sees the outcome</b>
+<pre>→ "grantedDuration": 3, "requestedDuration": 5, "durationUnit": "Days",
+  "accessExpiresAt": "2026-10-22T09:00:00Z"</pre>
+        <p><code>accessExpiresAt</code> is the server clock. Do not compute expiry from the PC's time.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>4 · Who counts as an approver</h2>
+    <p class="lede">You asked which role ids decide this. Read it from
+       <code>GetUserOverrideSettings</code> — do not derive it yourself.</p>
+
+<pre>GET /exe/V1/GetUserOverrideSettings/{userId}
+
+→ "isApprover": true,          ← show the Approvals tab
+  "canDecide": true,           ← show the Approve / Reject buttons
+  "roleIds": [3],              ← this user's role ids, for display only
+  "pendingApprovalCount": 4    ← the tab's badge
+
+  "maxSelfOverrideHours": 8,   ← "Your admin allows up to 8 hours"
+  "maxAdminApprovalDays": 30,  ← "Up to 30 days, the team may shorten it"
+  "typicalResponseTime": "2 to 4 Hours",
+
+  "canSelfOverride": true,     ← on the POLICY route, can be false
+  "canAdminOverride": true,
+  "selfOverridesTotal": 3,     ← from the policy on the policy route
+  "overrideResetPeriod": "Monthly"   ← Daily | Weekly | Monthly | Never</pre>
+    <p>The last four vary by which route you call — see §5. On
+       <code>GetUserOverrideSettings</code> they come from the older policy tables, as they always
+       have; on <code>GetUserPolicyOverrideSettings</code> they come from the new published
+       policy.</p>
+    <p>One behaviour change on the original route worth knowing: the allowance is now
+       <b>enforced</b> on submit. It was previously read and displayed but never checked, so a user
+       past their limit could keep going. The limit enforced is the same number you have been
+       showing as "3 / 5".</p>
+    <p>The two ceilings are <b>enforced</b>, not just displayed — ask for longer and the submit
+       comes back <code>409 LIMIT_EXCEEDED</code>. Read them rather than hardcoding, so changing
+       the number is a config edit instead of an agent release.</p>
+
+    <p>A user is an approver when <b>both</b> hold:</p>
+    <div class="table-box"><table>
+      <thead><tr><th>Condition</th><th>Where it comes from</th></tr></thead>
+      <tbody>
+        <tr><td>The user is active</td><td><code>sfm."User".IsActive</code></td></tr>
+        <tr><td>Their role is mapped as an approval role on <b>any</b> policy
+                — <i>or</i> their role name is <code>DLP Admin</code></td>
+            <td><code>dlp."PolicyApprovalRoleMap"</code>, written by the policy screen's
+                <code>approvalRoleIds</code>. The <code>DLP Admin</code> fallback covers tenants
+                that have never set an approval role, which would otherwise have no approvers at
+                all — it is also already who receives the "please review this" notification.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p><code>pendingApprovalCount</code> counts requests still awaiting a decision — admin
+       approvals and large-file requests — across the tenant, not per policy. It is always
+       <code>0</code> for a non-approver.</p>
+
+    <p><code>canDecide</code> is a separate field but currently returns the same value as
+       <code>isApprover</code>. It exists so view-only reviewers can be introduced later without
+       you changing anything: bind the tab to <code>isApprover</code> and the buttons to
+       <code>canDecide</code>, and that split will just start working.</p>
+
+    <p class="lede">Note it is <b>per user</b>, not per request row. With no per-policy scoping in
+       effect today those are the same answer, so apply <code>canDecide</code> to every row.</p>
+  </section>
+
+  <section>
+    <h2>5 · Things to know before you build</h2>
+
+    <div class="box note" style="display:grid;gap:14px">
+      <div>
+        <strong>Copy Paste and Typed Content are not available.</strong>
+        <p>Nothing in the activity log records whether content arrived via the clipboard or the
+           keyboard, so the API cannot tell them apart — it would be guessing. Those rows keep
+           whatever transfer type they were logged under. <b>This needs the exe agent team</b> to
+           stamp the channel at capture. The other four values are correct and safe to bind to.</p>
+      </div>
+      <div>
+        <strong>isApprover hides the tab; it does not protect the endpoint.</strong>
+        <p>Use it to decide what to draw. The approvals endpoints still answer any caller — the
+           tray app has no login, so the <code>userId</code> you send is a claim, not an identity.
+           Real enforcement comes with the tray-app authentication work. Please do not treat the
+           flag as a security boundary.</p>
+      </div>
+      <div>
+        <strong>unlimited is in the contract but is always false.</strong>
+        <p>You asked whether <code>maxOverrideAttempts = 0</code> meant unlimited or not
+           configured. Neither — it means <b>zero</b>. The column is nullable, so "not
+           configured" is already <code>NULL</code> (and falls back to a default cap), which
+           leaves <code>0</code> meaning zero attempts. Reading it as "no limit" would hand an
+           infinite allowance to an administrator who set it to forbid overriding.</p>
+        <p>So the policy model currently has no way to say unlimited. The field stays in the
+           response for you to bind to, and will start returning <code>true</code> if the policy
+           screen ever grows a way to mean it. Until then, treat
+           <code>remaining</code>/<code>total</code> as the truth.</p>
+      </div>
+      <div>
+        <strong>Submit can now refuse you. This is new.</strong>
+        <p>Requests that succeeded last week may now come back refused. Handle both:</p>
+<pre>400  NOT_ALLOWED        the policy does not permit this override, or not at
+                       this activity's sensitivity
+409  LIMIT_EXCEEDED     the allowance for the period is spent, or the duration
+                       asked for exceeds the ceiling
+409  DUPLICATE_REQUEST  a request for this activity is already open
+409  ALREADY_DECIDED    another approver got there first — refresh, do not retry</pre>
+        <p>Read <code>data.errorCode</code>, not the message — the wording will change, the codes will not.
+           Both <code>success</code> flags say <code>false</code> on a refusal.</p>
+      </div>
+      <div>
+        <strong>Nothing above changes on the endpoints you already call.</strong>
+        <p>The policy-driven behaviour lives on <b>separate routes</b>, because moving to the new
+           policy has not been agreed. Keep calling what you call today and nothing changes; switch
+           the URL when you are ready. Request and response shapes are identical, so it is a URL
+           change and nothing else.</p>
+<pre>unchanged, app settings          policy-driven
+──────────────────────────       ─────────────────────────────────
+SubmitOverrideRequest            SubmitPolicyOverrideRequest
+GetUserOverrideSettings/{id}     GetUserPolicyOverrideSettings/{id}   (portal host)</pre>
+        <p>One implementation underneath both, so the two cannot drift into different rules.</p>
+        <p>The original routes read the <b>older</b> policy tables, as they always have — so
+           <code>selfOverridesTotal</code> and <code>canSelfOverride</code> still come from a
+           policy there, just not the new one. What they do <i>not</i> do is check sensitivity, so
+           <code>NOT_ALLOWED</code> never comes back from them, and the allowance is always counted
+           over a calendar month whatever <code>overrideResetPeriod</code> says.</p>
+      </div>
+      <div>
+        <strong>On the policy routes, a submit can be refused for reasons the previous screen did
+           not show.</strong>
+        <p>The <b>Response options</b> section of a published policy drives all of this:</p>
+<pre>Self override          off        → NOT_ALLOWED
+Override attempts      3 per user → the 4th is LIMIT_EXCEEDED
+Limit resets           Daily | Weekly | Monthly | Never
+Applies to sensitivity Medium, Low → a Critical activity is NOT_ALLOWED
+Admin approval         same toggle and sensitivity rules</pre>
+        <p>Two consequences worth designing for. <code>canSelfOverride</code> can come back
+           <code>false</code> — do not assume the route is always open. And a user who passes
+           every check on the detail screen can still be refused on submit, because
+           <b>sensitivity is per activity</b>: the same person may self-override a Low finding
+           and not a Critical one under one policy.</p>
+        <p><code>overrideResetPeriod</code> now returns any of the four values, not only
+           <code>Monthly</code>. <code>Never</code> means the allowance never refills — it is a
+           lifetime total, not unlimited — and <code>nextResetAt</code> is <code>null</code> for it.</p>
+        <p>Where no policy is published, all of this falls back to server config and behaves as it
+           did before. If <code>selfOverridesTotal</code> comes back <code>5</code> with
+           <code>"Monthly"</code>, that is the fallback answering, not a policy.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6 · Pins we are not sending, and your remaining questions</h2>
+    <p class="lede">Going screen by screen through your mock — these are the labels with no data
+       behind them. Everything else on your pins is covered above.</p>
+
+    <div class="table-box"><table>
+      <thead><tr><th>Your pin</th><th>Where</th><th>Position</th></tr></thead>
+      <tbody>
+        <tr><td><code>contentTypeDescription</code><br><i>"Please make sure it is filled for blocked rows"</i></td>
+            <td>Activity detail</td>
+            <td><span class="tag part">Unverified</span> We did not change how it is populated and
+                have not confirmed it is filled. If it is still blank on blocked rows, raise it
+                separately — it is a scanning-pipeline question, not an API one.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p class="lede" style="margin-top:6px">And the questions at the foot of your handoff that are
+       not already answered above:</p>
+    <div class="table-box"><table>
+      <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td>Can a manager approve a shorter duration than requested?</td>
+            <td><b>Yes.</b> Send <code>validUntil</code> on the approve call; omit it and the
+                requested duration is granted in full. The detail then shows
+                <code>grantedDuration</code> below <code>requestedDuration</code>.</td></tr>
+        <tr><td>Is a rejection reason required?</td>
+            <td><b>No</b> — not enforced server-side. Enforce it in the form if you want one.</td></tr>
+        <tr><td>Should employees get an Approvals list of their own requests?</td>
+            <td><b>One already exists:</b> <code>POST /exe/V1/GetPendingRequests/{userId}</code>,
+                that user's own requests, newest first, optional <code>status</code> filter. It is
+                not approver-gated — it is their own history.</td></tr>
+        <tr><td>Does a manager see only their own team?</td>
+            <td><b>No.</b> An approver sees every request in the tenant. There is no team scoping
+                anywhere in the data today.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>7 · Before you test</h2>
+    <div class="box">
+      <p>Migration <b>V0011</b> must be applied, or <code>requestedDuration</code> comes back
+         <code>null</code> on every row and step 5 above shows nothing:</p>
+      <pre style="margin-top:10px">POST /admin/migration/run
+GET  /admin/migration/status     ← confirm every tenant took it</pre>
+      <p style="margin-top:10px">Also worth checking on your test policy: <code>canRequestAdminApproval</code>
+         returned false for your test user, which is why the Admin Approval button stayed hidden.
+         That is policy configuration, not an API gap.</p>
+    </div>
+  </section>
+
+  <footer>
+    Both hosts carry every change. DLP API routes have no <code>/V1</code> prefix; ExeApi routes do.
+    Questions on anything above — ask before working around it.
+  </footer>
+</div>

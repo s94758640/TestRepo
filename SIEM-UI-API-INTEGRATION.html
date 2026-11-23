@@ -1,0 +1,148 @@
+<title>SIEM Connectors — UI ↔ API integration</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#fff; --ink:#1a1f27; --muted:#59616e; --faint:#8a929e;
+    --line:#e6e9ef; --line2:#eef1f5; --accent:#2f6e70; --accent-soft:#e3f3f2;
+    --have:#2f8f63; --have-bg:#e6f3ec; --partial:#9a6a1a; --partial-bg:#faf0dd;
+    --miss:#b4443a; --miss-bg:#f7e5e3; --code-bg:#1b2130; --code-ink:#e9edf5;
+    --post:#2f6e70; --get:#3a5bd9;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;--line:#282d36;--line2:#22262e;
+    --accent:#5bb8ba;--accent-soft:#16302f;--have:#5fc48c;--have-bg:#15271e;--partial:#d7a24a;--partial-bg:#2a2112;
+    --miss:#e07a70;--miss-bg:#2c1816;--code-bg:#0f131a;--code-ink:#e4e9f2;--post:#5bb8ba;--get:#7f9cff;}}
+  :root[data-theme="dark"]{--bg:#13161b;--panel:#1a1e25;--ink:#e8ebf1;--muted:#9aa2af;--faint:#6b7380;--line:#282d36;--line2:#22262e;--accent:#5bb8ba;--accent-soft:#16302f;--have:#5fc48c;--have-bg:#15271e;--partial:#d7a24a;--partial-bg:#2a2112;--miss:#e07a70;--miss-bg:#2c1816;--code-bg:#0f131a;--code-ink:#e4e9f2;--post:#5bb8ba;--get:#7f9cff;}
+  :root[data-theme="light"]{--bg:#f5f6f8;--panel:#fff;--ink:#1a1f27;--muted:#59616e;--faint:#8a929e;--line:#e6e9ef;--line2:#eef1f5;--accent:#2f6e70;--accent-soft:#e3f3f2;--have:#2f8f63;--have-bg:#e6f3ec;--partial:#9a6a1a;--partial-bg:#faf0dd;--miss:#b4443a;--miss-bg:#f7e5e3;--code-bg:#1b2130;--code-ink:#e9edf5;--post:#2f6e70;--get:#3a5bd9;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.56;font-size:14.5px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+  .eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-family:var(--serif);font-weight:600;font-size:29px;line-height:1.14;margin:.35em 0 .2em;letter-spacing:-.01em;text-wrap:balance}
+  .sub{color:var(--muted);font-size:14px;max-width:70ch}
+  h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:40px 0 4px;letter-spacing:-.01em}
+  h3{font-size:14px;font-weight:700;margin:22px 0 6px;letter-spacing:.01em}
+  .lede{color:var(--muted);font-size:13px;margin:2px 0 14px;max-width:72ch}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 20px;margin:12px 0}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
+  @media(min-width:720px){table{display:table}}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  code{font-family:var(--mono);font-size:.86em;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:5px;white-space:nowrap}
+  td code{white-space:normal}
+  pre{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12px;line-height:1.55;border-radius:10px;padding:13px 15px;overflow-x:auto;margin:8px 0}
+  pre code{background:none;color:inherit;padding:0;white-space:pre}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap}
+  .have{color:var(--have);background:var(--have-bg)} .partial{color:var(--partial);background:var(--partial-bg)} .miss{color:var(--miss);background:var(--miss-bg)}
+  .m{font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px;color:#fff}
+  .m.post{background:var(--post)} .m.get{background:var(--get)}
+  .note{color:var(--muted);font-size:12.5px}
+  ol.build{counter-reset:b;list-style:none;padding:0;margin:8px 0}
+  ol.build>li{counter-increment:b;position:relative;padding:11px 0 11px 40px;border-bottom:1px solid var(--line2)}
+  ol.build>li:last-child{border-bottom:none}
+  ol.build>li::before{content:counter(b);position:absolute;left:0;top:10px;width:26px;height:26px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:12px;display:grid;place-items:center;font-family:var(--mono)}
+  .tag{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:6px}
+  .tag.small{color:var(--have);background:var(--have-bg)} .tag.dec{color:var(--partial);background:var(--partial-bg)} .tag.sec{color:var(--miss);background:var(--miss-bg)}
+  .foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+  b,strong{font-weight:600}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Settings → Connectors → SIEM · UI ↔ API integration</div>
+  <h1>SIEM connectors — what to call for every tile</h1>
+  <p class="sub">The SIEM backend is already built — both halves (push <b>Destinations</b> and pull <b>API access</b>), the 5-step connect wizard, secret rotation with overlap, and the OAuth + events feed. This maps each screen element to its endpoint, flags the few gaps, and lists the small items left to build.</p>
+  <p class="note">Routes are shown without the gateway prefix. The public URLs the collector uses (<code>/dlp/oauth/token</code>, <code>/dlp/siem/events</code>) carry the <code>/dlp</code> APIM prefix; console routes are <code>[Authorize]</code> JWT like the rest of the app. All list/save calls use the standard <code>ApiResponse</code> envelope; <code>/oauth/token</code> and <code>/siem/events</code> return raw (RFC-6749 / feed JSON).</p>
+
+  <h2>Two halves of the page</h2>
+  <div class="card"><table>
+    <thead><tr><th>Section</th><th>Direction</th><th>Backed by</th></tr></thead>
+    <tbody>
+      <tr><td><b>Destinations</b> — "we send"</td><td>Defensely → the SIEM (push)</td><td><code>siem/connectors</code> + <code>SiemConnector</code></td></tr>
+      <tr><td><b>API access</b> — "they collect"</td><td>the SIEM → Defensely (pull)</td><td><code>siem/clients</code> + <code>oauth/token</code> + <code>siem/events</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>A · Destinations list</h2>
+  <table>
+    <thead><tr><th>Element</th><th>Call</th><th>Field / note</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>The grid</td><td><span class="m post">POST</span> <code>siem/connectors/list</code></td><td>rows: <code>siemConnectorId, provider, displayName, endpointUrl, format, sensitivePolicy, status, lastError, lastValidatedAt, lastDeliveryAt, isEnabled, secretHint</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Status (Connected / Failing / Pending / Paused)</td><td>row <code>status</code></td><td><code>SiemConnectorStatus</code> — maps 1:1</td><td><span class="pill have">have</span></td></tr>
+      <tr><td>On/off toggle</td><td><span class="m post">POST</span> <code>siem/connectors/{id}/toggle?enabled={bool}</code></td><td>400 if enabling an untested destination (<code>lastValidatedAt == null</code>)</td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Health link</td><td><span class="m post">POST</span> <code>siem/connectors/{id}/health</code></td><td>returns <code>status, lastError, lastDeliveryAt, sentLast24h, failedLast24h, backlog, deadLettered</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Delete</td><td><span class="m post">POST</span> <code>siem/connectors/{id}/delete</code></td><td>—</td><td><span class="pill have">have</span></td></tr>
+      <tr><td><b>Sent 24h</b> on the row</td><td>— (only in <code>/health</code> today)</td><td>see Build #1 — moving onto the list row to avoid an N+1</td><td><span class="pill partial">partial</span></td></tr>
+      <tr><td><b>Queue text</b> (Up to date / N waiting / Not sending)</td><td>derive from <code>/health.backlog</code> + <code>isEnabled</code></td><td>Build #1 adds <code>sentLast24h</code> + <code>backlog</code> to the row so the UI derives: <code>!isEnabled → "Not sending"</code>, <code>backlog==0 → "Up to date"</code>, else <code>"{backlog} events waiting"</code></td><td><span class="pill partial">partial</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>B · Connect-a-SIEM wizard (5 steps)</h2>
+
+  <h3>Step 1 — Vendor</h3>
+  <p class="lede"><span class="m get">GET</span> <code>siem/providers</code> → <code>{ key, displayName, endpointLabel, secretLabel, setupSummary, isImplemented, defaultFormat, extraFields[] }</code>. Implemented: <code>splunk-hec</code>, <code>sentinel-dcr</code>, <code>qradar-syslog</code>, <code>webhook</code>. <span class="pill have">have</span> — Elastic / Sumo Logic / Google SecOps "coming soon" cards are <span class="pill miss">missing</span> (Build #2 adds them as <code>isImplemented:false</code>).</p>
+
+  <h3>Step 2 — Credentials</h3>
+  <p class="lede"><span class="m post">POST</span> <code>siem/connectors</code> — body <code>{ provider, displayName, endpointUrl, secret, config{…}, format, sensitivePolicy, filterJson }</code>. Per-vendor non-secret fields go in <code>config</code>, keyed exactly as <code>extraFields[].key</code> from step 1 (Splunk: <code>index</code>, <code>sourcetype</code>; Sentinel: <code>tenantId, clientId, dcrImmutableId, streamName</code>; webhook: <code>headerName</code>; QRadar: <code>caCertificatePem</code>, no secret). Secret is encrypted on write, never returned (only <code>secretHint</code> = last 4). Saved <code>isEnabled:false, status:Pending</code>. <span class="pill have">have</span></p>
+
+  <h3>Step 3 — Filter (severity + event types)</h3>
+  <p class="lede">Stored as <code>filterJson</code> on the connector; empty/<code>{}</code> = send everything. <span class="pill partial">partial</span> — the rule engine understands <code>Severity</code> and <code>PolicyAction</code>, but there is <b>no severity enum endpoint and no event-type catalog</b>, so the UI can't yet map its 5 checkboxes server-side. <b>Build #3</b> defines this. Until then the shape the UI must emit is:</p>
+  <pre><code>{ "op":"AND", "rules":[
+    { "op":"IN", "field":"Severity", "value":["Critical","High"] },
+    { "op":"IN", "field":"EventType", "value":["BlockedTransfer","PolicyViolation"] }
+] }</code></pre>
+  <p class="note">The <code>EventType</code> field and its values (Blocked transfers / Policy violations / Approval decisions / Discovery findings / Agent health) need server-side definition — that's Build #3.</p>
+
+  <h3>Step 4 — Format + sensitive content</h3>
+  <table>
+    <thead><tr><th>Control</th><th>Field</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Event format JSON / CEF</td><td><code>format</code> = <code>json</code> | <code>cef</code> (backend also supports <code>ecs</code>, <code>leef</code>)</td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Sensitive: "Don't send"</td><td><code>sensitivePolicy</code> = <code>off</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Sensitive: "Send a category summary" <code>{"PII":2,"PHI":1}</code></td><td><code>sensitivePolicy = "summary"</code> — category names + counts, never a value. (<code>masked</code> still accepted as a legacy alias.)</td><td><span class="pill have">have</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Step 5 — Test &amp; save</h3>
+  <p class="lede">Send test event <span class="m post">POST</span> <code>siem/connectors/{id}/test</code> → <code>{ success, httpStatus, error }</code> (sets <code>lastValidatedAt</code>). "Switch on delivery" = the toggle in A (enabled only after a test passes). Save = the create in step 2. <span class="pill have">have</span></p>
+
+  <h2>C · Secret-rotation overlap</h2>
+  <p class="lede">The banner ("the old secret keeps working for 23h 41m… End overlap now") is for an <b>API-access</b> credential (pull), not a destination. <span class="pill have">have</span></p>
+  <table><tbody>
+    <tr><td>Rotate</td><td><span class="m post">POST</span> <code>siem/clients/{clientId}/rotate</code> → new one-time secret; old one valid for <code>rotationOverlapEndsUtc</code> (default 24h)</td></tr>
+    <tr><td>End overlap now</td><td><span class="m post">POST</span> <code>siem/clients/{clientId}/rotate/complete</code></td></tr>
+    <tr><td>Countdown</td><td>row field <code>rotationOverlapEndsUtc</code> — render "keeps working for …" from it</td></tr>
+  </tbody></table>
+
+  <h2>D · API access (they collect)</h2>
+  <table>
+    <thead><tr><th>Element</th><th>Call</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>The grid</td><td><span class="m post">POST</span> <code>siem/clients/list</code> → <code>{ id, clientId, displayName, secretHint, scopes, status, lastUsedUtc, createdAtUtc, rotationOverlapEndsUtc }</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Status (Connected / Revoked)</td><td><code>SiemApiClientStatus</code> = Active | Revoked</td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Create — step 1 Name + Allowed IP ranges</td><td><span class="m post">POST</span> <code>siem/clients</code> — <code>{ displayName, allowedCidrs }</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Create — step 2 Save the secret</td><td>response <code>{ client{…}, clientSecret (once), tokenUrl, eventsUrl }</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Create — step 3 Verify (paste secret)</td><td><span class="m post">POST</span> <code>siem/clients/{clientId}/verify</code> → <code>{ success, error, eventsAvailable, tokenIssued }</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Revoke</td><td><span class="m post">POST</span> <code>siem/clients/{clientId}/revoke</code></td><td><span class="pill have">have</span></td></tr>
+      <tr><td>OAuth token (collector)</td><td><span class="m post">POST</span> <code>oauth/token</code> — <code>client_credentials</code>, RFC-6749</td><td><span class="pill have">have</span></td></tr>
+      <tr><td>Events feed (collector)</td><td><span class="m get">GET</span> <code>siem/events?from=&cursor=&limit=&format=</code> → <code>{ events, next_cursor, has_more, schema_version }</code> (30s lag)</td><td><span class="pill have">have</span></td></tr>
+      <tr><td><b>Allowed IP ranges</b> enforcement</td><td><code>allowedCidrs</code> stored but <b>not enforced</b></td><td><span class="pill partial">partial</span> (Build #5)</td></tr>
+      <tr><td><b>Last used</b> column</td><td>field exists but never stamped → always blank</td><td><span class="pill partial">partial</span> (Build #6)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What's left to build</h2>
+  <p class="lede">Everything above marked "have" is ready for the UI today. These close the gaps:</p>
+  <ol class="build">
+    <li><b>Sent-24h + queue on the list row.</b> Add <code>sentLast24h</code> and <code>backlog</code> to <code>siem/connectors/list</code> rows so the grid shows "Sent 24h" and derives the queue text without an N+1 to <code>/health</code>. <span class="tag small">small API</span></li>
+    <li><b>"Coming soon" vendors.</b> Add <code>isImplemented:false</code> descriptors for Elastic / Sumo Logic / Google SecOps to <code>siem/providers</code> so the greyed cards render. <span class="tag small">small API</span></li>
+    <li><b>Filter contract.</b> Define the event-type catalog (Blocked transfers / Policy violations / Approval decisions / Discovery findings / Agent health → <code>EventType</code> values) and the severity enum, and either expose a filter-schema endpoint or lock the <code>filterJson</code> shape above. Needed before the UI can wire step 3. <span class="tag dec">needs a design call</span></li>
+    <li><b>"Category summary" sensitive mode.</b> ✅ Done — <code>sensitivePolicy = "summary"</code> emits category counts (<code>{"PII":2}</code>), never a value; constraint widened (V0052). <span class="tag small">shipped</span></li>
+    <li><b>Allowed-IP enforcement.</b> Enforce <code>allowedCidrs</code> at <code>oauth/token</code> / the events auth — today the field is stored but ignored (a security gap, not just UI). <span class="tag sec">security</span></li>
+    <li><b>Last-used stamping.</b> Record <code>lastUsedUtc</code> on each successful <code>siem/events</code> call so the column isn't permanently blank. <span class="tag small">small API</span></li>
+  </ol>
+
+  <div class="foot">Defensely · SIEM connectors · backend in <code>SFM.DLP.SiemIntegration</code> + <code>SiemConnectorsController</code> / <code>SiemAdminController</code> / <code>SiemOAuthController</code> / <code>SiemEventsController</code>. Verified against the code.</div>
+</div>

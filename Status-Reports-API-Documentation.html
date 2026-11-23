@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFM DLP — Status Reports API</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { background:#1b1b1b; padding:14px 28px; display:flex; gap:12px; align-items:baseline; border-bottom:1px solid #000; }
+        .topbar h1 { color:#fff; font-size:18px; font-weight:700; margin:0; }
+        .topbar span { color:#89bf04; font-size:13px; }
+        #swagger { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SFM DLP</h1>
+        <span>Status Reports — Daily / Weekly / Monthly Status Report (Summary category): UI integration guide</span>
+    </div>
+    <div id="swagger"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+    const spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "SFM DLP — Status Reports",
+            "version": "1.0.0",
+            "description": "The three **Summary** reports of the Reports screen — `daily`, `weekly`, `monthly` — each covering one whole period compared with the period immediately before it. One `POST reports/{reportId}/status` call returns everything both tabs of the design render: the **Table View** (every metric with this period / last period / change) and the **Chart View**'s typed blocks (daily bars, channels, top policies, risk movers, shadow AI tools, incident severities, exposed devices).\n\nEvery response uses the standard envelope `{ success, message, data, errors }`.\n\n### The period model, in one paragraph\n\nA status report never covers an arbitrary range. It covers one whole period — a **UTC day**, a **Monday-to-Sunday week**, or a **calendar month** — and compares it with the one before. With **no dates** in the body, the report covers the last *complete* period (yesterday; the week that ended last Sunday; last month), because comparing a half-elapsed period against a whole one reads as a drop that is not there. A body **with dates** gets the period *containing* `toDate` instead — that is what \"show me the week of the 3rd\" means — complete or not. The response always echoes the resolved windows (`fromDate`/`toDate`, `previousFromDate`/`previousToDate`) and the column labels to print (`currentLabel`/`previousLabel`, e.g. *This week* / *Last week*).\n\n### Who calls what\n\n| Route | When |\n|---|---|\n| `GET /reports/catalog` | Once — the three reports appear first, under category **Summary** |\n| `POST /reports/{id}/status` | Opening the report, switching tabs costs nothing more — one payload serves both |\n| `POST /reports/{id}/grid` | Only if you want the Table View server-paged/sorted/filtered (the `section` chip) |\n| `POST /reports/{id}/summary` | Only if you want the 4 KPI tiles without the full payload |\n| `POST /reports/export/{id}/grid/xlsx` or `full/xlsx` | Excel of the Table View |\n\nThe catalog marks these three reports with **`layout: \"status\"`** (every other report says `layout: \"grid\"`). That flag — never the category name or a hardcoded id list — is how the client decides to render the status screen. They also say `hasChart: true`: `POST /reports/{id}/chart` serves the one status block the generic chart shapes can carry, the daily events/blocked **trend** — which is also what the Excel `full` export's chart sheet holds. The screen's Chart View still renders the status payload.\n\n### What counts as a policy hit\n\nThe crunch stamps a resolved `PolicyName` on **every** row. A hit is a row the policy engine actually **governed**: `PolicyAction` is a real verdict (Allow / Warn / Block), not `UnCovered` — the crunch's no-policy marker. The Overview tile and the *Policy enforcement* section both use this definition, so the tile equals the sum of the per-policy hits. (Not `IsAppliedToPolicy` — that flag marks logs an admin turned into policy rules via Log Review.) **On a tenant with a catch-all policy, every event is covered, so Policy hits legitimately equal Data events there.**\n\n### Period labels\n\n`currentLabel` / `previousLabel` are the column headers to print. The **latest complete** period reads naturally (\"This week\" / \"Last week\"); any **past** period is named by its dates — weekly \"Sep 14 – 20\" / \"Sep 7 – 13\", daily \"Sep 16\", monthly \"September 2026\" — with the year appended when it is not the current one or the week straddles two years (\"Dec 29 – Jan 4, 2026\"). Print them as-is; no client-side date math needed.\n\n### Shadow AI name hygiene\n\nFindings are folded into one entry per tool before anything is counted: names that are blank or purely numeric (an id that landed in the name field) are dropped as agent noise, and name variants such as \"DeepSeek\" / \"DeepSeek AI\" merge under one canonical key (case-insensitive, whitespace collapsed, trailing \" AI\" word removed — \"Otter.ai\" stays itself). For a merged tool, **events and sensitive events sum** across variants (occurrences are additive); **users take the largest variant's count** (the same people appear under either spelling, so summing would double-count); the display name and agent verdict come from the variant with the most events; a standing approval on any variant decides the tool.\n\n### Reading a metric row\n\nEvery metric carries both raw numbers and pre-formatted strings, so the UI renders without re-deriving anything:\n\n- `display` / `previousDisplay` — \"41,861\", \"6.7%\", \"3.2 h\", or \"—\" when there is no value.\n- `changeDisplay` — what the Change column prints: `+7.0%` (large counts), `+4` (small counts, previous < 50), `-1.2 pts` (percent metrics), `-0.7 h` (hour metrics), `0` (no movement), `—` (no previous period).\n- `direction` — `up` | `down` | `flat`, for the arrow.\n- `tone` — `good` | `bad` | `neutral`, for the colour: *up* is bad for policy hits or high-risk users, good for encrypted share, neutral for raw volume. The server decides so every screen colours the same way.\n- raw `current` / `previous` / `delta` / `deltaPercent` for sorting and custom rendering.\n\nA channel, policy, department or shadow-AI tool absent from one period shows **0** for that period, never \"—\" — absence from a period-scoped dataset genuinely means zero events then, and a row that went quiet keeps its place so the drop is visible. \"—\" is reserved for snapshot sections, where no previous figure *exists*.\n\n### Monthly extras\n\nThe monthly report carries two blocks the other two periods do not:\n\n- **`trends`** — six series (`dataEvents`, `blockedEvents`, `blockRate`, `policyHits`, `incidentsOpened`, `highRiskUsers`), each with six points: the reported month and the five before it, oldest first, zero-filled.\n- **`departments`** — activity rolled up by the user directory's department (events, blocked, block rate, incidents, previous events, average peak risk and its change vs the previous month). Rows whose user has no department — or no user at all — land in **Unassigned**. The Table View gains a *By department · events* section, and the `section` filter accepts `departments` (on the monthly report only).\n\nOn `daily` and `weekly` both arrays are empty.\n\n### Snapshot sections\n\nFile inventory and disk encryption come from discovery data, which is a snapshot of the disks *now* — nothing records what it looked like a period ago. Those sections carry `snapshot: true`, a human-readable `note`, and `previous: null` on every metric. Render the Previous/Change columns as \"—\" (the `previousDisplay`/`changeDisplay` strings already say so).\n\n### What the design shows that this API does not serve\n\nFollowing the Reports module's omit-rather-than-invent rule (see `REPORTS-IMPLEMENTATION-PLAN.md` §10):\n\n| Design element | Why it is absent |\n|---|---|\n| Web requests blocked / web filtering categories | No web-filtering event data exists in the platform |\n| Tenant violations / tenant restrictions by app | No tenant-restriction event data exists |\n| Mean time to close | Incidents carry no close timestamp; `Still open (of opened)` is served instead, and the incidents section's `note` says so |\n| Fixed channel taxonomy (Upload, Copy/Paste, Prompting…) | Channels are the tenant's own `TransferTypeName` master data, served as stored |\n| Week-over-week change on inventory / encryption | Discovery is a snapshot (see above) |\n\n### Tenancy and auth\n\nBearer JWT (the normal console token) on every route. The `ClientGUID` header (or claim) selects the tenant's database before any controller runs — no request field can widen the scope, and nothing in these bodies names a tenant."
+        },
+        "servers": [
+            { "url": "https://localhost:5001", "description": "Local dev" },
+            { "url": "https://qa-email.azure-api.net/qadlp", "description": "QA DLP (APIM)" },
+            { "url": "https://sfm-prod.azure-api.net/dlp", "description": "Production (APIM)" }
+        ],
+        "tags": [
+            { "name": "Status", "description": "The composite payload — both tabs in one read." },
+            { "name": "Table View", "description": "The generic grid/summary endpoints, as they behave for these three reports." },
+            { "name": "Export", "description": "Excel of the Table View." }
+        ],
+        "paths": {
+            "/reports/{reportId}/status": {
+                "post": {
+                    "tags": ["Status"],
+                    "summary": "The whole status report: sections, metrics, and the Chart View blocks",
+                    "description": "Resolves the period from the body (or defaults to the last complete one), runs every section's queries over the current **and** previous window, and returns one payload.\n\n- `sections[]` is the Table View in display order, Overview first: `overview`, `channels`, `blockedChannels`, `policies`, `risk`, `shadowAi`, `incidents`, `overrides` (then `departments` on monthly), `inventory`, `encryption`.\n- The typed blocks (`days`, `channels`, `topPolicies`, `riskIncreases`, `shadowAiTools`, `incidentSeverities`, `unencryptedDevices`, and on monthly `trends` + `departments`) are for the Chart View's widgets.\n- `shadowAiTools` lists every tool seen in **either** period, like the channel rows: a tool that went quiet keeps its row with `events: 0` and its `previousEvents`; the Overview tile counts this period's detections only.\n- `days` is zero-filled over the whole period (1 entry for daily, 7 for weekly, 28–31 for monthly), so bars can be drawn without gap handling.\n- `topPolicies` is the top **5** by hits; `riskIncreases` the top **5** score increases among users scored in *both* periods; `unencryptedDevices` the top **10** by sensitive files at risk.\n\n`filters` and `search` are accepted but only shape the *grid*; the status payload itself is always the full report.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "$ref": "#/components/parameters/StatusReportId" },
+                        { "$ref": "#/components/parameters/ClientGuid" }
+                    ],
+                    "requestBody": {
+                        "required": false,
+                        "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/StatusReportRequest" },
+                            "examples": {
+                                "lastCompletePeriod": { "summary": "Default — the last complete period", "value": {} },
+                                "aSpecificWeek": { "summary": "The week containing Sep 16 (weekly report)", "value": { "toDate": "2026-09-16" } }
+                            }
+                        } }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "The status report. Example trimmed to representative entries per section — a real payload carries every channel, band, severity and section the tenant has.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/StatusReportEnvelope" },
+                                "example": {
+                                    "success": true,
+                                    "message": null,
+                                    "errors": null,
+                                    "data": {
+                                        "reportId": "weekly",
+                                        "period": "weekly",
+                                        "generatedAt": "2026-10-12T06:00:00Z",
+                                        "fromDate": "2026-10-05T00:00:00Z",
+                                        "toDate": "2026-10-12T00:00:00Z",
+                                        "previousFromDate": "2026-09-28T00:00:00Z",
+                                        "previousToDate": "2026-10-05T00:00:00Z",
+                                        "currentLabel": "This week",
+                                        "previousLabel": "Last week",
+                                        "sections": [
+                                            {
+                                                "key": "overview", "title": "Overview", "snapshot": false, "note": null,
+                                                "metrics": [
+                                                    { "key": "dataEvents", "label": "Data events", "unit": "count", "current": 41861, "previous": 39135, "delta": 2726, "deltaPercent": 7.0, "display": "41,861", "previousDisplay": "39,135", "changeDisplay": "+7%", "direction": "up", "tone": "neutral" },
+                                                    { "key": "blockedEvents", "label": "Blocked events", "unit": "count", "current": 2803, "previous": 3083, "delta": -280, "deltaPercent": -9.1, "display": "2,803", "previousDisplay": "3,083", "changeDisplay": "-9.1%", "direction": "down", "tone": "neutral" },
+                                                    { "key": "blockRate", "label": "Block rate", "unit": "percent", "current": 6.7, "previous": 7.9, "delta": -1.2, "deltaPercent": -15.2, "display": "6.7%", "previousDisplay": "7.9%", "changeDisplay": "-1.2 pts", "direction": "down", "tone": "neutral" },
+                                                    { "key": "highRiskUsers", "label": "High-risk users", "unit": "count", "current": 23, "previous": 19, "delta": 4, "deltaPercent": 21.1, "display": "23", "previousDisplay": "19", "changeDisplay": "+4", "direction": "up", "tone": "bad" },
+                                                    { "key": "unencryptedDevices", "label": "Unencrypted devices", "unit": "count", "current": 6, "previous": null, "delta": null, "deltaPercent": null, "display": "6", "previousDisplay": "—", "changeDisplay": "—", "direction": "flat", "tone": "neutral" }
+                                                ]
+                                            },
+                                            {
+                                                "key": "incidents", "title": "Incidents & investigations", "snapshot": false,
+                                                "note": "Closed counts are the period's incidents closed by now; incidents carry no close timestamp, so mean time to close cannot be computed.",
+                                                "metrics": [
+                                                    { "key": "opened:Critical", "label": "Critical opened", "unit": "count", "current": 2, "previous": 3, "delta": -1, "deltaPercent": -33.3, "display": "2", "previousDisplay": "3", "changeDisplay": "-1", "direction": "down", "tone": "good" }
+                                                ]
+                                            },
+                                            {
+                                                "key": "encryption", "title": "Disk encryption status", "snapshot": true,
+                                                "note": "Encryption posture is a snapshot of the devices now; no previous-period figures exist.",
+                                                "metrics": [
+                                                    { "key": "encryptedShare", "label": "Encrypted share", "unit": "percent", "current": 99.5, "previous": null, "delta": null, "deltaPercent": null, "display": "99.5%", "previousDisplay": "—", "changeDisplay": "—", "direction": "flat", "tone": "neutral" }
+                                                ]
+                                            }
+                                        ],
+                                        "days": [
+                                            { "day": "2026-10-05T00:00:00Z", "events": 7363, "blocked": 537 },
+                                            { "day": "2026-10-06T00:00:00Z", "events": 6914, "blocked": 488 }
+                                        ],
+                                        "channels": [
+                                            { "channel": "Upload", "events": 18419, "blocked": 1284, "blockRate": 7.0, "previousEvents": 17102, "previousBlocked": 1449 },
+                                            { "channel": "Clipboard", "events": 9628, "blocked": 512, "blockRate": 5.3, "previousEvents": 9009, "previousBlocked": 555 }
+                                        ],
+                                        "topPolicies": [
+                                            { "policy": "PII to personal cloud", "hits": 1120, "allowed": 410, "warned": 290, "blocked": 420, "overridden": 36, "previousHits": 1042 }
+                                        ],
+                                        "riskIncreases": [
+                                            { "userId": 41, "user": "Maya Chen", "department": "Finance", "previousScore": 54, "score": 81, "increase": 27, "band": "Critical" }
+                                        ],
+                                        "shadowAiTools": [
+                                            { "tool": "Perplexity", "users": 128, "events": 940, "sensitiveEvents": 61, "previousEvents": 912, "status": "Pending", "firstSeen": "2026-08-02T04:11:00Z", "isNew": false },
+                                            { "tool": "ChatPDF", "users": 41, "events": 312, "sensitiveEvents": 12, "previousEvents": 0, "status": "Pending", "firstSeen": "2026-10-06T09:30:00Z", "isNew": true },
+                                            { "tool": "Gamma", "users": 0, "events": 0, "sensitiveEvents": 0, "previousEvents": 104, "status": "Pending", "firstSeen": "2026-09-12T07:00:00Z", "isNew": false }
+                                        ],
+                                        "incidentSeverities": [
+                                            { "severity": "Critical", "opened": 2, "closed": 1, "previousOpened": 3 },
+                                            { "severity": "High", "opened": 7, "closed": 5, "previousOpened": 6 }
+                                        ],
+                                        "unencryptedDevices": [
+                                            { "endpointId": 142, "endpoint": "FIN-LT-0142", "user": "Maya Chen", "posture": "Unencrypted", "sensitiveAtRisk": 212 }
+                                        ],
+                                        "trends": [],
+                                        "departments": []
+                                    }
+                                }
+                            } }
+                        },
+                        "400": {
+                            "description": "A validation problem — every issue listed at once — **or** a `reportId` that exists but is not a status report (e.g. `upload`).",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "examples": {
+                                    "notAStatusReport": { "value": { "success": false, "message": "The report request is not valid.", "data": null, "errors": ["Report 'upload' is not a status report. Status reports: daily, weekly, monthly."] } },
+                                    "badDates": { "value": { "success": false, "message": "The report request is not valid.", "data": null, "errors": ["fromDate must be before toDate."] } }
+                                }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid bearer token." },
+                        "404": {
+                            "description": "No report with that id at all.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/ApiResponseString" },
+                                "example": { "success": false, "message": "No report 'yearly'.", "data": null, "errors": null }
+                            } }
+                        },
+                        "499": { "description": "The caller cancelled the request (closed the tab) before the build finished. No body." },
+                        "500": {
+                            "description": "Logged and answered in the envelope.",
+                            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } }
+                        }
+                    }
+                }
+            },
+            "/reports/{reportId}/grid": {
+                "post": {
+                    "tags": ["Table View"],
+                    "summary": "The Table View as a server-paged grid",
+                    "description": "The flattened sections — one row per metric, keyed `section`, `metric`, `current`, `previous`, `change` (the display strings), with the raw values underneath (`currentValue`, `previousValue`, `delta`, `deltaPercent`) plus `direction`, `tone`, `sectionKey`, `metricKey`, `snapshot` and `order`.\n\n- Default sort is `order` ascending — the design's section order. `current`/`previous`/`change` sort on the raw values, never the strings.\n- The one filter chip is `section` (static): `overview`, `channels`, `blockedChannels`, `policies`, `risk`, `shadowAi`, `incidents`, `overrides`, `inventory`, `encryption`, plus `departments` on the monthly report — labels are accepted too and canonicalised.\n- `search` contains-matches the metric and section labels.\n\nA full report is ~45–60 rows, so `pageSize: 200` fetches it in one page if you prefer client-side paging.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "$ref": "#/components/parameters/StatusReportId" },
+                        { "$ref": "#/components/parameters/ClientGuid" }
+                    ],
+                    "requestBody": {
+                        "required": false,
+                        "content": { "application/json": {
+                            "schema": { "$ref": "#/components/schemas/StatusReportRequest" },
+                            "example": { "filters": { "section": "overview" }, "pageSize": 200 }
+                        } }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "One page of metric rows. `fromDate`/`toDate` echo the resolved period, not the body's dates.",
+                            "content": { "application/json": {
+                                "schema": { "$ref": "#/components/schemas/GridEnvelope" },
+                                "example": {
+                                    "success": true, "message": null, "errors": null,
+                                    "data": {
+                                        "reportId": "weekly", "view": "default",
+                                        "fromDate": "2026-10-05T00:00:00Z", "toDate": "2026-10-12T00:00:00Z",
+                                        "columns": [
+                                            { "key": "section", "label": "Section", "kind": "text", "align": "left", "flex": 1.1, "subKey": null, "sortKey": "section" },
+                                            { "key": "metric", "label": "Metric", "kind": "text", "align": "left", "flex": 1.6, "subKey": null, "sortKey": "metric" },
+                                            { "key": "current", "label": "This week", "kind": "text", "align": "right", "flex": 0.8, "subKey": null, "sortKey": "current" },
+                                            { "key": "previous", "label": "Last week", "kind": "text", "align": "right", "flex": 0.8, "subKey": null, "sortKey": "previous" },
+                                            { "key": "change", "label": "Change", "kind": "tag", "align": "right", "flex": 0.8, "subKey": null, "sortKey": "change" }
+                                        ],
+                                        "rows": [
+                                            { "order": 2, "sectionKey": "overview", "section": "Overview", "metricKey": "dataEvents", "metric": "Data events", "unit": "count", "current": "41,861", "previous": "39,135", "change": "+7%", "currentValue": 41861, "previousValue": 39135, "delta": 2726, "deltaPercent": 7.0, "direction": "up", "tone": "neutral", "snapshot": false }
+                                        ],
+                                        "totalCount": 9, "page": 1, "pageSize": 200, "totalPages": 1,
+                                        "appliedSort": { "sortBy": "order", "sortDescending": false },
+                                        "appliedFilters": [ { "key": "section", "label": "Section", "values": ["overview"] } ]
+                                    }
+                                }
+                            } }
+                        },
+                        "400": { "description": "Unknown filter key / value, bad sort key, bad paging — listed at once.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } },
+                        "401": { "description": "Missing or invalid bearer token." },
+                        "404": { "description": "No report with that id.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiResponseString" } } } }
+                    }
+                }
+            },
+            "/reports/{reportId}/summary": {
+                "post": {
+                    "tags": ["Table View"],
+                    "summary": "The 4 KPI tiles",
+                    "description": "`dataEvents`, `blockedEvents`, `policyHits`, `openIncidents` — the current period's values, taken from the same build as the status payload. For the full tile strip with previous values and change, use the status endpoint's `overview` section instead.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "$ref": "#/components/parameters/StatusReportId" },
+                        { "$ref": "#/components/parameters/ClientGuid" }
+                    ],
+                    "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusReportRequest" }, "example": {} } } },
+                    "responses": {
+                        "200": {
+                            "description": "The tiles.",
+                            "content": { "application/json": {
+                                "example": {
+                                    "success": true, "message": null, "errors": null,
+                                    "data": {
+                                        "reportId": "weekly", "view": "default",
+                                        "fromDate": "2026-10-05T00:00:00Z", "toDate": "2026-10-12T00:00:00Z",
+                                        "kpis": [
+                                            { "key": "dataEvents", "label": "Data events", "value": 41861, "display": "41,861", "tone": "default" },
+                                            { "key": "blockedEvents", "label": "Blocked events", "value": 2803, "display": "2,803", "tone": "danger" },
+                                            { "key": "policyHits", "label": "Policy hits", "value": 3906, "display": "3,906", "tone": "warning" },
+                                            { "key": "openIncidents", "label": "Open incidents", "value": 9, "display": "9", "tone": "danger" }
+                                        ],
+                                        "appliedFilters": []
+                                    }
+                                }
+                            } }
+                        },
+                        "401": { "description": "Missing or invalid bearer token." },
+                        "404": { "description": "No report with that id." }
+                    }
+                }
+            },
+            "/reports/export/{reportId}/grid/xlsx": {
+                "post": {
+                    "tags": ["Export"],
+                    "summary": "Excel of the Table View",
+                    "description": "Same body as the grid; `page`/`pageSize` are ignored — the file holds every row the filters match. The sheet is an Excel **Table** with AutoFilter, frozen header, typed cells and tag colouring, exactly as the other reports export. `full/xlsx` adds the Summary sheet (the 4 KPIs) and the chart sheet (the period's daily events/blocked trend); `chart/xlsx` serves those two sheets alone.\n\nResponse headers: `X-Report-Row-Count`, `X-Report-Total-Rows`, `X-Report-Truncated`.",
+                    "security": [ { "bearerAuth": [] } ],
+                    "parameters": [
+                        { "$ref": "#/components/parameters/StatusReportId" },
+                        { "$ref": "#/components/parameters/ClientGuid" }
+                    ],
+                    "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusReportRequest" } } } },
+                    "responses": {
+                        "200": { "description": "The .xlsx file.", "content": { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { "schema": { "type": "string", "format": "binary" } } } },
+                        "400": { "description": "Validation problem, or the chart scope on a report without a generic chart." },
+                        "401": { "description": "Missing or invalid bearer token." },
+                        "404": { "description": "No report with that id." }
+                    }
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+                    "description": "The normal SFM console JWT, on every route here." }
+            },
+            "parameters": {
+                "StatusReportId": {
+                    "name": "reportId", "in": "path", "required": true,
+                    "schema": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+                    "description": "Which Summary report. `daily` = a UTC day vs the day before; `weekly` = a Monday–Sunday week vs the week before; `monthly` = a calendar month vs the month before."
+                },
+                "ClientGuid": {
+                    "name": "ClientGUID", "in": "header", "required": true,
+                    "schema": { "type": "string", "format": "uuid" },
+                    "description": "Tenant selector, as on every DLP endpoint — resolves the tenant's database before the controller runs."
+                }
+            },
+            "schemas": {
+                "StatusReportRequest": {
+                    "type": "object",
+                    "description": "The standard report body. For status reports the dates *anchor the period*; everything else only shapes the grid.",
+                    "properties": {
+                        "fromDate": { "type": "string", "format": "date", "nullable": true, "description": "Optional. Validated (must precede toDate, range ≤ 366 days) but the period is derived from toDate." },
+                        "toDate": { "type": "string", "format": "date", "nullable": true, "description": "Optional. Present → the report covers the period **containing** this date. Absent (both dates) → the last complete period." },
+                        "filters": { "type": "object", "nullable": true, "description": "Grid only. One key: `section`, value(s) from the section keys (or their labels); the monthly report also accepts `departments`.", "example": { "section": "overview" } },
+                        "search": { "type": "string", "nullable": true, "description": "Grid only. Contains-match on metric and section labels." },
+                        "sortBy": { "type": "string", "nullable": true, "description": "Grid only: `order` (default, ascending) | `section` | `metric` | `current` | `previous` | `change`." },
+                        "sortDescending": { "type": "boolean", "nullable": true },
+                        "page": { "type": "integer", "default": 1, "description": "Grid only." },
+                        "pageSize": { "type": "integer", "default": 25, "maximum": 200, "description": "Grid only. 200 fetches a whole report in one page." }
+                    }
+                },
+                "StatusReportEnvelope": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": true },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "$ref": "#/components/schemas/StatusReport" },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "StatusReport": {
+                    "type": "object",
+                    "properties": {
+                        "reportId": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+                        "period": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+                        "generatedAt": { "type": "string", "format": "date-time" },
+                        "fromDate": { "type": "string", "format": "date-time", "description": "Start of the reported period (UTC)." },
+                        "toDate": { "type": "string", "format": "date-time", "description": "**Exclusive** end of the reported period." },
+                        "previousFromDate": { "type": "string", "format": "date-time" },
+                        "previousToDate": { "type": "string", "format": "date-time" },
+                        "currentLabel": { "type": "string", "example": "This week", "description": "Print as the current column's header. The latest complete period is relative (\"This week\"); a past period is dated (\"Sep 14 – 20\", \"Sep 16\", \"September 2026\")." },
+                        "previousLabel": { "type": "string", "example": "Last week" },
+                        "sections": { "type": "array", "items": { "$ref": "#/components/schemas/StatusSection" }, "description": "The Table View, in display order; Overview first." },
+                        "days": { "type": "array", "items": { "$ref": "#/components/schemas/StatusDay" }, "description": "Zero-filled over the whole period." },
+                        "channels": { "type": "array", "items": { "$ref": "#/components/schemas/StatusChannel" }, "description": "Ordered by events desc. A channel active only last period still appears, with zero current events." },
+                        "topPolicies": { "type": "array", "items": { "$ref": "#/components/schemas/StatusPolicy" }, "description": "Top 5 by hits in the period." },
+                        "riskIncreases": { "type": "array", "items": { "$ref": "#/components/schemas/StatusRiskMover" }, "description": "Top 5 increases among users scored in both periods. A user new to scoring is a band count, not a mover." },
+                        "shadowAiTools": { "type": "array", "items": { "$ref": "#/components/schemas/StatusShadowAiTool" }, "description": "Every tool a scan in the period found, ordered by events desc." },
+                        "incidentSeverities": { "type": "array", "items": { "$ref": "#/components/schemas/StatusIncidentSeverity" }, "description": "Critical → Low, then any unrated bucket." },
+                        "unencryptedDevices": { "type": "array", "items": { "$ref": "#/components/schemas/StatusUnencryptedDevice" }, "description": "Top 10 by sensitive files at risk. Snapshot." },
+                        "trends": { "type": "array", "items": { "$ref": "#/components/schemas/StatusTrend" }, "description": "Monthly report only; empty on daily/weekly. Six series × six months, oldest first." },
+                        "departments": { "type": "array", "items": { "$ref": "#/components/schemas/StatusDepartment" }, "description": "Monthly report only; empty on daily/weekly. Ordered by events desc." }
+                    }
+                },
+                "StatusSection": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string", "enum": ["overview", "channels", "blockedChannels", "policies", "risk", "shadowAi", "incidents", "overrides", "inventory", "encryption"] },
+                        "title": { "type": "string", "example": "Activity by channel · events" },
+                        "snapshot": { "type": "boolean", "description": "True → the data is a now-snapshot; every metric's previous is null. Render Previous/Change as \"—\"." },
+                        "note": { "type": "string", "nullable": true, "description": "Why a figure the design shows is missing, when one is. Show it as the section's footnote." },
+                        "metrics": { "type": "array", "items": { "$ref": "#/components/schemas/StatusMetric" } }
+                    }
+                },
+                "StatusMetric": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string", "example": "dataEvents", "description": "Stable within its section (`channel:Upload`, `band:High`, `opened:Critical`…)." },
+                        "label": { "type": "string", "example": "Data events" },
+                        "unit": { "type": "string", "enum": ["count", "percent", "hours", "bytes"] },
+                        "current": { "type": "number", "nullable": true },
+                        "previous": { "type": "number", "nullable": true, "description": "Null on snapshot sections." },
+                        "delta": { "type": "number", "nullable": true, "description": "current − previous." },
+                        "deltaPercent": { "type": "number", "nullable": true, "description": "Null when previous is null or zero." },
+                        "display": { "type": "string", "example": "41,861" },
+                        "previousDisplay": { "type": "string", "example": "39,135" },
+                        "changeDisplay": { "type": "string", "example": "+7%", "description": "`+7.0%` | `+4` | `-1.2 pts` | `-0.7 h` | `0` | `—`." },
+                        "direction": { "type": "string", "enum": ["up", "down", "flat"] },
+                        "tone": { "type": "string", "enum": ["good", "bad", "neutral"], "description": "Whether the movement helps or hurts posture — colour from this, not from direction." }
+                    }
+                },
+                "StatusDay": {
+                    "type": "object",
+                    "properties": {
+                        "day": { "type": "string", "format": "date-time" },
+                        "events": { "type": "integer" },
+                        "blocked": { "type": "integer" }
+                    }
+                },
+                "StatusChannel": {
+                    "type": "object",
+                    "properties": {
+                        "channel": { "type": "string", "example": "Upload", "description": "The tenant's TransferTypeName as stored; \"Unspecified\" for rows without one. Not mapped to a fixed taxonomy." },
+                        "events": { "type": "integer" },
+                        "blocked": { "type": "integer" },
+                        "blockRate": { "type": "number", "example": 7.0, "description": "Blocked as % of events, one decimal." },
+                        "previousEvents": { "type": "integer" },
+                        "previousBlocked": { "type": "integer" }
+                    }
+                },
+                "StatusPolicy": {
+                    "type": "object",
+                    "properties": {
+                        "policy": { "type": "string" },
+                        "hits": { "type": "integer" },
+                        "allowed": { "type": "integer", "description": "hits − blocked − warned (uncovered rows included)." },
+                        "warned": { "type": "integer" },
+                        "blocked": { "type": "integer" },
+                        "overridden": { "type": "integer" },
+                        "previousHits": { "type": "integer" }
+                    }
+                },
+                "StatusRiskMover": {
+                    "type": "object",
+                    "properties": {
+                        "userId": { "type": "integer" },
+                        "user": { "type": "string" },
+                        "department": { "type": "string", "nullable": true },
+                        "previousScore": { "type": "number", "description": "Peak score in the previous period, rounded." },
+                        "score": { "type": "number", "description": "Peak score in this period." },
+                        "increase": { "type": "number" },
+                        "band": { "type": "string", "enum": ["Critical", "High", "Medium", "Low", "Safe"] }
+                    }
+                },
+                "StatusShadowAiTool": {
+                    "type": "object",
+                    "description": "One row per tool seen in either period, after name hygiene: noise names (blank / purely numeric) dropped, variants (\"DeepSeek\" / \"DeepSeek AI\") merged. A tool detected only last period has users/events/sensitiveEvents of 0; one detected only this period has previousEvents 0.",
+                    "properties": {
+                        "tool": { "type": "string" },
+                        "users": { "type": "integer", "description": "This period." },
+                        "events": { "type": "integer", "description": "This period; 0 when the tool was seen only last period." },
+                        "sensitiveEvents": { "type": "integer" },
+                        "previousEvents": { "type": "integer", "description": "Last period; 0 when the tool was not seen then." },
+                        "status": { "type": "string", "enum": ["Whitelisted", "Pending", "Blocked"], "description": "The tenant's standing decision laid over the agent's verdict — same rule as the Approvals screen." },
+                        "firstSeen": { "type": "string", "format": "date-time", "nullable": true },
+                        "isNew": { "type": "boolean", "description": "First detected inside this period — the design's \"New\" badge." }
+                    }
+                },
+                "StatusIncidentSeverity": {
+                    "type": "object",
+                    "properties": {
+                        "severity": { "type": "string", "example": "Critical" },
+                        "opened": { "type": "integer", "description": "Investigations opened in the period." },
+                        "closed": { "type": "integer", "description": "Of those, how many are closed **now** — there is no close timestamp." },
+                        "previousOpened": { "type": "integer" }
+                    }
+                },
+                "StatusTrend": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string", "enum": ["dataEvents", "blockedEvents", "blockRate", "policyHits", "incidentsOpened", "highRiskUsers"] },
+                        "label": { "type": "string", "example": "Data events" },
+                        "unit": { "type": "string", "enum": ["count", "percent"] },
+                        "points": { "type": "array", "items": { "$ref": "#/components/schemas/StatusTrendPoint" }, "description": "Six entries, oldest month first, zero-filled." }
+                    }
+                },
+                "StatusTrendPoint": {
+                    "type": "object",
+                    "properties": {
+                        "month": { "type": "string", "format": "date-time", "description": "First day of the month, UTC midnight." },
+                        "value": { "type": "number" },
+                        "display": { "type": "string", "example": "41,861" }
+                    }
+                },
+                "StatusDepartment": {
+                    "type": "object",
+                    "properties": {
+                        "department": { "type": "string", "example": "Finance", "description": "DepartmentName from the user directory; \"Unassigned\" when the user has none or the row carries no user." },
+                        "events": { "type": "integer" },
+                        "blocked": { "type": "integer" },
+                        "blockRate": { "type": "number", "example": 6.2, "description": "Blocked as % of events, one decimal." },
+                        "incidents": { "type": "integer", "description": "Investigations opened in the period on the department's users." },
+                        "previousEvents": { "type": "integer" },
+                        "avgRisk": { "type": "number", "nullable": true, "description": "Average peak risk score of the department's scored users; null when none were scored this period." },
+                        "riskChange": { "type": "number", "nullable": true, "description": "avgRisk now minus last period's; null unless both periods scored someone." }
+                    }
+                },
+                "StatusUnencryptedDevice": {
+                    "type": "object",
+                    "properties": {
+                        "endpointId": { "type": "integer" },
+                        "endpoint": { "type": "string", "example": "FIN-LT-0142" },
+                        "user": { "type": "string", "nullable": true, "description": "The machine's primary user, when the directory knows one." },
+                        "posture": { "type": "string", "enum": ["Unencrypted", "Partial", "Suspended"], "description": "Anything short of fully encrypted counts — a half-encrypted laptop is exposed." },
+                        "sensitiveAtRisk": { "type": "integer", "description": "Sensitive files on the unprotected volumes." }
+                    }
+                },
+                "GridEnvelope": {
+                    "type": "object",
+                    "description": "The standard report grid envelope; see Reports-UI-Integration.md for the generic contract. Row keys for these reports are listed in the endpoint description.",
+                    "properties": {
+                        "success": { "type": "boolean" },
+                        "message": { "type": "string", "nullable": true },
+                        "data": { "type": "object" },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                },
+                "ApiResponseString": {
+                    "type": "object",
+                    "properties": {
+                        "success": { "type": "boolean", "example": false },
+                        "message": { "type": "string", "example": "The report request is not valid." },
+                        "data": { "type": "string", "nullable": true, "example": null },
+                        "errors": { "type": "array", "nullable": true, "items": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    };
+
+    window.onload = () => {
+        SwaggerUIBundle({
+            spec,
+            dom_id: '#swagger',
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: 'BaseLayout',
+            docExpansion: 'list',
+            defaultModelsExpandDepth: 1,
+            tryItOutEnabled: true
+        });
+    };
+    </script>
+</body>
+</html>

@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard v2 — QA Knowledge Transfer</title>
+<style>
+  :root{
+    --muted:#64748b; --line:#e2e8f0; --post:#2563eb; --code:#0b1020; --code-fg:#e6edf3;
+    --accent:#2563eb; --chip:#eef2ff; --chip-fg:#3730a3;
+    --new:#059669; --newbg:#ecfdf5; --bad:#b91c1c; --badbg:#fef2f2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;background:#f1f5f9;line-height:1.55}
+  header.top{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;padding:28px 40px}
+  header.top h1{margin:0 0 6px;font-size:24px}
+  header.top p{margin:0;color:#cbd5e1;font-size:14px}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  nav.side{width:260px;flex:0 0 260px;padding:24px 16px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:#fff}
+  nav.side h4{margin:18px 8px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  nav.side a{display:block;padding:6px 10px;border-radius:6px;color:#334155;text-decoration:none;font-size:13px}
+  nav.side a:hover{background:#f1f5f9}
+  main{flex:1;padding:24px 32px;min-width:0}
+  section{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:22px}
+  section h2{margin-top:0;font-size:18px}
+  h5.section{margin:20px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0}
+  .note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .ok{background:var(--newbg);border:1px solid #a7f3d0;border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .bad{background:var(--badbg);border:1px solid #fecaca;border-radius:8px;padding:11px 14px;font-size:13.5px;margin:12px 0}
+  .pill{display:inline-block;background:var(--chip);color:var(--chip-fg);padding:2px 8px;border-radius:20px;font-size:11px;margin:1px 2px}
+  .sev{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;color:#fff}
+  .sev.blocker{background:#b91c1c}.sev.med{background:#d97706}.sev.low{background:#64748b}
+  .sev.fixed{background:#059669}
+  .tag{font-size:12px;color:var(--muted)}
+  .chk{font-family:ui-monospace,monospace;color:var(--muted)}
+  @media(max-width:1000px){nav.side{display:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Dashboard v2 — QA Knowledge Transfer</h1>
+  <p>How the redesigned DLP dashboard gets its numbers, what must agree with what,
+  and which surprises are not defects · <code>/dashboard/v2/*</code></p>
+</header>
+
+<div class="wrap">
+<nav class="side">
+  <h4>Start here</h4>
+  <a href="#first">Read this first</a>
+  <a href="#populations">The three populations</a>
+  <a href="#calls">Which call paints what</a>
+  <a href="#window">Dates, time zone, badges</a>
+  <h4>Per screen</h4>
+  <a href="#overview">Overview tab</a>
+  <a href="#file">File Sharing tab</a>
+  <a href="#content">Content Sharing tab</a>
+  <a href="#web">Web Filtering tab</a>
+  <a href="#panel">The drill-down panel</a>
+  <h4>Testing</h4>
+  <a href="#invariants">Numbers that must agree</a>
+  <a href="#notbugs">Looks wrong, is correct</a>
+  <a href="#open">Defects &amp; retests</a>
+  <a href="#notserved">Not served — do not test</a>
+  <a href="#checklist">Round-one checklist</a>
+</nav>
+
+<main>
+
+<section id="first">
+  <h2>Read this first</h2>
+  <ol>
+    <li><strong>Four tabs, thirteen endpoints, one screen.</strong> Overview, File Sharing,
+    Content Sharing and Web Filtering are four views over the same event store. Every
+    endpoint is a <code>POST</code> under <code>/dashboard/v2</code> and every one of them
+    takes the <em>same</em> JSON body — a filter. There are no query strings and no path
+    parameters to vary.</li>
+
+    <li><strong>Nothing is cached and nothing is precomputed</strong> — except the
+    Organization Risk Score, which is the one number on the page this API does not
+    calculate. Every other figure is counted from the log tables at the moment you ask.
+    <b>The numbers move while you test.</b> A screenshot of the Overview taken at 14:02
+    and one of the File Sharing tab taken at 14:04 will not match, and that is not a bug.
+    When comparing two tabs, reload both within the same minute, or compare the raw API
+    responses rather than the screens.</li>
+
+    <li><strong>Three populations, three different tables.</strong> File, Content and Web
+    are not slices of one list — see the next section. Most "the numbers don't add up"
+    reports trace back to this.</li>
+
+    <li><strong>Every click opens the same endpoint.</strong> Tiles, bars, donut segments,
+    legend rows, table rows and heat-map cells all call <code>drill-down</code>. They differ
+    only by the filter the UI sends. So a panel showing the wrong events is almost always
+    the <em>wrong filter being sent</em>, not a wrong query — ask for the request body
+    before raising it.</li>
+
+    <li><strong>Always capture the request body.</strong> In DevTools → Network, click the
+    call → Payload. A dashboard defect without the request body cannot be triaged, because
+    the body is the entire question that was asked.</li>
+  </ol>
+</section>
+
+<section id="populations">
+  <h2>The three populations — the one concept to take away</h2>
+  <p>Everything on this screen belongs to exactly one of three groups, and they come from
+  different places in the database.</p>
+
+  <table>
+    <tr><th>Area</th><th>Channels in it</th><th>Read from</th><th>Carries</th></tr>
+    <tr>
+      <td><b>file</b></td>
+      <td><span class="pill">Upload</span><span class="pill">Download</span><span class="pill">Device Write</span><span class="pill">Device Read</span></td>
+      <td>crunched transfer logs, via the combined activity view</td>
+      <td>file name, size, severity, destination app, device</td>
+    </tr>
+    <tr>
+      <td><b>content</b></td>
+      <td><span class="pill">Copy / Paste</span><span class="pill">Typed Content</span><span class="pill">Prompt</span></td>
+      <td>crunched transfer logs + AI prompt logs, via the same view</td>
+      <td>detected data types, AI tool, outcome. <b>No severity, no file size</b></td>
+    </tr>
+    <tr>
+      <td><b>web</b></td>
+      <td>— none —</td>
+      <td><b>a separate table</b>, <code>WebFilteringLog</code></td>
+      <td>domain, category, verdict. <b>No severity, no channel, no scanned content</b></td>
+    </tr>
+  </table>
+
+  <div class="note"><strong>Three consequences QA will hit on day one.</strong>
+  <ul style="margin:6px 0 0">
+    <li><b>Content events have no severity.</b> So the Content Sharing tab's Risk by Channel
+    severity bar is entirely "Not assessed" grey, and filtering content by Critical returns
+    nothing. Correct, not empty-by-accident.</li>
+    <li><b>Web requests have no severity, channel, data type, device or size.</b> Sending any
+    of those filters with <code>"areas":["web"]</code> returns an empty panel <em>on purpose</em>
+    — the endpoint skips the web read rather than returning rows that do not satisfy what was
+    asked.</li>
+    <li><b>A USB write is stored as an Upload</b> with a device flag, not as its own transfer
+    type. The dashboard splits them back out. If Device Write ever reads 0 while the Top Device
+    Types card lists thousands of events, that split has regressed — that <em>is</em> a defect.</li>
+  </ul></div>
+
+  <div class="note"><strong>"Web Filtering" here is not the Logs screen's "Web Filtering".</strong>
+  The Logs screen has an activity group with that name which contains file transfers made
+  through a browser. This tab reads the web-request log — URLs a policy matched. The two
+  are different populations and <b>are not expected to produce the same totals</b>. A
+  mismatch between this tab and the Logs screen is not a defect by itself.</div>
+</section>
+
+<section id="calls">
+  <h2>Which call paints what</h2>
+  <p>What you should see in the Network tab for each tab. Anything beyond this list is the
+  UI doing extra work and is worth asking about.</p>
+
+  <table>
+    <tr><th>Tab</th><th>Calls fired on load</th></tr>
+    <tr><td><b>Overview</b></td>
+      <td><code>overview/summary</code> · <code>overview/panels</code> ·
+      <code>overview/risk-score</code> · <code>activity-heatmap</code> ·
+      <code>insider-signals</code> · <code>time-series</code> (<code>splitBy:"area"</code>)
+      <br><span class="tag">plus the shared lookup / department calls that fill the Filter dropdowns</span></td></tr>
+    <tr><td><b>File Sharing</b></td>
+      <td><code>file-sharing</code> · <code>time-series</code> (<code>splitBy:"channel"</code>)</td></tr>
+    <tr><td><b>Content Sharing</b></td>
+      <td><code>content-sharing</code> · <code>time-series</code> (<code>splitBy:"channel"</code>)</td></tr>
+    <tr><td><b>Web Filtering</b></td>
+      <td><code>web-filtering</code> · <code>time-series</code> (<code>splitBy:"action"</code>)</td></tr>
+    <tr><td><b>Any click</b></td><td><code>drill-down</code> — opens the right-hand panel</td></tr>
+    <tr><td><b>Expanding a panel row</b></td><td><code>event-detail</code> — needs <code>area</code> <em>and</em> <code>eventId</code></td></tr>
+    <tr><td><b>Data Classification → a category</b></td><td><code>classification/breakdown</code> — opens inside the card, not the panel</td></tr>
+    <tr><td><b>Exfiltration Attempts → a channel</b></td><td><code>exfiltration/breakdown</code> — opens inside the card</td></tr>
+  </table>
+
+  <div class="ok"><strong>One Overview tab = six reads, not twenty.</strong> The six Overview
+  panels are deliberately served by a single <code>overview/panels</code> call. If you see six
+  separate calls for them, something has been un-grouped and page load will have regressed.</div>
+</section>
+
+<section id="window">
+  <h2>Dates, time zone and the ↑/↓ badges</h2>
+  <table>
+    <tr><th>Rule</th><th>What it means when testing</th></tr>
+    <tr><td><b>The window is half-open</b> — <code>fromDate</code> inclusive, <code>toDate</code> exclusive</td>
+      <td>An event at exactly <code>toDate</code> is in the <em>next</em> window, not this one.</td></tr>
+    <tr><td><b>A bare date as <code>toDate</code> means the whole of that day</b></td>
+      <td><code>"toDate":"2026-11-17"</code> covers up to 2026-11-18 00:00. Picking 11-11 → 11-17 in
+      the picker includes all of the 17th.</td></tr>
+    <tr><td><b>Off-hours and the heat map are in the tenant's time zone</b></td>
+      <td>The response echoes <code>timeZone</code> and <code>businessHours</code> — on QA,
+      <code>Asia/Kolkata</code> and 09:30–18:30. Check the echo before disputing an hour.
+      <b>Event timestamps elsewhere in the API are UTC.</b></td></tr>
+    <tr><td><b>A badge compares against the immediately preceding window of equal length</b></td>
+      <td>A 7-day window is compared with the 7 days before it. Change the range and every
+      badge legitimately changes.</td></tr>
+    <tr><td><b><code>null</code> badge means "render nothing"</b></td>
+      <td>Not 0%, not 100%. It means the previous window had nothing to compare with, or no
+      dates were sent. A badge reading "↑ 100%" on a brand-new metric would be the defect.</td></tr>
+    <tr><td><b>No date at all = no window</b></td>
+      <td>All history. Every badge will be <code>null</code>, correctly.</td></tr>
+  </table>
+</section>
+
+<section id="overview">
+  <h2>Overview tab — where each number comes from</h2>
+  <table>
+    <tr><th>On screen</th><th>What it counts</th><th>Watch for</th></tr>
+    <tr><td><b>Organization Risk Score</b> + the five bars</td>
+      <td>Averaged from the <b>daily risk snapshots</b> written by the scoring pipeline — the
+      only figure on this page this API does not compute. Mean per user first, then across
+      users, so a user who reported on 30 days does not outweigh one who reported on 3.</td>
+      <td>If the pipeline has not run for the window, the response is
+      <code>riskLevel:"Unknown"</code>, <code>scoredUsers:0</code>. The UI must say
+      <em>unavailable</em> — a reassuring "0" over missing data is a defect.</td></tr>
+    <tr><td><b>Total Incidents</b></td>
+      <td><b>Blocked + Warned + Override</b> across all three areas.</td>
+      <td>It is <b>not</b> the sum of the three area cards — those show all events including
+      Allowed. Do not raise that as a mismatch.</td></tr>
+    <tr><td><b>High-Risk Users</b></td>
+      <td>Distinct users with at least one <b>Critical or High</b> event in the window.</td>
+      <td>Content and web events have no severity, so this is driven by file events only.</td></tr>
+    <tr><td><b>Off-Hour Activity</b> <span class="tag">n (p%)</span></td>
+      <td>File + content events outside the tenant's business hours, in local time.</td>
+      <td><b>The percentage denominator excludes web requests</b> — it is a share of file+content,
+      not of everything. The tile's own caption names the hours and zone used.</td></tr>
+    <tr><td><b>Policy Compliance</b></td>
+      <td>Allowed ÷ all events, <b>including web</b>.</td>
+      <td>Must equal the Security Score card's Compliance row exactly — they were two
+      different numbers until <b>D2</b> was fixed in this build.</td></tr>
+    <tr><td><b>File / Content / Web area cards</b></td>
+      <td>All events in that area, split by channel (or by outcome, for web).</td>
+      <td>The channel rows must sum exactly to the card's event count.</td></tr>
+    <tr><td><b>Risk Score Breakdown</b> bars</td>
+      <td>The snapshot's component percentages, averaged.</td>
+      <td>They are shares of the risk model, <b>not</b> percentages of events, and they are not
+      required to total 100.</td></tr>
+    <tr><td><b>Incidents by Area</b></td>
+      <td><code>time-series</code> with <code>splitBy:"area"</code> — one point per day per area.</td>
+      <td>Quiet days are seeded as 0 rather than omitted, so the line is continuous.</td></tr>
+    <tr><td><b>High Risk Users</b> list</td>
+      <td>Top 6 users by Critical + High count, among users who have at least one.</td>
+      <td>The headline tile counts <em>all</em> such users; the list shows 6. 10 vs 6 names is correct.</td></tr>
+    <tr><td><b>Endpoint Coverage</b></td>
+      <td>Active endpoints by their <b>latest</b> daily status. Four buckets: Healthy, Offline,
+      Service not running, Not reporting.</td>
+      <td>"Not reporting" = registered but never heard from. The four must sum exactly to Total
+      Endpoints — that is the strongest check on this card.</td></tr>
+    <tr><td><b>Security Score</b></td>
+      <td>Score = compliance %, over the same population as the headline tile — file, content
+      <b>and</b> web. Active/Total Policies counted from the <b>policy tables</b>, not from policy
+      names in logs. "Needs review" = active policies with more than 10 non-Allowed events in the
+      window, counted across the activity log and the web log together.</td>
+      <td>Compliance here must equal the headline Policy Compliance tile (<b>I18</b>), and
+      "x of y need review" must have x ≤ y.</td></tr>
+    <tr><td><b>Top Incidents by Apps</b></td>
+      <td>Non-Allowed events grouped by application, device traffic excluded.</td>
+      <td>Aggregate rows — they open the drill-down panel, never a single event.</td></tr>
+    <tr><td><b>Activity Heatmap</b></td>
+      <td>File + content events by weekday and hour, tenant local time.</td>
+      <td>Honours the header's Filter controls — if you filter to one user the grid must thin out.</td></tr>
+    <tr><td><b>Data Classification</b></td>
+      <td>Scanned vs violated volume by detected category.</td>
+      <td><b>A file carrying PII and PCI counts under both.</b> The rows are "how much of this type
+      did we see", not a partition, so they will not sum to the scanned total.</td></tr>
+    <tr><td><b>Insider Risk Signals</b></td>
+      <td>Three computed rules: High-Risk User, After-Hours Transfer, Mass Data Exfiltration
+      (&gt;500 MB in 30 min, or &gt;100 files in 15 min).</td>
+      <td>Computed live from events, not stored flags. There is no filter that reproduces one
+      exactly, so the panel a card opens is an approximation by design.</td></tr>
+  </table>
+</section>
+
+<section id="file">
+  <h2>File Sharing tab</h2>
+  <table>
+    <tr><th>On screen</th><th>What it counts</th><th>Watch for</th></tr>
+    <tr><td><b>Total File Events</b> + the four KPI tiles</td>
+      <td>Upload, Download, Device Write, Device Read over the window.</td>
+      <td>The four must sum to Total File Events. Each tile's sub-line is its blocked count.</td></tr>
+    <tr><td><b>File Activity Split</b></td><td>The same four as a donut.</td>
+      <td>Same numbers as the tiles — any disagreement is a defect.</td></tr>
+    <tr><td><b>File Events Over Time</b></td><td><code>time-series</code>, <code>splitBy:"channel"</code>.</td>
+      <td>Daily points; quiet days are 0, not gaps.</td></tr>
+    <tr><td><b>Top Destinations</b></td><td>Events by destination application.
+      <b>Device traffic is excluded</b> — a USB stick is not a destination and has its own card.</td>
+      <td>So Top Destinations will not sum to Total File Events.</td></tr>
+    <tr><td><b>Data Classification</b> <span class="tag">violated / total</span></td>
+      <td>Per category: violated bytes out of scanned bytes, file events only.</td>
+      <td>Same double-counting rule as the Overview copy. The two cards share one implementation
+      and must agree whenever the same filter is applied.</td></tr>
+    <tr><td><b>Top Device Types</b></td><td>Device transfers grouped by device type, split into
+      writes and reads.</td>
+      <td>Caption says "device types, not devices" — USB is a <em>type</em>, not one stick.
+      Writes come from Upload rows, reads from Download rows.</td></tr>
+    <tr><td><b>Risk by Channel</b></td><td>Per channel: event count, severity mix, and
+      "Stopped" = blocked ÷ events.</td>
+      <td>All five severity segments (Critical·High·Medium·Low·<b>Not assessed</b>) must sum to that
+      channel's event count. Every channel is always returned, zeros included — a 0 row means
+      "nothing happened", not "not measured".</td></tr>
+    <tr><td><b>Largest Transfers</b></td><td>Top 6 by file size.</td>
+      <td><b>The only list on the dashboard whose rows open one event.</b> Identical path + size +
+      user rows are collapsed, because the same transfer can be crunched twice on a retry and
+      three identical 8 GB rows read as three incidents.</td></tr>
+  </table>
+</section>
+
+<section id="content">
+  <h2>Content Sharing tab</h2>
+  <table>
+    <tr><th>On screen</th><th>What it counts</th><th>Watch for</th></tr>
+    <tr><td><b>Total Content Events</b> + Copy/Paste, Typed Content, Prompt tiles</td>
+      <td>The three content channels.</td>
+      <td>Must sum to the total. On QA today Copy/Paste and Typed Content are legitimately 0 —
+      the agent build in that environment reports prompts only.</td></tr>
+    <tr><td><b>Response Outcome</b></td><td><b>Four</b> rows: Blocked, Warned, <b>Override</b>, Allowed.</td>
+      <td>The four must sum to Total Content Events. <b>Override exists on this tab only</b> — a
+      file transfer and a web request have no override flow.</td></tr>
+    <tr><td><b>Top AI Tools by Prompts</b></td>
+      <td>Prompt events grouped by AI tool, resolved through the GenAI tool catalogue.</td>
+      <td>Anything not in the catalogue is excluded on purpose — that is how Teams and a browser
+      extension id once appeared on this card. So this list will not sum to the prompt total.</td></tr>
+    <tr><td><b>Sensitive Data Detected</b></td>
+      <td>Detected data types, resolved to their category through the sensitive-category
+      catalogue — "EMAIL ADDRESS" counts under Personally Identifiable Information rather than
+      becoming its own row.</td>
+      <td><b>The percentages are shares of total type-mentions, not of events.</b> One prompt
+      carrying PII + PCI contributes to both rows, so these do not sum to the event count.</td></tr>
+    <tr><td><b>Risk by Channel</b></td><td>As File Sharing.</td>
+      <td>The severity bar is <b>entirely grey</b> here — content has no severity. Expected.</td></tr>
+    <tr><td><b>Top Users Sharing Sensitive Content</b></td>
+      <td>Top 6 by content event count; department comes from the user record.</td>
+      <td>Ranked by the number shown (total events), with blocked as the secondary sort.
+      Department is where the person works <b>now</b>, not where they worked when the event
+      happened — a transfer between teams carries history with it.</td></tr>
+  </table>
+</section>
+
+<section id="web">
+  <h2>Web Filtering tab</h2>
+  <table>
+    <tr><th>On screen</th><th>What it counts</th><th>Watch for</th></tr>
+    <tr><td><b>Policy-Matched Requests</b> + Blocked / Warned / Allowed</td>
+      <td>Web requests a policy matched, by verdict.</td>
+      <td>The three must sum to the total. The sub-caption also reports the distinct domain count.</td></tr>
+    <tr><td><b>Top Categories</b></td><td>Requests by category code.</td>
+      <td><b>Uncategorised is a real bucket, not an omission</b> — most browsing matches no
+      category, and it is usually the largest row. It deliberately sorts <em>last</em> however
+      big it is, so real categories are not pushed off a six-row card.</td></tr>
+    <tr><td><b>Top Blocked Domains</b></td><td>Blocked requests by domain — <b>one row per
+      domain</b>, carrying that domain's full block count.</td>
+      <td>The category on the second line is the one <em>most</em> of that domain's blocks
+      carried; it labels the row, it is not what the row counts. A domain must never appear
+      twice (<b>I19</b>) — it did until <b>D3</b> was fixed in this build.</td></tr>
+    <tr><td><b>Top Users by Blocks</b></td><td>Top 6 users by blocked request count.</td><td>—</td></tr>
+    <tr><td><b>Risk by Category</b></td><td>Events and Stopped % per category.</td>
+      <td><b>Severity columns are always 0</b> — a web request carries no severity and inventing
+      one would be a fabrication. Do not raise this.</td></tr>
+  </table>
+</section>
+
+<section id="panel">
+  <h2>The drill-down panel — how it is supposed to behave</h2>
+  <p>One endpoint serves every click on the dashboard. The request body <em>is</em> the question;
+  the panel is the answer.</p>
+
+  <table>
+    <tr><th>In the panel</th><th>Must be</th></tr>
+    <tr><td><b>Events</b></td><td>The same number as the thing that was clicked.</td></tr>
+    <tr><td><b>Blocked</b></td><td>≤ Events, with the percentage of Events in brackets.</td></tr>
+    <tr><td><b>Users</b></td><td>Distinct users across the matched events — never the sum of
+    per-source counts.</td></tr>
+    <tr><td><b>Top users chips</b></td><td>Top 4 by event count. Clicking one re-opens the panel as
+    <em>the same filter AND that user</em>, with a back arrow.</td></tr>
+    <tr><td><b>"LATEST 60 OF n"</b></td><td><code>n</code> = total matches; the list holds
+    <code>min(60, n)</code> rows, newest first. The caption appears only when n &gt; 60.</td></tr>
+    <tr><td><b>Every listed event</b></td><td>Must satisfy <em>every</em> filter that was sent.
+    Fields are AND'ed; values inside one field are OR'ed.</td></tr>
+    <tr><td><b>The heading</b></td><td>Set by the UI from the tile that was clicked — the API
+    deliberately returns no title, because one query serves many labels.</td></tr>
+    <tr><td><b>Back</b></td><td>The UI's own filter stack. The API returns no back pointer.</td></tr>
+  </table>
+
+  <div class="note"><strong>The triage rule for this panel.</strong> When the panel looks wrong,
+  read the request body first.
+  <ul style="margin:6px 0 0">
+    <li>Panel shows <em>more</em> than the widget → the UI sent too <em>few</em> filters
+    (usually a missing <code>areas</code> — defect <b>D1</b>).</li>
+    <li>Panel is empty → either a filter that cannot match the population (channel/severity/
+    dataType against web), or a department that matches nobody.</li>
+    <li>Panel shows the right count but the wrong rows → a genuine API defect. Raise it with the body.</li>
+  </ul></div>
+</section>
+
+<section id="invariants">
+  <h2>Numbers that must agree — the checks worth automating</h2>
+  <p>Each of these should hold for any window, any filter. A break is a real defect.</p>
+
+  <table>
+    <tr><th>#</th><th>Check</th></tr>
+    <tr><td class="chk">I1</td><td>Overview File/Content/Web card events = sum of that card's channel (or outcome) rows.</td></tr>
+    <tr><td class="chk">I2</td><td>File Sharing tab Total File Events = the Overview File Sharing card, <b>same window, same moment</b>.</td></tr>
+    <tr><td class="chk">I3</td><td>File Sharing: Upload + Download + Device Write + Device Read = Total File Events.</td></tr>
+    <tr><td class="chk">I4</td><td>File Activity Split donut = the four KPI tiles, number for number.</td></tr>
+    <tr><td class="chk">I5</td><td>Risk by Channel: a channel's Critical+High+Medium+Low+Not-assessed = that channel's Events.</td></tr>
+    <tr><td class="chk">I6</td><td>Risk by Channel: a channel's Events = that channel's KPI tile.</td></tr>
+    <tr><td class="chk">I7</td><td>Content: Blocked + Warned + Override + Allowed = Total Content Events.</td></tr>
+    <tr><td class="chk">I8</td><td>Web: Blocked + Warned + Allowed = Policy-Matched Requests.</td></tr>
+    <tr><td class="chk">I9</td><td>Endpoint Coverage: Healthy + Offline + Service-not-running + Not-reporting = Total Endpoints.</td></tr>
+    <tr><td class="chk">I10</td><td>Security Score: policies needing review ≤ Total Active Policies.</td></tr>
+    <tr><td class="chk">I11</td><td>Drill-down Events = the widget that was clicked (once the UI sends <code>areas</code>).</td></tr>
+    <tr><td class="chk">I12</td><td>Drill-down Blocked ≤ Events, and the bracketed % = Blocked ÷ Events.</td></tr>
+    <tr><td class="chk">I13</td><td>Drill-down rows ≤ 60, newest first, and every row satisfies every filter sent.</td></tr>
+    <tr><td class="chk">I14</td><td>Clicking a user chip narrows: the new Events ≤ the previous Events.</td></tr>
+    <tr><td class="chk">I15</td><td>Widening the date range never decreases any count.</td></tr>
+    <tr><td class="chk">I16</td><td>Time-series points summed over the window = the matching tab total.</td></tr>
+    <tr><td class="chk">I17</td><td>Overview Total Incidents = Blocked + Warned + Override over all three areas — equal to a
+      drill-down sent as <code>{"actions":["Blocked","Warned","Override"]}</code>.</td></tr>
+    <tr><td class="chk">I18</td><td>Overview <b>Policy Compliance</b> tile = Security Score card's <b>Compliance</b> row, exactly. <span class="tag">new — D2</span></td></tr>
+    <tr><td class="chk">I19</td><td>Top Blocked Domains lists each domain at most once. <span class="tag">new — D3</span></td></tr>
+    <tr><td class="chk">I20</td><td>A Sensitive Data Detected or Data Classification row opens a panel whose Events is <b>within the
+      double-counting allowance</b> of the row — never 0, and never a fraction of it. <span class="tag">new — D4</span></td></tr>
+    <tr><td class="chk">I21</td><td>A Top AI Tools row opens a panel whose Events equals the row. <span class="tag">new — D5</span></td></tr>
+    <tr><td class="chk">I22</td><td>The Off-Hour Activity tile opens a panel whose Events <b>equals the tile</b>, and that panel is smaller than the same window unfiltered. <span class="tag">new — D7</span></td></tr>
+    <tr><td class="chk">I23</td><td>A heat-map cell opens a panel smaller than the window, and every listed event falls on that weekday and hour in <code>Asia/Kolkata</code>. <span class="tag">new — D7</span></td></tr>
+    <tr><td class="chk">I24</td><td>A data-type panel is <b>never larger</b> than the card row that opened it. <span class="tag">new — D8</span></td></tr>
+    <tr><td class="chk">I25</td><td>A High-Risk Users row's <b>violations</b> equals <code>{"areas":["file","content"],"userIds":[n],"actions":["Blocked","Warned","Override"]}</code>, and the Total Violations box equals the same call with all six ids. <span class="tag">new — D9</span></td></tr>
+  </table>
+
+  <div class="note"><strong>I20's "allowance" is real and is not a bug.</strong> Sensitive Data
+  Detected counts <b>identifier mentions</b>, while the panel counts <b>events</b>. One prompt whose
+  content carries two identifiers that both resolve to PII — say an email address and an Aadhaar
+  number — adds <b>2</b> to the card's PII row and <b>1</b> to the panel. So the card can legitimately
+  read higher. What it must never do is read higher because the filter found nothing: a 0, or a
+  number that is a small fraction of the tile, is the <b>D4</b> symptom returning.</div>
+
+  <div class="note"><strong>I17 is the sharpest test you have</strong>, because it makes a headline
+  tile and the drill-down behind it prove each other. If they ever differ, one of the two has
+  changed its definition of "incident".</div>
+</section>
+
+<section id="notbugs">
+  <h2>Looks wrong, is correct — please do not raise these</h2>
+  <ol>
+    <li><strong>Tab totals drift while you test.</strong> The data is live. Compare responses
+    captured in the same minute.</li>
+    <li><strong>The three area cards do not sum to Total Incidents.</strong> Incidents counts
+    Blocked + Warned + Override only; the cards show every event.</li>
+    <li><strong>There is a fifth severity, "None" / "Not assessed".</strong> The scanner emits it
+    when it could not assess a file, and it is usually the largest bucket. The four coloured
+    severities are not expected to sum to the total.</li>
+    <li><strong>Content and web events have no severity.</strong> Grey bars and zero severity
+    columns on those tabs are correct.</li>
+    <li><strong>Copy / Paste and Typed Content are Content Sharing, not File Sharing.</strong>
+    They used to land on the File tab; that was the bug and it is fixed. If you are comparing
+    against an older build, the numbers have moved and the new ones are right.</li>
+    <li><strong>Device Write / Device Read carry events that used to be counted as Upload /
+    Download.</strong> Expect Upload to be lower than in an old build and the two device channels
+    to be higher by the same amount.</li>
+    <li><strong>Data Classification rows do not sum to the scanned total.</strong> A file with PII
+    and PCI counts under both categories.</li>
+    <li><strong>Sensitive Data Detected percentages do not sum to 100.</strong> Same reason, over
+    type-mentions.</li>
+    <li><strong>Top Destinations does not sum to Total File Events.</strong> Device traffic is
+    excluded; it has its own card.</li>
+    <li><strong>Top AI Tools does not sum to the prompt total.</strong> Applications that are not
+    GenAI tools are excluded by catalogue.</li>
+    <li><strong>Uncategorised is the biggest web category and still sorts last.</strong> Deliberate.</li>
+    <li><strong>Only Largest Transfers rows open a single event.</strong> Every other ranked list is
+    an aggregate, so it has no event id — by design.</li>
+    <li><strong>A change badge is missing.</strong> <code>null</code> means "do not render" — the
+    previous window had nothing, or no dates were sent.</li>
+    <li><strong>Endpoint Coverage has no "Warning" slice.</strong> "Service not running" is the
+    derived equivalent: online, but DLP is not running. There is no stored Warning status.</li>
+    <li><strong>This tab's web numbers differ from the Logs screen's Web Filtering group.</strong>
+    Different populations — see <a href="#populations">The three populations</a>.</li>
+    <li><strong>Risk by Channel lists channels with 0 events.</strong> Keeps the table's shape, so
+    0 reads as "nothing happened" rather than "not measured".</li>
+    <li><strong>An Insider Risk Signal card opens a panel that does not match its number exactly.</strong>
+    The signals are computed rules; no single filter reproduces one. Documented approximation.</li>
+  </ol>
+</section>
+
+<section id="open">
+  <h2>Defects found in this review</h2>
+  <p>Three were found. <b>Two were on our side and are fixed in this build</b> — they need a
+  retest, and D2 deliberately moves a number, so read its side effect before raising anything.
+  <b>D1 is in the UI</b> and is still open.</p>
+
+  <h5 class="section"><span class="sev blocker">BLOCKER</span> &nbsp; D1 — the drill-down panel is not scoped to the tab it was opened from</h5>
+  <div class="bad">
+  <b>Owner: UI.</b> The API is behaving correctly; the request being sent is wrong.
+  </div>
+  <table>
+    <tr><th>Steps</th><td>Dashboard → <b>File Sharing</b> tab → Data Classification card → click <b>PII</b>.</td></tr>
+    <tr><th>Sent</th><td><code>{"fromDate":"…","toDate":"…","dataTypes":["PII"]}</code></td></tr>
+    <tr><th>Expected</th><td>Only file events (Upload / Download / Device Write / Device Read) carrying PII.
+      The panel's Events should equal the PII row on the card that was clicked.</td></tr>
+    <tr><th>Actual</th><td>Events is larger than the card, and the list contains rows like
+      <code>Selva S · Prompt · www.google.com</code>. <b>Prompts are Content Sharing events</b>, so the
+      panel is showing file <em>and</em> content merged.</td></tr>
+    <tr><th>Why</th><td><code>drill-down</code> is one endpoint over all three populations and the request
+      body is the only thing that names one. With no <code>areas</code> in the body it answers "file and
+      content", which is exactly what it was asked. There is no tab in the URL and no session state for
+      the server to infer from.</td></tr>
+    <tr><th>Fix</th><td>Every click that originates on a tab must send that tab's area —
+      <code>"areas":["file"]</code>, <code>["content"]</code> or <code>["web"]</code> — in addition to
+      whatever the widget contributes. So the case above becomes
+      <code>{"areas":["file"],"dataTypes":["PII"]}</code>. The per-tab click→filter table in
+      <b>Dashboard-V2-API-Documentation.html → Click → filter map</b> has been rewritten to spell out
+      the exact body for every widget on all four tabs.</td></tr>
+    <tr><th>Retest</th><td>For each of the four tabs, click every clickable widget and confirm
+      (a) the request body carries the tab's <code>areas</code>, and (b) <b>I11</b> holds — the panel's
+      Events equals the widget's own number. On File Sharing, no listed row may have a Prompt,
+      Copy / Paste or Typed Content channel; on Content Sharing, none may be an Upload or Download.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D2 — two different "Compliance" numbers on the Overview</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b></div>
+  <table>
+    <tr><th>Was</th><td>The headline <b>Policy Compliance</b> tile and the <b>Security Score</b> card's
+      <b>Compliance</b> row showed different percentages on the same screen for the same window —
+      observed 11% and 15%.</td></tr>
+    <tr><th>Cause</th><td>Different populations. The headline divided by all events <em>including</em>
+      web requests; the Security Score card divided by file + content only. Web requests are almost
+      entirely blocked, so including them pulls the figure down. Neither number was wrong on its own;
+      having both under one word was.</td></tr>
+    <tr><th>Now</th><td>Both count all three areas. They must agree exactly — that is invariant
+      <b>I18</b>.</td></tr>
+    <tr><th>Side effect to expect</th><td><b>"N policies need review" will go up</b> on any tenant with
+      active web policies. It too now counts a policy's noise across the activity log and the web log
+      together, so a web policy that blocked several hundred requests is finally named by the card that
+      scores it. A rise here is the fix working, not a regression.</td></tr>
+    <tr><th>Retest</th><td>Overview, several windows: confirm the two percentages match. Confirm
+      "x of y need review" still has x ≤ y. Compare the review count against the previous build and
+      confirm any increase is explained by a web policy.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D3 — the same domain appeared twice in Top Blocked Domains</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b></div>
+  <table>
+    <tr><th>Was</th><td><code>chatgpt.com</code> listed twice — 146 blocks as Uncategorised and 40 as
+      Computers And Technology — and likewise <code>claude.ai</code> at 56 and 19. One domain's block
+      count was split across two ranks, so neither row said how often that domain was really blocked,
+      and a domain with an even split could be pushed off the six-row card by one it actually outranks.</td></tr>
+    <tr><th>Cause</th><td>The list grouped by domain <em>and</em> category, and the category is recorded
+      per request — not every request carries one.</td></tr>
+    <tr><th>Now</th><td>One row per domain with its full block count. The second line shows the category
+      <em>most</em> of that domain's blocks carried.</td></tr>
+    <tr><th>Read this carefully</th><td><b>The category now labels the row; it is not what the row
+      counts.</b> A domain whose requests are categorised inconsistently will show one category while
+      its count includes requests that carried another. That is deliberate — it is the trade for a rank
+      that means something. Do not raise it as a mismatch against Top Categories, which legitimately
+      counts per request.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I19</b> — no domain appears twice. Confirm a domain's row count
+      now equals the sum of the two rows it used to produce.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D4 — a data-type click opened an empty or short panel</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b> Raised by the API team against 11–17 Nov.</div>
+  <table>
+    <tr><th>Was</th><td><code>{"areas":["content"],"dataTypes":["POLICY"]}</code> returned
+      <code>totalCount</code> 0 while Sensitive Data Detected read <b>615</b> for POLICY, so the panel
+      opened empty. PII read 285 on the tile against 201 in the panel; PCI 84 against 67.</td></tr>
+    <tr><th>Cause</th><td>The card and the filter spoke different vocabularies. The card resolves every
+      stored identifier through the sensitive-category catalogue and reports the <b>category</b> — so
+      "EMAIL ADDRESS" counts under PII — while the filter compared the requested string against the stored
+      one directly. A category whose code is never written into the column literally matched nothing at
+      all, which is why POLICY was a clean 0 and PII was merely short.</td></tr>
+    <tr><th>Now</th><td>Each requested value is expanded to every name the catalogue stores it under before
+      the query is built. Values the catalogue does not know match exactly as before.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I20</b> on every category on the Content Sharing and File Sharing
+      cards and on the Overview copy. POLICY is the sharpest case — it was the clean zero.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D5 — an AI-tool click returned a fraction of the row</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b></div>
+  <table>
+    <tr><th>Was</th><td><code>{"areas":["content"],"apps":["Claude"]}</code> returned <b>13</b> while Top AI
+      Tools read <b>48</b> for Claude.</td></tr>
+    <tr><th>Cause</th><td>The same shape as D4. Top AI Tools groups prompts by the catalogue's display name,
+      so Claude, claude.ai, Claude.exe and a browser-extension id are one row — while the filter matched the
+      stored application name exactly, finding only the rows literally recorded as "Claude".</td></tr>
+    <tr><th>Now</th><td>An app name is expanded to every alias of the same tool. Apps outside the catalogue —
+      Microsoft Edge, One Drive, everything on Top Incidents by Apps — expand to themselves and are
+      unchanged.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I21</b> for every Top AI Tools row, and confirm Top Destinations and Top
+      Incidents by Apps still match their rows exactly — those were already correct and must not move.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev blocker">OPEN</span> &nbsp; D6 — a cross-area app click returns 500</h5>
+  <div class="bad"><b>Owner: API. Not fixed — needs the stack trace.</b></div>
+  <table>
+    <tr><th>Symptom</th><td><code>{"apps":["Claude"]}</code> with no <code>areas</code> returns 500, "An error
+      occurred while reading the dashboard." The Overview's <b>Top Incidents by Apps</b> sends exactly this
+      body, so clicking a row there fails. A live broken click, not a theoretical one.</td></tr>
+    <tr><th>Known</th><td>The same body <em>with</em> <code>"areas":["content"]</code> succeeds. The only thing
+      omitting <code>areas</code> changes is that the web-filtering read also runs — with an area naming file
+      or content it is skipped. So the failure is in the web arm, on a path the Web Filtering tab never
+      exercises because it never sends <code>apps</code>.</td></tr>
+    <tr><th>Not known</th><td>The exception itself. The controller swallows it into the generic message and
+      logs it as <code>"Dashboard drill-down failed."</code> — that log line names the cause. A query timeout
+      would present identically, since no <code>areas</code> means no area predicate plus a full web scan.</td></tr>
+    <tr><th>QA action</th><td>Do not retest until this is marked fixed.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D7 — the clock filters were ignored</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b></div>
+  <table>
+    <tr><th>Was</th><td><code>{"offHoursOnly":true}</code> returned the same count as sending no
+      filter at all — 4,537 against an Off-Hour tile of 816. <code>hours</code> and
+      <code>daysOfWeek</code> had the identical fault, so <b>every heat-map cell opened an
+      unfiltered panel</b>. That half was never reported; it was found while fixing this one.</td></tr>
+    <tr><th>Cause</th><td>All three were on the contract and read by nothing — accepted, then
+      silently dropped. The worst failure mode available: the caller is told nothing and the
+      number looks plausible.</td></tr>
+    <tr><th>Now</th><td>Applied in the tenant's time zone. The Off-Hour panel matches its tile
+      exactly (816 = 816).</td></tr>
+    <tr><th>Read this</th><td>Local time is computed by shifting UTC by the zone's <em>standard</em>
+      offset, the same approximation the tile and the heat map already make. Exact for
+      <code>Asia/Kolkata</code>, which has no daylight saving; a zone that does would be an hour
+      out either side of a transition. Not a defect on this tenant.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I22</b> and <b>I23</b>. Also confirm that sending a clock
+      filter with <code>"areas":["web"]</code> returns 0 — web carries none of these, and the
+      tile and heat map count file and content only.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D8 — a data-type panel could exceed its tile</h5>
+  <div class="ok"><b>Owner: API. Fixed — retest required.</b></div>
+  <table>
+    <tr><th>Was</th><td><code>{"areas":["content"],"dataTypes":["POLICY"]}</code> returned 618
+      against a tile of 615. The panel should never exceed the tile.</td></tr>
+    <tr><th>Cause</th><td>Introduced by the D4 fix. The card resolves each entry in the content
+      column separately; the filter matched the requested value as a <em>substring</em>, so it also
+      caught entries that merely contain the word. The surplus was invisible on screen because the
+      card lists only its top few types.</td></tr>
+    <tr><th>Now</th><td>Both sides are reduced to the same shape and the match is for a whole
+      delimited entry. POLICY lands on 615 exactly.</td></tr>
+    <tr><th>Expect</th><td>PII, PCI and PHI all came <b>down</b> slightly as well — they were
+      over-matching too, just less visibly. The tiles still read higher than the panels, which is
+      the mentions-versus-events difference and is correct.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I24</b> across every row of Sensitive Data Detected and Data
+      Classification, on all three cards.</td></tr>
+  </table>
+
+  <h5 class="section"><span class="sev fixed">FIXED IN THIS BUILD</span> &nbsp; D9 — High-Risk Users counted a fourth outcome</h5>
+  <div class="ok"><b>Owner: API. Fixed — numbers move, read this before raising anything.</b></div>
+  <table>
+    <tr><th>Was</th><td>The Total Violations box summed its six rows to 2,154 while the equivalent
+      drill-down returned 2,130 — about 1.4% out, and no filter could close the gap.</td></tr>
+    <tr><th>Cause</th><td>The card counted <em>everything that is not Allow</em>. The column has a
+      fourth value, <code>UnCovered</code>, which <code>crunch."UserRiskSummary"</code> defines as
+      <b>activities where no policy applied at all</b>. That is the absence of a verdict, not a
+      violation — and there is no <code>actions</code> value for it, so a row including it was
+      unmatchable by construction.</td></tr>
+    <tr><th>Now</th><td>Counts the three named outcomes, the same ones Total Incidents counts.
+      Card and drill-down agree exactly: six rows sum to 2,130 and the matching call returns 2,130;
+      a single row reads 392 against 392.</td></tr>
+    <tr><th>Expect</th><td><b>High-Risk Users violations and Top Incidents by Apps both read lower
+      than the previous build</b> — they share one query. A drop here is the fix working.</td></tr>
+    <tr><th>Still inconsistent, tracked separately</th><td>Risk by Channel's <b>Stopped %</b>, Data
+      Classification's <b>violated bytes</b> and <b>Exfiltration Attempts</b> all still count
+      not-Allow, so they include uncovered activity. Stopped % contradicts its own caption
+      ("'Stopped' counts blocked events"). Not changed in this build — raise against D10 rather
+      than as new findings.</td></tr>
+    <tr><th>Retest</th><td>Confirm <b>I25</b> for each of the six rows and for the box.</td></tr>
+  </table>
+</section>
+
+<section id="notserved">
+  <h2>Not served — do not raise these as missing data</h2>
+  <table>
+    <tr><th>Card in the design</th><th>Why there is no data</th></tr>
+    <tr><td><b>Violations by Regulation</b></td><td>The event carries no policy id, so a violation
+      cannot be attributed to a regulation.</td></tr>
+    <tr><td><b>Warnings Bypassed</b></td><td>Nothing records the user proceeding past a warning.</td></tr>
+    <tr><td><b>Departing Employee</b> (the 4th insider signal)</td><td>Needs an HRIS resignation flag
+      the product does not hold. Deliberately <em>absent</em> rather than zero — a zero would read as
+      "nobody is leaving" instead of "we cannot tell".</td></tr>
+  </table>
+  <p class="tag">If any of these appear on screen rendering empty or zero, that is a UI defect —
+  they should be left out entirely.</p>
+</section>
+
+<section id="checklist">
+  <h2>Round-one test checklist</h2>
+  <ol>
+    <li><b>Baseline.</b> Pick one window (e.g. last 7 days) and capture all four tabs' API responses
+    within the same minute. Every later comparison uses these, not screenshots.</li>
+    <li><b>Invariants.</b> Run I1–I10, plus <b>I18</b> and <b>I19</b>, against the captured
+    responses. These need no clicking.</li>
+    <li><b>Tab scoping (D1).</b> On each tab, click every clickable widget. For each: capture the
+    request body, confirm it carries the tab's <code>areas</code>, and confirm I11.</li>
+    <li><b>Population leakage.</b> In every File Sharing panel, confirm no row has a Prompt /
+    Copy&nbsp;/&nbsp;Paste / Typed Content channel. In every Content Sharing panel, confirm no Upload /
+    Download / Device row. In every Web Filtering panel, confirm every row is a domain.</li>
+    <li><b>Composition.</b> Open any panel, click a user chip, confirm the count narrows (I14) and the
+    back arrow restores the previous filter and count exactly.</li>
+    <li><b>Event detail.</b> Expand a panel row; confirm it opens the right event. Then confirm that
+    the same id under the wrong <code>area</code> returns 404 rather than someone else's event —
+    the three populations have overlapping id sequences.</li>
+    <li><b>Header filters.</b> Apply Severity / Action / Department from the header and confirm
+    <em>every</em> card on the page moves, including the Activity Heatmap. A card that does not move
+    is not reading the filter.</li>
+    <li><b>Department.</b> Filter to a department with no users and confirm the page reads zero
+    everywhere rather than showing everybody.</li>
+    <li><b>Date edges.</b> Single day; a day with no events; a window ending today; no window at all
+    (all badges must disappear). Confirm I15 across a widening range.</li>
+    <li><b>Time zone.</b> Confirm the Off-Hour tile and the heat map both name
+    <code>Asia/Kolkata</code> and the tenant's business hours, and that an event just outside those
+    hours is counted as off-hours.</li>
+    <li><b>Degraded paths.</b> A window with no risk snapshots → "Unknown", not a score of 0.
+    A tenant with no endpoints → Endpoint Coverage reads 0 of 0, not an error.</li>
+    <li><b>Performance.</b> Overview should be 6 calls, each a few hundred ms. A tab that fires more
+    than its documented calls, or one call per card, is a regression.</li>
+  </ol>
+</section>
+
+<p class="tag" style="margin:26px 0 10px">Dashboard v2 · QA knowledge transfer · companion to
+<b>Dashboard-V2-API-Documentation.html</b> (the UI contract) and
+<b>DLP-Dashboard-Calculations.html</b> (the v1 screen).</p>
+
+</main>
+</div>
+</body>
+</html>
